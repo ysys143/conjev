@@ -140,3 +140,41 @@ export function pointReport(point: string, records: readonly ShadowRecord[], lab
 
   return lines.join('\n')
 }
+
+/**
+ * The instruction filter: the latest set of chunks, what left the loaded
+ * files, what Jev would drop or defer and why, and for deferred chunks how
+ * often the work they govern began without them.
+ */
+export function filterReport(records: readonly ShadowRecord[]): string {
+  const chunkRecords = records.filter(r => r.point === 'instr-filter' && r.decision !== 'sent')
+  if (chunkRecords.length === 0) return 'instr-filter: no records'
+  const latestTs = chunkRecords.reduce((best, r) => (r.ts > best ? r.ts : best), '')
+  const latestState = chunkRecords.find(r => r.ts === latestTs)?.facts?.state
+  const latest = chunkRecords.filter(r => r.facts?.state === latestState && r.ts === latestTs)
+  const chars = (rs: readonly ShadowRecord[]): number => rs.reduce((sum, r) => sum + Number(r.facts?.chars ?? 0), 0)
+  const by = (decision: string) => latest.filter(r => r.decision === decision)
+  const dropped = [...by('drop'), ...by('would-drop').filter(r => r.heuristic)]
+  const lines = [
+    `instr-filter: ${latest.length} chunks (${chars(latest)} chars) in the latest set of instruction files`,
+    `  loaded twice: ${dropped.length} chunks, ${chars(dropped)} chars (${by('drop').length > 0 ? 'left out' : 'would be left out in active'})`,
+    `  Jev, if applied: would drop ${by('would-drop').filter(r => !r.heuristic).length} (${chars(by('would-drop').filter(r => !r.heuristic))} chars), would defer ${by('would-defer').length} (${chars(by('would-defer'))} chars), keep ${by('would-keep').length}`,
+  ]
+  for (const r of latest.filter(r => r.decision !== 'would-keep')) {
+    lines.push(`  - ${r.decision} ${r.facts?.heading} (${r.facts?.file}, ${r.facts?.chars} chars): ${r.facts?.reason} [${r.id}]`)
+  }
+
+  // For each kind of work a deferred chunk governs: tool uses of that kind,
+  // and how many came with no would-attach judgment before them in the session.
+  const defers = records.filter(r => r.point === 'instr-defer')
+  const uses = records.filter(r => r.point === 'instr-tool')
+  const signatures = [...new Set(by('would-defer').map(r => r.facts?.signature).filter((s): s is string => s !== undefined && s !== '-'))]
+  for (const signature of signatures) {
+    const events = uses.filter(u => u.facts?.signature === signature)
+    const missed = events.filter(u => !defers.some(d => d.sessionId === u.sessionId && d.ts <= u.ts && d.facts?.signature === signature && d.decision === 'would-attach'))
+    const pct = events.length === 0 ? '-' : `${Math.round((missed.length / events.length) * 100)}%`
+    lines.push(`  would-miss, ${signature}: ${events.length} tool uses, ${missed.length} with the chunk not yet attached (${pct})`)
+  }
+
+  return lines.join('\n')
+}

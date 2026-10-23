@@ -6,7 +6,9 @@ import { askConditions, attachedNow, forgetAttached, fragmentsDirOf, loadFragmen
 import { INSTRUCTIONS_POINT, decideFragments, fragmentBlock, keywordHit, pinnedSection } from './instructions'
 import { probabilityOf, type JevResult } from './jev'
 import { errorOf, judge, keyFor, trustFor } from './jev-call'
-import { pointReport, type ShadowRecord } from './report'
+import { filterReport, pointReport, type ShadowRecord } from './report'
+import { chunksOf, exactDuplicates, normalized, supersededOmc, withoutChunks, type DocFile } from './instruction-docs'
+import { judgeDeferred, omcVersionsOf, recordFilter, recordToolUse, stateKeyOf } from './filter-flow'
 import { scrub } from './scrub'
 import { harnessSettingsFrom, usesJev } from './settings'
 import { newId, runtime, startRuntime } from './state'
@@ -122,6 +124,28 @@ export const register: Register = (on, options) => {
     return next(e)
   })
 
+  // The instruction files the engine is about to load: chunks loaded twice
+  // leave in active; Jev's reading of the rest is recorded, never applied.
+  on('prompt.context', async ($, e, next) => {
+    const mode = settings.instructionFilter
+    const files = e.instructionFiles
+    if (mode === 'off' || files === undefined) return next(e)
+    const t0 = await $.clock.now()
+    const docs = files.filter(file => file.kind !== 'memory') as unknown as DocFile[]
+    const chunks = chunksOf(docs)
+    const drops = new Map([...exactDuplicates(chunks), ...supersededOmc(chunks, await omcVersionsOf($, docs))])
+    const droppedChars = chunks.filter(c => drops.has(c.id)).reduce((sum, c) => sum + normalized(c.text).length, 0)
+    runtime.filter = { stateKey: stateKeyOf(chunks), chunks, drops, droppedChars, deferred: runtime.filter?.deferred ?? [] }
+    const passed = mode === 'active' && drops.size > 0 ? withoutChunks(files as unknown as DocFile[], chunks, drops, await homeOf($)) : undefined
+    const hookMs = (await $.clock.now()) - t0
+    // Judged and recorded after the request has gone.
+    void recordFilter($, chunks, drops, mode, t0, hookMs).catch(() => undefined)
+    if (passed !== undefined) $.ui.toast(`context-harness: left out ${drops.size} instruction chunks loaded twice (${droppedChars} chars)`)
+    showStatus($)
+
+    return passed === undefined ? next(e) : next({ ...e, instructionFiles: passed as unknown as typeof files })
+  }).catch((_, e, next) => next(e))
+
   // E1, pinned fragments: one stable section at the end of the system prompt.
   on('prompt.compose', async ($, e, next) => {
     const composed = await next(e)
@@ -135,6 +159,10 @@ export const register: Register = (on, options) => {
   // E1, conditional fragments: appended to the prompt that first meets their
   // condition, and again only once the conversation no longer carries them.
   on('prompt.submit', async ($, e, next) => {
+    if (settings.instructionFilter !== 'off') {
+      const text = e.command !== undefined ? `/${e.command.name} ${e.command.args ?? ''}` : e.text
+      void judgeDeferred($, text, e.origin?.kind ?? 'unknown', e.turnId).catch(() => undefined)
+    }
     const mode = settings.instructions
     // The person's own prompts only: typed, remote, headless, or a plugin's sent as the person's words.
     const origin = e.origin
@@ -311,7 +339,7 @@ export const register: Register = (on, options) => {
     const trust = await trustFor($)
     const fragments = settings.instructions === 'off' ? undefined : await loadFragments($)
     const header = [
-      `context-harness: stop ${settings.stopGate}, tool ${settings.toolGate}, tool jev ${settings.toolJev}, instructions ${settings.instructions}, fold ${settings.foldJev}`,
+      `context-harness: stop ${settings.stopGate}, tool ${settings.toolGate}, tool jev ${settings.toolJev}, instructions ${settings.instructions}, fold ${settings.foldJev}, instruction filter ${settings.instructionFilter}`,
       `key ${key ? `from ${key.source}` : 'none'}, provider ${trust.trust} (${trust.why})`,
       ...(fragments
         ? [`fragments: ${fragments.list.length} in ${fragments.dir} (#${fragments.hash.slice(0, 6)})${fragments.problems.length ? `; skipped: ${fragments.problems.join('; ')}` : ''}`]
@@ -323,6 +351,7 @@ export const register: Register = (on, options) => {
       pointReport(TOOL_POINT, records, labels, settings.toolThreshold),
       pointReport(INSTRUCTIONS_POINT, records, labels, settings.instructionThreshold),
       pointReport(FOLD_POINT, records, labels, 0.5),
+      ...(settings.instructionFilter === 'off' && !records.some(r => r.point === 'instr-filter') ? [] : [filterReport(records)]),
     ]
 
     return { text: [...header, ...reports].join('\n\n') }
@@ -407,6 +436,7 @@ export const register: Register = (on, options) => {
   // and, for what it lets through in an external session, Jev's judgment.
   // Registered before the plugin's own tools, so it sees their calls too.
   on('tool.call', async ($, e, next) => {
+    if (settings.instructionFilter !== 'off') void recordToolUse($, String(e.tool), e as unknown as Record<string, unknown>, e.tool_use_id).catch(() => undefined)
     const mode = settings.toolGate
     const jevMode = settings.toolJev
     if (mode === 'off' && jevMode === 'off') return next(e)

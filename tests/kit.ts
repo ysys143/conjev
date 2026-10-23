@@ -62,6 +62,9 @@ export const setup = (on: On, s: Setup = {}) => {
   const configured: [string, unknown][] = []
   const order: string[] = []
   const commands: string[] = []
+  // What the engine would load after the plugin answered prompt.context, and every timer the plugin waited on.
+  const loaded: { path: string; kind: string; content: string }[][] = []
+  const sleeps: number[] = []
   // The messages the next request is built from: what $.session.messages({ as: 'api' }) answers.
   const api: ApiMessage[] = []
   let now = 1_700_000_000_000
@@ -106,7 +109,10 @@ export const setup = (on: On, s: Setup = {}) => {
     return { value: { exitCode: e.argv[0] === s.failRun ? 1 : 0, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
   })
   on('clock.now', () => ({ value: (now += 5) }))
-  on('clock.sleep', () => (s.isTimerStopped ? new Promise<never>(() => undefined) : { value: undefined }))
+  on('clock.sleep', (_, e) => {
+    sleeps.push(e.ms)
+    return s.isTimerStopped ? new Promise<never>(() => undefined) : { value: undefined }
+  })
   on('clock.after', () => ({ value: undefined }))
   on('http.fetch', async (_, e) => {
     const body = JSON.parse(e.init?.body ?? '{}') as Record<string, unknown>
@@ -158,6 +164,10 @@ export const setup = (on: On, s: Setup = {}) => {
     return { text: e.text }
   })
   on('prompt.compose', () => ({ sections: [{ id: 'base', text: 'You are helpful.', scope: 'shared' as const }] }))
+  on('prompt.context', (_, e) => {
+    loaded.push((e.instructionFiles ?? []).map(f => ({ path: f.path, kind: f.kind, content: f.content })))
+    return { blocks: e.blocks, instructionFiles: e.instructionFiles }
+  })
   // A summary replaces what the next request is built from; a compaction the plugin answers never gets here.
   on('session.compact', () => {
     if (s.compactBelow === 'skip') return { skip: 'skipped below' } as never
@@ -174,7 +184,7 @@ export const setup = (on: On, s: Setup = {}) => {
     return { result: 'ok' }
   })
 
-  return { env, files, fetches, writes, runs, disk, store, statuses, toasts, logs, appended, submitted, configured, order, api, commands }
+  return { env, files, fetches, writes, runs, disk, store, statuses, toasts, logs, appended, submitted, configured, order, api, commands, loaded, sleeps }
 }
 
 export const records = (writes: readonly { path: string; text: string }[], point: string) =>

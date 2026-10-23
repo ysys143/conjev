@@ -6,7 +6,7 @@ When a Claude Code conversation compacts, the engine replaces it with a summary,
 
 It is a Claude Code plugin, written against Claude Code's mod API (function hooks). Folding needs no setup and no key. **An optional [judgment layer](#judgment-layer-optional) adds gates that use Jev, TypeSafe's decision model; every gate is off by default, and while they are off nothing leaves your machine.**
 
-[Install](#install) · [Commands](#commands) · [How folding works](#how-folding-works) · [Compared with](#compared-with) · [Project state](#project-state-and-memory) · [Judgment layer](#judgment-layer-optional) · [Data and privacy](#data-and-privacy) · [Measured](#measured) · [Limits](#limits)
+[Install](#install) · [Commands](#commands) · [How folding works](#how-folding-works) · [Compared with](#compared-with) · [Project state](#project-state-and-memory) · [Instruction files](#instruction-files) · [Judgment layer](#judgment-layer-optional) · [Data and privacy](#data-and-privacy) · [Measured](#measured) · [Limits](#limits)
 
 ![Before compaction, two large tool results fill the transcript, each two prompts old. After the fold, the same messages remain and those results are one-line pointers; the originals are in an archive on disk, read_coordinate returns them, and a note sends the model back to INTENT.md and PHASE.md.](docs/fold.svg)
 
@@ -94,6 +94,26 @@ A compaction summary is never the source of truth; files the project keeps are. 
 - `/context-harness:project-state` keeps `INTENT.md` and `PHASE.md`, alone or across several agent sessions, with the rules that keep one board consistent.
 - `/context-harness:consolidate` turns a stretch of work into memory that lasts: the board, an episode, repeated procedures as project skills, lasting principles into `AGENTS.md` once you agree. A deterministic procedure that keeps repeating is proposed as code: see [just-dag-it](https://github.com/ysys143/just-dag-it).
 
+## Instruction files
+
+Claude Code loads its instruction files whole at the start of a conversation and again after each compaction: the user `CLAUDE.md` of the profile in use, a project's `CLAUDE.md` and `AGENTS.md`, every file they `@`-import, and the `.claude/CLAUDE.md` of every folder above the working folder. That last rule means a session run from inside your home folder also loads `~/.claude/CLAUDE.md` as a project file. If another profile's `CLAUDE.md` (say `~/.claude-3/CLAUDE.md`) is a copy of it, the same text loads twice.
+
+**The fix needs no plugin.** In each profile other than `~/.claude` that keeps its own copy, exclude the shared one:
+
+```json
+{ "claudeMdExcludes": ["/Users/you/.claude/CLAUDE.md"] }
+```
+
+Never put this in `~/.claude/settings.json` itself: there the same file is the profile's own user file, and the profile would lose it. In the author's setup it took the first request from 69,152 to 66,655 tokens (the OMC block, 5.9k characters, loaded once instead of twice).
+
+**`instructionFilter`** (`off`, `shadow`, `active`; default `off`) handles what is left, through the engine's `prompt.context` hook, which hands a plugin the instruction files just before they are sent. It splits them into chunks by heading and by tag block, keeping code fences whole, and then:
+
+- **Loaded twice, byte for byte** (whitespace aside): `active` leaves the later copy out and puts a one-line note where it was (`[context-harness: left out "…", loaded from …]`), so the model knows. Of two OMC blocks at different versions, the older one leaves. Organization (`managed`) files and the auto-memory index are never changed.
+- **Jev's reading of the rest, recorded only, in either mode:** after the request has gone, Jev is asked of every chunk whether nearly every request needs it, and of every user-level chunk whether the chunks before it already say all of it. `/jev-report` lists what that would drop or defer, and why. These rules are never dropped or deferred: identity, language, autonomy and approval, answering questions first, shell, git, API keys, browser, anything headed as deliberate repetition, and the OMC block. The Orca section is decided by the environment, not by Jev.
+- **Would-miss:** for every prompt, slash commands included, Jev is asked whether the chunks it would defer apply. Tool uses of their kind (browser, web fetch, `orca`, `claude -p`) are recorded too, and `/jev-report` counts how often that work began with the chunk not yet attached.
+
+Jev's readings are applied only once the records support it: at least 20 chunks labeled covered and 60 labeled partly or new with precision of 0.95 or more at the threshold, and a would-miss rate under 5% over 30 or more real sessions. Until then they cost a few hundred milliseconds in the background and nothing on the request path: `prompt.context` itself takes about 30 ms.
+
 ## Judgment layer (optional)
 
 ![Four Claude Code events, each with the gate that judges it and what it sends to Jev: instructions at the prompt, the tool gate at each tool call, the Stop gate when the turn ends, and fold relevance at compaction.](docs/turn.svg)
@@ -110,6 +130,7 @@ Each gate is set on its own to one of three modes:
 | Tool gate floor | `toolGate` | When another provider serves the session (for example Bedrock, Vertex, a proxy, or a non-Anthropic base URL; see *Tool gate in detail*), refuses calls that touch secret files or print secrets, `read_coordinate` included. In every session, refuses writes to this plugin's files, its archives and Claude's settings files | Nothing |
 | Tool gate Jev | `toolJev` | When another provider serves the session, classes each call the floor let through as open, standard, restricted or custom from its path or command, and refuses restricted and custom | The tool name and the scrubbed target |
 | Conditional instructions | `instructions` | Attaches an instruction fragment to the prompt that first meets its condition | Your prompt, scrubbed, first 600 characters, and the fragments' conditions (never their bodies) |
+| Instruction filter | `instructionFilter` | Leaves instruction chunks loaded twice out (`active`), and records Jev's reading of the rest ([Instruction files](#instruction-files)) | With a key: the instruction files' text, scrubbed, when they change; for chunks Jev would defer, each prompt's first 600 characters, scrubbed |
 | Fold relevance | `foldJev` (shadow only) | Records which of the largest earlier results your request still needs, beside what the fold did | Your last prompt, scrubbed, first 400 characters, and for each result its tool and target: the path, the start of the command, or the search pattern, URL or description it was called with (never its output) |
 
 Scrubbing removes secret-shaped strings, `NAME=value` secrets, email addresses and your home folder.
@@ -212,8 +233,9 @@ Jev bills input tokens only, $0.042 per million ([TypeSafe's Models page](https:
 | Conditional instructions | Each prompt you write while some fragment is not attached | ~400 with 3 fragments, ~2,000 with 24 | $0.017-0.084 per 1,000 prompts |
 | Fold relevance | Each compaction, one call per 24 results, at most two | up to ~2,500 | $0.21 per 1,000 compactions |
 | Tool gate Jev | Each new target in a session another provider serves | ~455 | $0.019 per 1,000 targets |
+| Instruction filter | Each new set of instruction files (two calls), then each prompt while some chunk would be deferred | ~13,600 per set, ~1,730 per prompt | $0.0006 per set, $0.073 per 1,000 prompts |
 
-The session caps (`stopCap` 200, `instructionCap` 200, `foldCap` 20, `toolCap` 300 calls) bound one session at about 670,000 input tokens: $0.03.
+The session caps (`stopCap` 200, `instructionCap` 200, `foldCap` 20, `toolCap` 300 calls) bound one session at about 670,000 input tokens: $0.03. The instruction filter draws on `instructionCap` too.
 
 The author's own use, priced as if every gate were on (2026-10-23, counted from Claude Code transcripts; nothing was sent), one Claude Max 20x account on two machines:
 
@@ -261,11 +283,24 @@ The plugin uses, and only for this: the network (Jev, only with a Jev setting on
 | Stop gate, `active`, 12 ordinary turns | No false block | jev-harness 0.0.3 |
 | Tool gate, external session | `.env`, a symlink to a `.pem` and `printenv` refused; 2-4 ms per call | jev-harness 0.0.3 |
 | A Jev call, two-way choice | 206 ms p50, 339 ms p95 | jev-1.14.0 |
+| The shared `CLAUDE.md` excluded in a second profile | OMC block loaded once, not twice; first request 69,152 → 66,655 tokens | Claude Code 2.1.309 |
+| A chunk loaded twice, `instructionFilter: active` | Loaded once, with the note in place of the copy; `prompt.context` took 31 ms | context-harness 0.0.2 |
+| Jev's reading of 34 real instruction chunks | Would defer 5 (1,770 characters), drop 0; nothing on the always-kept list | context-harness 0.0.2 |
 | Stop rule against Jev, 100 paragraphs | Agreement κ 0.35 | jev-harness 0.0.3 |
 | A broad fragment condition | 0.92-0.96 on unrelated one-sentence questions | jev-harness 0.0.3 |
 | Stop gate on real announcements | Not measured yet: ordinary turns never ended on one | jev-harness 0.0.3 |
 
 Live runs used Claude Code 2.1.306-2.1.308 with Haiku 5.5 in the author's own folders; the Jev timings are direct API calls, and the rule replays use the author's transcripts.
+
+<details>
+<summary>context-harness 0.0.2 (2026-10-23, Claude Code 2.1.309, Haiku 5.5, the author's own instruction files)</summary>
+
+- **`prompt.context`** fired once before the first prompt, and again on the first prompt after `/compact` and after `/clear`. A general-purpose subagent got the rewritten files without the hook firing again: its recorded instructions lacked the section the hook removed.
+- **Loaded twice.** With a section of `~/.agents/AGENTS.md` copied into a project `CLAUDE.md`, `shadow` loaded both (counted twice in the first message the model received) and recorded the copy as what `active` would leave out; `active` loaded it once, with the note in place of the copy. The hook took 31 ms.
+- **Jev's reading** of 34 chunks (12,344 characters): two calls of 7,592 and 6,043 input tokens, answered in 298 and 214 ms, after the request had gone. It would defer "작업 방식" (0.97), "웹 페이지 가져오기" (1.00), "LLM 호출 경로" (0.99) and the test project's own lead (0.98); Orca was deferred by the environment; nothing was judged covered. What was sent held no home path, account name or email address.
+- **Would-miss.** Each later prompt cost one call of about 1,730 input tokens (232-320 ms, in the background); for prompts like "Reply with the single word ok" no deferred chunk was judged to apply. Too few sessions yet for a rate.
+
+</details>
 
 <details>
 <summary>context-harness 0.0.1 (2026-10-23, Claude Code 2.1.308, Haiku 5.5, a folder with a 301-line log and a 248-line Python file)</summary>
@@ -323,7 +358,8 @@ Jev answers a question in one of three shapes: a choice among named options, a s
 - A plugin loaded before this one that answers compactions itself takes them; this plugin then neither folds nor judges them.
 - A changed setting reloads the plugin, which starts its counters and its count of consolidation requests over.
 - In `shadow`, nothing is attached, so what would have been is remembered, and forgotten only when the plugin sees a compaction summarized or the conversation cleared; `active` counts the conversation instead.
-- Not yet: fold relevance as a decision rather than a record; whether attached fragments make answers better; the Stop gate's accuracy on real announcements.
+- The instruction filter sees only what loads at the start and after a compaction; a subfolder's `CLAUDE.md` and `.claude/rules` arrive later, as Claude Code reads files, and pass it by.
+- Not yet: fold relevance as a decision rather than a record; applying Jev's instruction readings; whether attached fragments make answers better; the Stop gate's accuracy on real announcements.
 
 ## Upgrading
 
@@ -344,7 +380,7 @@ claude plugin test /path/to/context-harness    # tests/*.test.ts
 claude plugin validate /path/to/context-harness
 ```
 
-The suite has 120 tests. Eleven defects planted back one at a time each made at least one of them fail: the cleanup over the whole folder, a fixed size floor for the judgment, the earlier turn count, folders left readable, a failed `chmod` ignored, archives readable directly, a `/compact` without `HOME`, fragments counted without the conversation, queued prompts not remembered, a failure after the fold undoing it, and a quoted opening tag taken for a block.
+The suite has 134 tests. Nineteen defects planted back one at a time each made at least one of them fail. For the instruction filter: the always-kept list ignored, a deferred chunk counted as already saying another, a project rule dropped for a user one, a late Jev answer dropped, chunk names the attached-fragment count cannot read, the memory or organization file cut, a heading inside a code fence taken for a section, and records written while the setting is off. From 0.0.1: the cleanup over the whole folder, a fixed size floor for the judgment, the earlier turn count, folders left readable, a failed `chmod` ignored, archives readable directly, a `/compact` without `HOME`, fragments counted without the conversation, queued prompts not remembered, a failure after the fold undoing it, and a quoted opening tag taken for a block.
 
 ## Credits
 
@@ -352,7 +388,7 @@ The idea of folding completed tool output into addressed one-line pointers, inst
 
 ## Versions
 
-Versions stay at 0.0.x while the plugin is young. 0.0.1 is the first release, joining context-fold 0.0.2 and jev-harness 0.0.3.
+Versions stay at 0.0.x while the plugin is young. 0.0.1 is the first release, joining context-fold 0.0.2 and jev-harness 0.0.3. 0.0.2 adds the instruction filter.
 
 ## License
 

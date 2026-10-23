@@ -39,13 +39,17 @@ test('defaults: a key in every source, every hook run, nothing sent and no judgm
   await $.session.compact({ trigger: 'manual', messages: FOLDABLE } as never)
   await $.classic.PostCompact({ trigger: 'manual', compact_summary: 'x' } as never)
   await $.classic.SessionStart({ source: 'compact' } as never)
+  const files = [{ path: '/home/me/.agents/AGENTS.md', kind: 'user', content: '## 문체\n\nLead with the result.\n' }, { path: '/proj/AGENTS.md', kind: 'project', content: '## 문체\n\nLead with the result.\n' }]
+  await $.prompt.context({ blocks: [{ name: 'claudeMd', text: 'rendered' }], instructionFiles: files } as never)
   const report = await $.command.run({ command: 'jev-report', args: '' } as never)
   await drain()
 
   expect(io.fetches.length).toBe(0)
   expect(io.writes.filter(w => w.path.includes('/records/'))).toEqual([])
+  // The instruction files load as they are, the duplicate included.
+  expect(io.loaded[0]).toEqual(files)
   // The modes the engine filled in from the manifest.
-  expect(report.text).toContain('context-harness: stop off, tool off, tool jev off, instructions off, fold off')
+  expect(report.text).toContain('context-harness: stop off, tool off, tool jev off, instructions off, fold off, instruction filter off')
   // The fragment was not attached: instructions are off.
   expect(io.submitted[0]?.context).toBe(undefined)
   // Folding needs no key and is on by default.

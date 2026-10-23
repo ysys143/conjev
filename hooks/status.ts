@@ -16,6 +16,7 @@ export function jevStatus(
   counts: Counts,
   hasNoKey: boolean,
   fragments: { list: readonly unknown[]; hash: string } | undefined,
+  filtered = 0,
 ): string | undefined {
   const isJev = usesJev(settings)
   if (!isJev && settings.toolGate === 'off') return undefined
@@ -28,6 +29,7 @@ export function jevStatus(
     parts.push(`instr ${settings.instructions} ${fragments ? `${fragments.list.length} #${fragments.hash.slice(0, 6)}` : '-'}, ${counts.attached} attached`)
   }
   if (settings.foldJev !== 'off') parts.push(`fold ${settings.foldJev} ${counts.foldJudged} judged`)
+  if (settings.instructionFilter !== 'off') parts.push(`instr filter ${settings.instructionFilter}${filtered ? ` −${Math.round(filtered / 100) / 10}k dup` : ''}`)
 
   return parts.join(' · ')
 }
@@ -42,7 +44,7 @@ export function showStatus($: EngineInterface): void {
   const settings = runtime.settings
   const line = statusLine([
     foldStatus(runtime.folded),
-    settings === undefined ? undefined : jevStatus(settings, runtime.counts, runtime.key === null, runtime.fragments),
+    settings === undefined ? undefined : jevStatus(settings, runtime.counts, runtime.key === null, runtime.fragments, runtime.filter?.droppedChars),
   ])
   if (line !== undefined) $.ui.status(line)
 }

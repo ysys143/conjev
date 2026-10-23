@@ -21,6 +21,7 @@ export type HarnessSettings = {
   instructionCap: number
   foldJev: 'off' | 'shadow'
   foldCap: number
+  instructionFilter: Mode
 }
 
 const modeOf = (value: unknown): Mode => (value === 'shadow' || value === 'active' ? value : 'off')
@@ -52,10 +53,17 @@ export function harnessSettingsFrom(options: Readonly<Record<string, unknown>>):
     instructionCap: numberOf(options.instructionCap, 200, 0, 10_000),
     foldJev: options.foldJev === 'shadow' ? 'shadow' : 'off',
     foldCap: numberOf(options.foldCap, 20, 0, 1000),
+    instructionFilter: modeOf(options.instructionFilter),
   }
 }
 
 /** Whether a setting can send anything to Jev; only then is a key looked up. */
 export function usesJev(settings: HarnessSettings): boolean {
-  return settings.stopGate !== 'off' || settings.toolJev !== 'off' || settings.instructions !== 'off' || settings.foldJev !== 'off'
+  return (
+    settings.stopGate !== 'off' ||
+    settings.toolJev !== 'off' ||
+    settings.instructions !== 'off' ||
+    settings.foldJev !== 'off' ||
+    settings.instructionFilter !== 'off'
+  )
 }

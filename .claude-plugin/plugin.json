@@ -1,6 +1,6 @@
 {
   "name": "context-harness",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Context management for Claude Code: fold completed tool results into one-line pointers at compaction instead of summarizing, keep the project's intent and status files current, and, with a Jev key, judgment gates for announced-but-undone turns, secret files under other providers, and conditional instructions. Folding needs no key; every Jev setting is off by default.",
   "author": {
     "name": "ysys143",
@@ -201,6 +201,17 @@
       "title": "TypeSafe API key",
       "description": "Kept in secure storage. Without it, the plugin's .env (TYPESAFE_API_KEY=) or the TYPESAFE_API_KEY environment variable is used.",
       "sensitive": true
+    },
+    "instructionFilter": {
+      "type": "string",
+      "title": "Instruction filter (CLAUDE.md, AGENTS.md)",
+      "description": "off: nothing. shadow: each time the instruction files load, records which chunks are loaded twice and, with a key, Jev's reading of which chunks every request needs and which repeat earlier ones; the scrubbed instruction text, and for chunks Jev would defer your prompts (first 600 characters), are sent to TypeSafe. active: chunks loaded twice byte for byte are left out; Jev's readings are still only recorded.",
+      "options": [
+        "off",
+        "shadow",
+        "active"
+      ],
+      "default": "off"
     }
   }
 }
