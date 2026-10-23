@@ -77,5 +77,6 @@ One behaviour is clear from the tool calls alone: **after compaction, Opus searc
 ## Follow-ups this suggests
 
 - For a file read, point at the file to read again; the archived copy may be older than the disk.
-- Rerun Opus with a longer `TURN_IDLE`, with the session record counted as its own route.
+- Rerun Opus with turn ends read from the session, not the screen, and the session record counted as its own route.
 - An arm with the pointer line and no note, to separate the two.
+- The larger question, whether long work goes better across compactions with every device of the plugin, is planned in [next-evaluation.md](next-evaluation.md).

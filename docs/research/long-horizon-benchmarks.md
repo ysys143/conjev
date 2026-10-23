@@ -1,6 +1,6 @@
 # Benchmarks for keeping a long task on track
 
-The question: with context-harness folding instead of summarizing, does an agent finish long work better, through many compactions, than with Claude Code's own summary? [fold-recovery.md](fold-recovery.md) shows that a needed original comes back; it does not show that tasks go better. This note lists benchmarks that could, how well each fits, and what each would take. Surveyed 2026-10-23; details were checked against each paper's abstract or the project's own page.
+The question: with context-harness (its fold, its project files and its gates), does an agent finish long work better, through many compactions, than with Claude Code's own summary? [next-evaluation.md](next-evaluation.md) answers it first with a synthetic task suite; the benchmarks here are the external step after it. [fold-recovery.md](fold-recovery.md) shows that a needed original comes back; it does not show that tasks go better. This note lists benchmarks that could, how well each fits, and what each would take. Surveyed 2026-10-23; details were checked against each paper's abstract or the project's own page.
 
 ## Fit, best first
 

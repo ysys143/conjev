@@ -293,7 +293,7 @@ The plugin uses, and only for this: the network (Jev, only with a Jev setting on
 | A broad fragment condition | 0.92-0.96 on unrelated one-sentence questions | jev-harness 0.0.3 |
 | Stop gate on real announcements | Not measured yet: ordinary turns never ended on one | jev-harness 0.0.3 |
 
-Live runs used Claude Code 2.1.306-2.1.309 with Haiku 5.5 in the author's own folders; the Jev timings are direct API calls, and the rule replays use the author's transcripts. Research notes, with methods and limits: [do folded results come back when needed](docs/research/fold-recovery.md) (kit in [`experiments/fold-recovery/`](experiments/fold-recovery/)), and [benchmarks for keeping a long task on track](docs/research/long-horizon-benchmarks.md).
+Live runs used Claude Code 2.1.306-2.1.309 with Haiku 5.5 in the author's own folders; the Jev timings are direct API calls, and the rule replays use the author's transcripts. Research notes, with methods and limits, are indexed in [docs/research](docs/research/README.md): what each layer has and has not been measured on, [do folded results come back when needed](docs/research/fold-recovery.md) (kit in [`experiments/fold-recovery/`](experiments/fold-recovery/)), the [next evaluation](docs/research/next-evaluation.md), and [benchmarks for keeping a long task on track](docs/research/long-horizon-benchmarks.md).
 
 <details>
 <summary>context-harness 0.0.2 (2026-10-23, Claude Code 2.1.309, Haiku 5.5, the author's own instruction files)</summary>
