@@ -78,7 +78,7 @@ A tool result is folded when it is finished and large: older than the last `keep
 
 ## Compared with
 
-- **Claude Code's own compaction** replaces the conversation with a summary. context-harness answers the same compaction first and folds; the summary runs only when there is nothing to fold or the folded transcript still fills more than 60% of the window, and then on the folded transcript.
+- **Claude Code's own compaction** replaces the conversation with a summary. context-harness answers the same compaction first and folds; the summary runs only when there is nothing to fold or the folded transcript still fills more than 60% of the window, and then on the folded transcript. After its summary, Claude Code attaches the files read recently as they are now: asked for a value as it was before the file changed, the model gave the new one as the old, 5 times of 5 ([fold-recovery](docs/research/fold-recovery.md)).
 - **Memory plugins** keep what was learned across sessions, in a store of their own. context-harness works inside a session: exact tool output stays one call away, and what should last is written by the agent into the project's own files (`INTENT.md`, `PHASE.md`, `sessions/`).
 
 ## Project state and memory
@@ -286,11 +286,14 @@ The plugin uses, and only for this: the network (Jev, only with a Jev setting on
 | The shared `CLAUDE.md` excluded in a second profile | OMC block loaded once, not twice; first request 69,152 → 66,655 tokens | Claude Code 2.1.309 |
 | A chunk loaded twice, `instructionFilter: active` | Loaded once, with the note in place of the copy; `prompt.context` took 31 ms | context-harness 0.0.2 |
 | Jev's reading of 34 real instruction chunks | Would defer 5 (1,770 characters), drop 0; nothing on the always-kept list | context-harness 0.0.2 |
+| A file changed since it was read, after compaction: its earlier value | Fold 5/5 (through `read_coordinate`); fold with no pointer 0/5, said it could not know; Claude Code's summary 0/5, gave the new value 5 times | context-harness 0.0.2, Haiku 5.5 |
+| An output that cannot be produced again, after compaction | Fold 5/5; fold with no pointer 0/5; summary 0/5 | context-harness 0.0.2, Haiku 5.5 |
+| Folded results reached again in one long working session | 15 of 300, all files read again from disk; none through `read_coordinate` | context-fold 0.0.2 |
 | Stop rule against Jev, 100 paragraphs | Agreement κ 0.35 | jev-harness 0.0.3 |
 | A broad fragment condition | 0.92-0.96 on unrelated one-sentence questions | jev-harness 0.0.3 |
 | Stop gate on real announcements | Not measured yet: ordinary turns never ended on one | jev-harness 0.0.3 |
 
-Live runs used Claude Code 2.1.306-2.1.308 with Haiku 5.5 in the author's own folders; the Jev timings are direct API calls, and the rule replays use the author's transcripts.
+Live runs used Claude Code 2.1.306-2.1.309 with Haiku 5.5 in the author's own folders; the Jev timings are direct API calls, and the rule replays use the author's transcripts. Research notes, with methods and limits: [do folded results come back when needed](docs/research/fold-recovery.md) (kit in [`experiments/fold-recovery/`](experiments/fold-recovery/)), and [benchmarks for keeping a long task on track](docs/research/long-horizon-benchmarks.md).
 
 <details>
 <summary>context-harness 0.0.2 (2026-10-23, Claude Code 2.1.309, Haiku 5.5, the author's own instruction files)</summary>
@@ -384,7 +387,7 @@ The suite has 134 tests. Nineteen defects planted back one at a time each made a
 
 ## Credits
 
-The idea of folding completed tool output into addressed one-line pointers, instead of summarizing, comes from Hwang Dae Jin and Yeni, *The Context Coordinate System and the Principle of Unbroken Memory* (Philosophy That Works, 2026; DOI [10.5281/zenodo.23377916](https://doi.org/10.5281/zenodo.23377916); [repository](https://github.com/philosophythatworks/context-lattice)). This plugin is an independent implementation and contains no code from that project. Related work: observation masking in [Lindenbauer et al., 2025](https://arxiv.org/abs/2508.21433), and Anthropic's [context editing](https://platform.claude.com/docs/en/build-with-claude/context-editing).
+The idea of folding completed tool output into addressed one-line pointers, instead of summarizing, comes from Hwang Dae Jin and Yeni, *The Context Coordinate System and the Principle of Unbroken Memory* (Philosophy That Works, 2026; DOI [10.5281/zenodo.23377916](https://doi.org/10.5281/zenodo.23377916); [repository](https://github.com/philosophythatworks/context-lattice)). This plugin is an independent implementation and contains no code from that project. Related work: observation masking in [Lindenbauer et al., 2025](https://arxiv.org/abs/2508.21433); agent-managed offloading and retrieval in [ACM](https://arxiv.org/abs/2607.23809); and Anthropic's [context editing](https://platform.claude.com/docs/en/build-with-claude/context-editing).
 
 ## Versions
 
