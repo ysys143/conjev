@@ -159,7 +159,7 @@ Scrubbing removes secret-shaped strings, `NAME=value` secrets, email addresses a
 
 4. Read `/jev-report`, label records with `/jev-mark`, and switch a gate to `active` once it earns it (see [Records and labels](#records-and-labels)).
 
-Without a key, the status line says only `jev: no key` and nothing is sent. The tool gate floor needs no key. With `toolGate: active`, the agent cannot write the plugin's `.env` or Claude's settings files; set those yourself.
+Without a key, the status line says only `jev: no key` and nothing is sent. The tool gate floor needs no key. Otherwise the judgment layer's status line stays empty until a gate has recorded something: Claude Code draws every plugin status line with a warning mark, which a plugin cannot change, so a line that only said the gates were on would look like a fault. With `toolGate: active`, the agent cannot write the plugin's `.env` or Claude's settings files; set those yourself.
 
 <details>
 <summary>Stop gate in detail</summary>
@@ -391,7 +391,7 @@ The idea of folding completed tool output into addressed one-line pointers, inst
 
 ## Versions
 
-Versions stay at 0.0.x while the plugin is young. 0.0.1 is the first release, joining context-fold 0.0.2 and jev-harness 0.0.3. 0.0.2 adds the instruction filter.
+Versions stay at 0.0.x while the plugin is young. 0.0.1 is the first release, joining context-fold 0.0.2 and jev-harness 0.0.3. 0.0.2 adds the instruction filter. 0.0.3 keeps the status line empty until there is something to show.
 
 ## License
 
