@@ -1,0 +1,95 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 586" width="880" height="586" role="img" aria-labelledby="fold-title fold-desc">
+  <title id="fold-title">Fold, don't summarize</title>
+  <desc id="fold-desc">Before compaction, the transcript holds two large tool results, each two prompts old. After the fold, the same messages remain and each of those results is a one-line pointer. The originals are kept in an archive on disk, read_coordinate returns them, and a note sends the model back to the project's INTENT.md and PHASE.md.</desc>
+  <style>
+    text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; fill: #2d3142; }
+    .eyebrow { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 10.5px; letter-spacing: 1px; fill: #4f5d75; }
+    .bar { font-size: 12.5px; }
+    .call { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11.5px; fill: #4f5d75; }
+    .pointer { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11.5px; fill: #a8481a; }
+    .note { font-size: 12px; fill: #2e5aa8; }
+    .name { font-size: 14px; font-weight: 600; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; fill: #4f5d75; }
+    .small { font-size: 12px; fill: #4f5d75; }
+    .label { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; fill: #4f5d75; }
+  </style>
+  <defs>
+    <marker id="arr-accent" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 Z" fill="#eb6c36"/></marker>
+    <marker id="arr-link" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 Z" fill="#2e5aa8"/></marker>
+  </defs>
+
+  <rect width="880" height="586" rx="12" fill="#f5f5f5"/>
+
+  <!-- Connectors first, so boxes paint over their ends. -->
+  <path d="M388 166 H486" fill="none" stroke="#eb6c36" stroke-width="1.5" marker-end="url(#arr-accent)"/>
+  <path d="M210 396 V474 Q210 482 218 482 H266" fill="none" stroke="#eb6c36" stroke-width="1.3" marker-end="url(#arr-accent)"/>
+  <path d="M502 482 H552 Q560 482 560 474 V402" fill="none" stroke="#2e5aa8" stroke-width="1.3" marker-end="url(#arr-link)"/>
+  <path d="M733 396 V436" fill="none" stroke="#2e5aa8" stroke-width="1.3" stroke-dasharray="4,3" marker-end="url(#arr-link)"/>
+
+  <!-- Connector labels on masks the color of the canvas. -->
+  <rect x="393" y="144" width="94" height="13" fill="#f5f5f5"/>
+  <text x="440" y="154" class="label" text-anchor="middle">at compaction</text>
+  <rect x="216" y="417" width="100" height="13" fill="#f5f5f5"/>
+  <text x="220" y="427" class="label">originals kept</text>
+  <rect x="566" y="417" width="132" height="13" fill="#f5f5f5"/>
+  <text x="570" y="427" class="label">read_coordinate(id)</text>
+  <rect x="739" y="411" width="94" height="13" fill="#f5f5f5"/>
+  <text x="743" y="421" class="label">re-read first</text>
+
+  <!-- Before: two large results, each two prompts old. -->
+  <rect x="32" y="24" width="356" height="372" rx="8" fill="#ffffff" stroke="#c9ced8"/>
+  <text x="48" y="48" class="eyebrow">BEFORE COMPACTION</text>
+  <rect x="48" y="62" width="324" height="28" rx="4" fill="#eef1f6"/>
+  <text x="58" y="81" class="bar">you · Look at the billing code</text>
+  <rect x="48" y="96" width="324" height="28" rx="4" fill="#ffffff" stroke="#d5d9e1"/>
+  <text x="58" y="115" class="call">Read src/billing/invoice.ts</text>
+  <rect x="48" y="130" width="324" height="72" rx="4" fill="#fbe2d6" stroke="#eb6c36" stroke-width="0.8"/>
+  <text x="58" y="171" class="bar">tool result · 1,201 lines</text>
+  <rect x="48" y="208" width="324" height="28" rx="4" fill="#ffffff" stroke="#d5d9e1"/>
+  <text x="58" y="227" class="call">Bash npm test</text>
+  <rect x="48" y="242" width="324" height="44" rx="4" fill="#fbe2d6" stroke="#eb6c36" stroke-width="0.8"/>
+  <text x="58" y="269" class="bar">tool result · 612 lines</text>
+  <rect x="48" y="292" width="324" height="28" rx="4" fill="#eef1f6"/>
+  <text x="58" y="311" class="bar">you · Fix the rounding bug</text>
+  <rect x="48" y="326" width="324" height="28" rx="4" fill="#eef1f6"/>
+  <text x="58" y="345" class="bar">you · Now add a test for it</text>
+  <rect x="48" y="360" width="324" height="28" rx="4" fill="#ffffff" stroke="#2d3142" stroke-width="0.8"/>
+  <text x="58" y="379" class="bar">recent result · kept whole</text>
+
+  <!-- After: the same messages; those results are pointers. -->
+  <rect x="492" y="24" width="356" height="372" rx="8" fill="#ffffff" stroke="#c9ced8"/>
+  <text x="508" y="48" class="eyebrow">AFTER THE FOLD</text>
+  <rect x="508" y="62" width="324" height="28" rx="4" fill="#eef1f6"/>
+  <text x="518" y="81" class="bar">you · Look at the billing code</text>
+  <rect x="508" y="96" width="324" height="28" rx="4" fill="#ffffff" stroke="#d5d9e1"/>
+  <text x="518" y="115" class="call">Read src/billing/invoice.ts</text>
+  <rect x="508" y="130" width="324" height="28" rx="4" fill="#ffffff" stroke="#eb6c36" stroke-width="0.8" stroke-dasharray="3,2"/>
+  <text x="518" y="149" class="pointer">[folded Read · invoice.ts · 1201 lines …]</text>
+  <rect x="508" y="164" width="324" height="28" rx="4" fill="#ffffff" stroke="#d5d9e1"/>
+  <text x="518" y="183" class="call">Bash npm test</text>
+  <rect x="508" y="198" width="324" height="28" rx="4" fill="#ffffff" stroke="#eb6c36" stroke-width="0.8" stroke-dasharray="3,2"/>
+  <text x="518" y="217" class="pointer">[folded Bash · npm test · 612 lines …]</text>
+  <rect x="508" y="232" width="324" height="28" rx="4" fill="#eef1f6"/>
+  <text x="518" y="251" class="bar">you · Fix the rounding bug</text>
+  <rect x="508" y="266" width="324" height="28" rx="4" fill="#eef1f6"/>
+  <text x="518" y="285" class="bar">you · Now add a test for it</text>
+  <rect x="508" y="300" width="324" height="28" rx="4" fill="#ffffff" stroke="#2d3142" stroke-width="0.8"/>
+  <text x="518" y="319" class="bar">recent result · kept whole</text>
+  <rect x="508" y="334" width="324" height="48" rx="4" fill="#e6ecf6" stroke="#2e5aa8" stroke-width="0.8"/>
+  <text x="518" y="353" class="note">note · 2 results folded;</text>
+  <text x="518" y="371" class="note">re-read INTENT.md and PHASE.md</text>
+
+  <!-- On disk. -->
+  <rect x="272" y="442" width="230" height="120" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="0.8"/>
+  <text x="288" y="470" class="name">Archive</text>
+  <text x="288" y="492" class="mono">~/.local/state/</text>
+  <text x="288" y="508" class="mono">context-harness/archive/</text>
+  <text x="288" y="534" class="small">the originals, unchanged</text>
+
+  <rect x="618" y="442" width="230" height="120" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="0.8"/>
+  <text x="634" y="470" class="name">Project files</text>
+  <text x="634" y="492" class="mono">INTENT.md · PHASE.md</text>
+  <text x="634" y="508" class="mono">sessions/</text>
+  <text x="634" y="534" class="small">the source of truth,</text>
+  <text x="634" y="550" class="small">written by the agent</text>
+</svg>
