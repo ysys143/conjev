@@ -2,7 +2,7 @@
 
 **Status:** plan, not yet run. Written 2026-10-23 against context-harness 0.0.3 and Claude Code 2.1.309. Everything marked *frozen* is fixed after the pilot and not changed once the main runs start.
 
-**Review.** Four read-only reviews by gpt-6-astra the same day, each against the code. The first found 16 problems (3 critical); the second, 7 left (2 critical) and the plan blocked for main runs; the third, one major gap in the device checks; the fourth judged that gap closed and asked for one assertion to be qualified, which was done. The fourth reviewer's verdict on phase 0 was "ready to start"; main-run readiness depends on phases 0-2 passing as written.
+**Review.** Four read-only reviews by gpt-6-astra the same day, each against the code. The first found 16 problems (3 critical); the second, 7 left (2 critical) and the plan blocked for main runs; the third, one major gap in the device checks; the fourth judged that gap closed and asked for one assertion to be qualified, which was done. The fourth reviewer's verdict on phase 0 was "ready to start"; main-run readiness depends on phases 0-2 passing as written. After the reviews, the research environment was changed at the owner's decision from a separate macOS user (the reviewers' recommendation) to a separate Claude configuration folder; that section has not been reviewed again.
 
 ## Why this evaluation
 
@@ -37,17 +37,16 @@ Held equal across arms: model and settings, Claude Code binary, research account
 
 ## Research environment
 
-**Hard isolation is required for every scored run (pilot and main).** A configuration without it is for setup only and contributes nothing to Q1.
+A separate Claude Code configuration folder, `CLAUDE_CONFIG_DIR=~/.claude-research`, under the same macOS account. This does not isolate everything; what it leaves open is handled as follows and stated in the results.
 
-- **A dedicated macOS user** (for example `chresearch`) runs the agent; the evaluator is another user. context-harness keeps archives and records under `$HOME`, cleans its records there at start, and reads fragments from `~/.agents/fragments` by default, and Claude Code loads `CLAUDE.md` from parent folders, so a separate `CLAUDE_CONFIG_DIR` alone is not enough.
-- **Each run sees only its own task, session record and plugin state.** After each run, its teardown moves the run's task folder, session records (`<profile>/projects/…`) and plugin state (`~/.local/state/context-harness/`) into the evaluator's store, and the next run starts with none of them.
-- **The agent cannot read** answer keys, hidden tests, generator secrets, proxy captures, the event log or other runs: all belong to the evaluator's user, mode 700.
-- **Canary test** before every phase: canary files placed in each forbidden location, read through file tools and through shell commands from inside a session; every read must fail.
+- **Settings.** `settings.json`: `autoMemoryEnabled: false`; for H, context-harness from the marketplace at the version under test, with `fragmentsDir` set to an empty synthetic folder; no other plugins, hooks, output styles, MCP servers or skills; an empty user `CLAUDE.md`. Phase 0 checks in the captured system prompt, at start and after a compaction, that nothing else is in effect, and that auto-memory contributes nothing and writes no memory files.
+- **Task folders outside the home folder** (for example under `/private/tmp/ch-research/`): Claude Code also loads `~/.claude/CLAUDE.md` for any folder below home.
+- **The plugin's own state.** context-harness keeps archives and records under `~/.local/state/context-harness/`, beside the author's own. Each run's session id keeps them apart, and teardown moves the run's part into the evaluator's store. Before the next run starts, no earlier run's state is left there.
+- **Answers out of reach by timing, not permission.** The same account can read anything the evaluator writes, so answer keys and hidden tests are not on disk while a run is going: the generator writes the task folder and keeps the answers in a store it creates only after the run's teardown. Proxy captures are written outside the task folder.
+- **Reads are detected, not prevented.** Every tool call is in the capture. A run in which the agent touched the evaluator's store, another run's folder, another session's record or the author's own files is marked *contaminated*, kept, and reported apart; it does not count toward the decision.
 - **What every run can read:** its own session record. It is part of every Claude Code session, so it stays, and recovery through it is counted as its own route.
-- **Settings.** Profile `settings.json`: `autoMemoryEnabled: false`; for H, context-harness from the marketplace at the version under test, with `fragmentsDir` set to an empty synthetic folder; no other plugins, hooks, output styles, MCP servers or skills; an empty user `CLAUDE.md`.
-- **Phase 0 inventory.** What is actually in effect is checked in the captured system prompt at start and after a compaction. Auto-memory contributes nothing to any request and creates no memory files.
-- **Credentials.** No `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN` or provider variables in the agent user's environment, so the subscription is used. Phase 0 checks the credential source without logging any value.
-- **Steps only the person can do:** create the user, log in once as that user (`/login`), and accept any trust dialog the chosen driver shows. No driver answers a dialog.
+- **Credentials.** No `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN` or provider variables in the run's environment, so the subscription is used. Phase 0 checks the credential source without logging any value.
+- **Steps only the person can do:** log in once in the research folder (`CLAUDE_CONFIG_DIR=~/.claude-research claude`, then `/login`; Claude Code keeps a separate keychain entry for each configuration folder), and accept any trust dialog the chosen driver shows. No driver answers a dialog.
 
 ## Capturing the real messages
 
@@ -153,9 +152,9 @@ Candidates, chosen in phase 0 by one test, the full chain in one process: a turn
 
 | Phase | What | Exit |
 | --- | --- | --- |
-| 0. Setup | Research user and profile; login; proxy and its transport tests; trust, credential, permission, isolation and canary checks; the prohibited-action watcher test; driver chosen by the full-chain test | Every phase-0 check passes |
+| 0. Setup | Research configuration folder; login; proxy and its transport tests; trust, credential and permission checks; teardown and contamination detection tested; the prohibited-action watcher test; driver chosen by the full-chain test | Every phase-0 check passes |
 | 1. Devices | Deterministic action tests, then live smoke tests of H in diagnostic configurations | Every diagnostic case meets its minimum and passes. A failure stops the phase until the defect is fixed and retested; a filed defect is not a pass |
-| 2. Pilot | 1 task family, 1 seed, V and H, on the model chosen for the main runs, under hard isolation | Scripts score a run end to end; exposure met; cost per run measured; the scoring map frozen |
+| 2. Pilot | 1 task family, 1 seed, V and H, on the model chosen for the main runs | Scripts score a run end to end; exposure met; cost per run measured; the scoring map frozen |
 | 3. Main | 3 task families × 3 seeds × V and H | All 18 runs scored, or every missing one accounted for |
 | 4. Report | `docs/research/long-task-results.md` | Per-run and per-task tables, exposure, device checks (Q1 exposure reported apart, including expected NOT EXERCISED devices), cost, limits |
 
@@ -163,13 +162,14 @@ Candidates, chosen in phase 0 by one test, the full chain in one process: a turn
 
 **Interruptions.**
 - Reaching a run's ceiling is an observed outcome of that arm and is not replaced.
+- A contaminated run (see Research environment) does not count toward the decision and is not replaced; its pair is reported missing.
 - Infrastructure or usage-limit interruptions are told apart from treatment outcomes before any scoring, and allow at most one replacement pair. Every attempt and its cost is kept.
 - If outcomes are still missing, the report gives available-pair estimates explicitly and does not make the 9-pair decision.
 
 **Budget.**
 - The pilot runs on the main model, so its measurement is the one the budget uses.
 - The budget is set separately for setup, phase 1, the pilot, the main runs, scoring and Jev. The account's usage meters are recorded before and after each phase.
-- A separate user or profile does not get a separate allowance.
+- A separate configuration folder does not get a separate allowance.
 - If the main runs do not fit, this plan is revised (fewer task families, the same seeds per family) before any main outcome is looked at.
 
 ## Deciding the result
@@ -193,10 +193,10 @@ Fixed before the runs:
 | Risk | Handling |
 | --- | --- |
 | The driver changes what the plugin does | Persistent process for both arms; the full-chain test; teardown drain |
-| The agent reads answers or earlier runs | Evaluator-owned files; per-run teardown; canaries through file tools and shell |
+| The agent reads answers or earlier runs | Answers not on disk during a run; per-run teardown; every read in the capture, contaminated runs reported apart |
 | Transient violations go unseen | File-system watcher, tested against an edit-and-restore script |
 | The proxy changes behaviour | Transport tests; one turn with and without it |
-| Credentials or private text in captures | Removed from what is written; captures under the evaluator's user, never committed; synthetic tasks only |
+| Credentials or private text in captures | Removed from what is written; captures outside task folders, never committed; synthetic tasks only |
 | Costs miscounted | Usage rebuilt from the stream events; Jev counted per call |
 | Usage limits | Pilot on the main model; budget per phase; meters recorded |
 | Forced compaction is not natural compaction | Stated as a limit; exposure minimums per boundary |
