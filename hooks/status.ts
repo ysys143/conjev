@@ -10,7 +10,12 @@ export function foldStatus(folded: { results: number; savedChars: number }): str
   return folded.results === 0 ? undefined : `folded ${folded.results} · −${Math.round(folded.savedChars / 1000)}k chars`
 }
 
-/** The judgment layer's part; undefined while everything it shows is off. */
+/**
+ * The judgment layer's part; undefined until a gate has recorded something.
+ * Claude Code draws a plugin's status with a warning mark, so a line that
+ * only says the gates are on would look like a fault from the first prompt.
+ * A missing key is a fault, and shows at once.
+ */
 export function jevStatus(
   settings: HarnessSettings,
   counts: Counts,
@@ -21,6 +26,8 @@ export function jevStatus(
   const isJev = usesJev(settings)
   if (!isJev && settings.toolGate === 'off') return undefined
   if (isJev && hasNoKey) return 'jev: no key'
+  const recorded = counts.judged + counts.failed + counts.floor + counts.toolJudged + counts.attached + counts.foldJudged
+  if (recorded === 0 && filtered === 0) return undefined
   const parts = ['jev']
   if (settings.stopGate !== 'off') parts.push(`stop ${settings.stopGate} ${counts.judged} judged${counts.failed ? `, ${counts.failed} failed` : ''}`)
   if (settings.toolGate !== 'off') parts.push(`tool ${settings.toolGate} ${counts.floor} hits`)

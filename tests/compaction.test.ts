@@ -297,3 +297,17 @@ test('an archive that could not be written still leaves the note that follows a 
   await settle(() => io.appended.length > 0)
   expect(io.appended[0]).toContain('[context-harness] This conversation was just compacted.')
 })
+
+test('status: nothing on screen while the gates are on but have recorded nothing', { options: { stopGate: 'shadow', foldJev: 'shadow' } }, async ($, on) => {
+  const io = setup(on, { env: KEY_ENV })
+  await $.session.start(START)
+  expect(io.statuses).toEqual([])
+})
+
+test('status: a gate that recorded something shows the line', { options: { toolGate: 'active', providerTrust: 'external' } }, async ($, on) => {
+  const io = setup(on)
+  await $.session.start(START)
+  expect(io.statuses).toEqual([])
+  await $.tool.call({ tool: 'Read', file_path: '/proj/.env' })
+  expect(io.statuses.at(-1)).toBe('jev · tool active 1 hits')
+})
