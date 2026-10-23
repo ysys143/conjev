@@ -129,6 +129,31 @@ In `/config` under context-harness, or in `settings.json`:
 
 Everything but the tool gate floor needs a TypeSafe key, read from the first of: the `apiKey` setting (kept in secure storage; `/plugin configure context-harness@context-harness`), a `TYPESAFE_API_KEY=` line in a `.env` in the plugin's folder, or the `TYPESAFE_API_KEY` environment variable. Without one the status line says `jev: no key` and nothing is sent.
 
+## What Jev costs
+
+Jev bills input tokens only, $0.042 per million ([TypeSafe's Models page](https://docs.typesafe.ai/models), 2026-10-23); output is free. A call from this mod sends 370-500 input tokens, about 70 more for each further question in the same request.
+
+| Point | When it calls | Input tokens per call | Cost |
+| --- | --- | --- | --- |
+| Stop gate | Each turn end it judges (about 60%; the rest are skipped) | ~400 | $0.017 per 1,000 turn ends |
+| Conditional instructions | Each prompt you write while some fragment is not attached | ~400 with 3 fragments, ~2,000 with 24 | $0.017-0.084 per 1,000 prompts |
+| Fold relevance | Each compaction, one call per 24 results, at most two | up to ~2,500 | $0.21 per 1,000 compactions |
+| Tool gate Jev | Each new target in a session another provider serves | ~455 | $0.019 per 1,000 targets |
+
+The session caps (`stopCap` 200, `instructionCap` 200, `foldCap` 20, `toolCap` 300 calls) bound one session at about 670,000 input tokens: $0.03.
+
+**The author's own use, priced as if every Jev setting were on** (2026-10-23, counted from Claude Code transcripts; nothing was sent): one Claude Max 20x account, two machines.
+
+| Period | Sessions | Prompts | Tool calls | Compactions | Typical | Upper |
+| --- | --- | --- | --- | --- | --- | --- |
+| One week, 68% of the weekly limit used | 121 | 1,495 | 30,485 | 66 | $0.05 | $0.25 |
+| That week scaled to 100% of the limit | | | | | $0.07 | $0.37 |
+| 30 days | 764 | 5,812 | 182,775 | 165 | $0.28 | $1.00 |
+
+*Typical* is three fragments, and the tool gate's Jev only where another provider served the session (none that week; 38 of 764 sessions over 30 days). *Upper* is 24 fragments asked on every prompt and every session served by another provider. Used up to its weekly limit, a Max 20x plan comes to about $0.32 a month typical and $1.57 at the upper end, 0.2-0.8% of the plan's $200 ([Claude pricing](https://claude.com/pricing)); Max 5x allows a quarter of Max 20x's usage, so roughly a quarter of that. The weekly limit also counts use outside Claude Code, which runs no mod, so Claude Code alone at 100% would cost somewhat more.
+
+The cost that matters more is time: in `active`, a judged turn end and the first call to each target wait for Jev, 200-340 ms (p50-p95).
+
 ## Records, labels and when to turn a gate on
 
 - `/jev-report`: per gate, records, skips by reason, coverage, failures by kind, latency, tokens, the rule-versus-Jev table with Cohen's kappa, unlabeled disagreements, and, once labeled, precision and recall at several thresholds.
