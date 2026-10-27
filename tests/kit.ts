@@ -1,6 +1,7 @@
 // One stub of everything the plugin asks the engine, shared by the hook tests.
 import type { HttpResponse, SessionMessage } from 'claude-code'
 import type { TestBody } from 'claude-code/testing'
+import { JEV_ENDPOINT } from '../hooks/jev'
 
 export type On = Parameters<TestBody>[1]
 // The test runtime has timers; the type library the mod is checked with does not declare them.
@@ -39,6 +40,8 @@ export type Setup = {
   failList?: string
   /** Prompts are queued behind a running turn: not in the conversation yet when the next one is judged. */
   isQueued?: boolean
+  /** Web pages by URL; any other URL but Jev's answers 404. */
+  pages?: Record<string, HttpResponse>
 }
 
 type ApiMessage = { role: 'user' | 'assistant'; content: { type: string; text?: string }[] }
@@ -50,6 +53,7 @@ export const setup = (on: On, s: Setup = {}) => {
   const files: Record<string, string> = { ...s.files }
   const fetches: { headers: Record<string, string>; body: Record<string, unknown> }[] = []
   const writes: { path: string; text: string }[] = []
+  const pageFetches: string[] = []
   const runs: string[][] = []
   // What touched the disk, in order: `run <argv0>` and `write <path>`.
   const disk: string[] = []
@@ -115,6 +119,10 @@ export const setup = (on: On, s: Setup = {}) => {
   })
   on('clock.after', () => ({ value: undefined }))
   on('http.fetch', async (_, e) => {
+    if (e.url !== JEV_ENDPOINT) {
+      pageFetches.push(e.url)
+      return { value: s.pages?.[e.url] ?? { status: 404, ok: false, headers: {}, text: '' } }
+    }
     const body = JSON.parse(e.init?.body ?? '{}') as Record<string, unknown>
     fetches.push({ headers: { ...e.init?.headers }, body })
     order.push('jev')
@@ -184,7 +192,7 @@ export const setup = (on: On, s: Setup = {}) => {
     return { result: 'ok' }
   })
 
-  return { env, files, fetches, writes, runs, disk, store, statuses, toasts, logs, appended, submitted, configured, order, api, commands, loaded, sleeps }
+  return { env, files, fetches, pageFetches, writes, runs, disk, store, statuses, toasts, logs, appended, submitted, configured, order, api, commands, loaded, sleeps }
 }
 
 export const records = (writes: readonly { path: string; text: string }[], point: string) =>

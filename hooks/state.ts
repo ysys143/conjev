@@ -1,12 +1,13 @@
 // What the module keeps between hooks. Per process: a reload (a changed
 // setting) starts it over, which costs a mkdir, a lookup and the counters.
 import type { PolicySettings } from './fold'
+import type { Detected } from './browser-route'
 import type { Chunk } from './instruction-docs'
 import type { Fragment } from './instructions'
 import type { HarnessSettings } from './settings'
 import type { Trust } from './tool-gate'
 
-export type Counts = { judged: number; failed: number; floor: number; toolJudged: number; attached: number; foldJudged: number }
+export type Counts = { judged: number; failed: number; floor: number; toolJudged: number; attached: number; foldJudged: number; webRead: number; foldBlocks: number; browserRouted: number }
 
 export const runtime: {
   settings?: HarnessSettings
@@ -21,7 +22,9 @@ export const runtime: {
   pending: Map<string, Set<string>>
   /** The instruction files as last loaded: their chunks, what left them, and what Jev would defer. */
   filter?: { stateKey: string; chunks: Chunk[]; drops: Map<string, Chunk>; droppedChars: number; deferred: Chunk[] }
-} = { counts: { judged: 0, failed: 0, floor: 0, toolJudged: 0, attached: 0, foldJudged: 0 }, folded: { results: 0, savedChars: 0 }, pending: new Map() }
+  /** The browser tools found installed, once per process. */
+  browsers?: Detected
+} = { counts: { judged: 0, failed: 0, floor: 0, toolJudged: 0, attached: 0, foldJudged: 0, webRead: 0, foldBlocks: 0, browserRouted: 0 }, folded: { results: 0, savedChars: 0 }, pending: new Map() }
 
 // Folders already made private in this process.
 export const madeDirs = new Set<string>()
@@ -41,7 +44,8 @@ export function startRuntime(settings: HarnessSettings, policy: PolicySettings):
   runtime.key = undefined
   runtime.trust = undefined
   runtime.fragments = undefined
-  runtime.counts = { judged: 0, failed: 0, floor: 0, toolJudged: 0, attached: 0, foldJudged: 0 }
+  runtime.counts = { judged: 0, failed: 0, floor: 0, toolJudged: 0, attached: 0, foldJudged: 0, webRead: 0, foldBlocks: 0, browserRouted: 0 }
+  runtime.browsers = undefined
   runtime.folded = { results: 0, savedChars: 0 }
   runtime.filter = undefined
 }

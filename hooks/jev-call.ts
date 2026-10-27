@@ -90,13 +90,36 @@ export async function judge(
   timeoutMs: number,
 ): Promise<JevResult> {
   const storeKey = `budget:${budget.sessionId}:${budget.point}`
-  const before = readBudget(await $.store.get(storeKey))
-  const gate = admit(before, budget.cap, await $.clock.now())
+  // The call is counted before it goes out, under the point's lock, so calls
+  // running at once (a page's windows) each see the others.
+  const gate = await locked(storeKey, async () => {
+    const before = readBudget(await $.store.get(storeKey))
+    const admitted = admit(before, budget.cap, await $.clock.now())
+    if (admitted === 'ok') await $.store.set(storeKey, { ...before, calls: before.calls + 1 })
+
+    return admitted
+  })
   if (gate !== 'ok') return { ok: false, kind: gate, ms: 0 }
   const result = await askJev($, key, state, questions, timeoutMs)
-  await $.store.set(storeKey, afterCall(before, result.ok, await $.clock.now()))
+  await locked(storeKey, async () => {
+    const counted = readBudget(await $.store.get(storeKey))
+    await $.store.set(storeKey, afterCall({ ...counted, calls: Math.max(0, counted.calls - 1) }, result.ok, await $.clock.now()))
+  })
 
   return result
+}
+
+const locks = new Map<string, Promise<unknown>>()
+
+/** Runs `fn` after every earlier `fn` under the same key has settled. */
+function locked<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  const run = (locks.get(key) ?? Promise.resolve()).then(fn, fn)
+  locks.set(
+    key,
+    run.catch(() => undefined),
+  )
+
+  return run
 }
 
 /** A failed call as a record stores it. */
