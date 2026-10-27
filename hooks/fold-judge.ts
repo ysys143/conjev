@@ -66,11 +66,13 @@ export function describeCall(use: Pick<ToolUseSummary, 'tool' | 'input'> | undef
 /**
  * The results the fold could act on, at least the policy's minimum size, at
  * most `limit`, largest first. Built from the fold's own list, so the rule's
- * verdict here is the fold's.
+ * verdict here is the fold's: a result the fold would leave whole — one in a
+ * message holding media, or one whose pointer would not save anything — is not
+ * judged either.
  */
 export function foldCandidates(messages: readonly SessionMessage[], settings: PolicySettings, home: string, cwd: string, limit: number, view?: MessageView): FoldCandidate[] {
   return foldableResults(messages, makePolicy(settings), view)
-    .filter(result => result.text.length >= settings.minFoldChars)
+    .filter(result => result.fold && result.text.length >= settings.minFoldChars)
     .map(result => ({
       id: result.id,
       tool: result.tool,

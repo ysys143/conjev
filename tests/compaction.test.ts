@@ -61,8 +61,9 @@ test('every fold record states what the fold did, under a policy that is not the
     expect((row.facts as Record<string, string>).policyFolds).toBe(String(archived.has(String(row.joinKey))))
   }
   const byId = new Map(rows.map(row => [String(row.joinKey), row]))
-  // An error under keepErrorsUnder stays; a 900-character result one prompt old folds under keepRecentTurns 1.
-  expect(byId.get('err')?.heuristic).toBe(false)
+  // An error under keepErrorsUnder is not folded, so the judgment is not asked
+  // about it either: no row for it.
+  expect(byId.get('err')).toBe(undefined)
   expect(archived.has('err')).toBe(false)
   expect(byId.get('late')?.heuristic).toBe(true)
   // Every age is the fold's count, the reminder and the /command included.
@@ -71,7 +72,9 @@ test('every fold record states what the fold did, under a policy that is not the
     const at = BUSY.findIndex(m => m.toolResults?.[0]?.tool_use_id === row.joinKey)
     expect((row.facts as Record<string, string>).turnsAgo).toBe(String(ages[at]))
   }
-  expect((byId.get('err')?.facts as Record<string, string>).turnsAgo).toBe('3')
+  // The 900-character result folds under keepRecentTurns 1, and its age is the
+  // fold's count: the prompt that follows it.
+  expect((byId.get('late')?.facts as Record<string, string>).turnsAgo).toBe('1')
 })
 
 test('canary: no tool output and no unshown input reaches Jev', { options: NON_DEFAULT }, async ($, on) => {
@@ -118,16 +121,46 @@ test('the fold judgment scrubs a tool call line before it cuts it', { options: N
   expect(bodies.join()).toContain('Grep')
 })
 
+test('the fold judgment reads the same api view as the fold: a result beside media is not judged', { options: NON_DEFAULT }, async ($, on) => {
+  // The message holding t0 also holds a screenshot result. The fold leaves that
+  // message whole, so the judgment must not ask about t0 either.
+  const withShot = [
+    prompt('Refactor the parser'),
+    call('t0', 'Read', { file_path: '/proj/src/f0.ts' }),
+    { ...answer('t0', `${MARK}\n${'y'.repeat(2000)}`), toolResults: [{ tool_use_id: 't0', text: 'y'.repeat(2000), isError: false }, { tool_use_id: 't1', text: '', isError: false }] },
+    call('t1', 'mcp__browser__screenshot', { url: 'https://example.test' }),
+    prompt('next'),
+    prompt('and next'),
+  ] as SessionMessage[]
+  const api = withShot.map(m => ({
+    role: m.role,
+    content: [
+      ...(m.toolResults ?? []).map(r => ({ type: 'tool_result', tool_use_id: r.tool_use_id, content: r.tool_use_id === 't1' ? [{ type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'iVBORw0KGgo=' } }] : [{ type: 'text', text: r.text }] })),
+      ...(m.text === '' ? [] : [{ type: 'text', text: m.text }]),
+      ...m.toolUses.map(u => ({ type: 'tool_use', id: u.tool_use_id, name: u.tool, input: u.input })),
+    ],
+  }))
+  const io = setup(on, { transcript: withShot, api, messages: withShot, env: KEY_ENV, fetch: everyQuestion })
+  await $.session.compact({ trigger: 'manual', messages: withShot } as never)
+  await settle(() => records(io.writes, 'fold').length > 0)
+
+  const judged = records(io.writes, 'fold').map(r => String(r.joinKey))
+  expect(judged).not.toContain('t0')
+  expect(judged).not.toContain('t1')
+})
+
 const BIG = 'x\n'.repeat(1500)
 const RECENT: SessionMessage[] = [prompt('Look at a.ts'), call('a', 'Read', { file_path: '/proj/a.ts' }), answer('a', BIG)]
 const OLD: SessionMessage[] = [...RECENT, prompt('next'), prompt('and next')]
 
-test('nothing folded: the engine summarizes, and the judgment records that nothing was folded', { options: { foldJev: 'shadow' } }, async ($, on) => {
+test('nothing folded: the engine summarizes, and nothing is judged either', { options: { foldJev: 'shadow' } }, async ($, on) => {
   const io = setup(on, { transcript: RECENT, env: KEY_ENV, fetch: everyQuestion })
   const result = await $.session.compact({ trigger: 'manual', messages: RECENT } as never)
   expect(JSON.stringify(result)).toContain('summary')
-  await settle(() => records(io.writes, 'fold').length > 0)
-  expect(records(io.writes, 'fold').map(r => [r.joinKey, r.heuristic])).toEqual([['a', false]])
+  await drain()
+  // The one result is too recent for the policy to fold, so the judgment is not
+  // asked about it: a result the fold leaves whole is not judged.
+  expect(records(io.writes, 'fold')).toEqual([])
   expect(archivedIds(io.writes).size).toBe(0)
 })
 

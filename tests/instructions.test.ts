@@ -77,10 +77,10 @@ test('fold candidates come from the fold policy itself: its turn count, its size
     ['c', 'Bash npm test (3001 lines)', 2, true],
     ['a', 'Read ./src/billing/invoice.ts (1501 lines)', 4, true],
   ])
-  // A lower size floor brings the 800-character result in; a wider recent window keeps c.
+  // A lower size floor brings the 800-character result in; a wider recent window
+  // keeps c, so the policy does not fold it and the judgment is not asked about it.
   const wider = foldCandidates(TRANSCRIPT, { ...DEFAULT_SETTINGS, minFoldChars: 500, keepRecentTurns: 3 }, HOME, '/proj', 48)
   expect(wider.map(c => [c.id, c.ruleFolds])).toEqual([
-    ['c', false],
     ['a', true],
     ['b', true],
   ])
