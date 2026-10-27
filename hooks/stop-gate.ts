@@ -15,13 +15,17 @@ export const STOP_QUESTION: JevQuestion = {
   },
 }
 
+/** How much of the last paragraph goes to Jev, from its end. */
+export const PARAGRAPH_CHARS = 600
+
 export const STOP_MESSAGE =
   'Your last paragraph announces work you have not done yet. If you can do it now, do it. ' +
   'If you are waiting for the person, say plainly what you need from them.'
 
-const PARAGRAPH_CHARS = 600
 
-/** The last prose paragraph of a message, at most 600 characters, its end kept. */
+/** The last prose paragraph of a message. The caller scrubs it and then keeps
+ * its end, at most `PARAGRAPH_CHARS`: a cut before the scrub could leave part
+ * of a value the scrub would have replaced. */
 export function lastParagraph(message: string | undefined): string {
   if (message === undefined) return ''
   const withoutFences = message.replace(/```[\s\S]*?```/g, '\n\n')
@@ -29,9 +33,7 @@ export function lastParagraph(message: string | undefined): string {
     .split(/\n\s*\n/)
     .map(block => block.trim())
     .filter(block => block !== '' && !/^(\|.*\|\s*)+$/s.test(block) && !/^[-=*_`\s]+$/.test(block))
-  const last = blocks.at(-1) ?? ''
-
-  return last.length > PARAGRAPH_CHARS ? last.slice(-PARAGRAPH_CHARS) : last
+  return blocks.at(-1) ?? ''
 }
 
 const lastSentence = (paragraph: string): string => {

@@ -3,8 +3,8 @@ import { admit, afterCall, EMPTY_BUDGET } from '../hooks/budget'
 import { checkAnswer, parseResponse, probabilityOf, type JevQuestion } from '../hooks/jev'
 import { keyFromDotenv, pickKey } from '../hooks/key'
 import { confusion, kappa, percentile, pointReport, sweep, type ShadowRecord } from '../hooks/report'
-import { clip, scrub } from '../hooks/scrub'
-import { STOP_QUESTION, announcesByRule, lastParagraph, stopSkipReason } from '../hooks/stop-gate'
+import { COMMAND_CHARS, clip, scrub } from '../hooks/scrub'
+import { PARAGRAPH_CHARS, STOP_QUESTION, announcesByRule, lastParagraph, stopSkipReason } from '../hooks/stop-gate'
 import {
   canWrite,
   decideTrust,
@@ -120,10 +120,11 @@ test('the budget stops at the cap and opens the circuit after three failures in 
   expect(afterCall({ calls: 1, failures: 2, openUntil: 0 }, true, 0)).toEqual({ calls: 2, failures: 0, openUntil: 0 })
 })
 
-test('the last paragraph skips code blocks and tables and keeps its end', () => {
+test('the last paragraph skips code blocks and tables, and its end is what is kept', () => {
   const message = 'Intro.\n\nI changed the parser.\n\n```ts\nconst a = 1\n```\n\n| a | b |\n|---|---|\n| 1 | 2 |'
   expect(lastParagraph(message)).toBe('I changed the parser.')
-  expect(lastParagraph(`a\n\n${'x'.repeat(700)}`).length).toBe(600)
+  // The bound is applied after scrubbing, by the caller.
+  expect(clip(lastParagraph(`a\n\n${'x'.repeat(700)}`), PARAGRAPH_CHARS, 'tail').length).toBe(600)
   expect(lastParagraph(undefined)).toBe('')
 })
 
@@ -278,7 +279,8 @@ test('tool targets: the working folder becomes ./, other folders under home a ha
   expect(targetOfPath(`${HOME}/notes.md`, HOME, cwd)).toBe('~/notes.md')
   expect(targetOfPath('/etc/hosts', HOME, cwd)).toBe('/etc/hosts')
   expect(targetOfCommand(`cat ${cwd}/config/settings.py && ls ${cwd}`, HOME, cwd)).toBe('cat ./config/settings.py && ls .')
-  expect(targetOfCommand('x'.repeat(300), HOME, cwd).length).toBe(200)
+  // The length is bounded after scrubbing, by the caller.
+  expect(clip(targetOfCommand('x'.repeat(300), HOME, cwd), COMMAND_CHARS).length).toBe(200)
 })
 
 test('the hash is stable and the risk adds restricted and custom', () => {

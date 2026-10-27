@@ -5,7 +5,7 @@ import { anchorNote, dueBeforeFold, type AnchorFile, type MessageView, type Poli
 import { FOLD_POINT, currentRequest, foldCandidates, foldQuestion } from './fold-judge'
 import { probabilityOf } from './jev'
 import { errorOf, judge, keyFor } from './jev-call'
-import { clip, scrub } from './scrub'
+import { CALL_CHARS, clip, scrub } from './scrub'
 import { runtime, newId, settingsOf } from './state'
 import { showStatus } from './status'
 import { homeOf, writeRecord } from './storage'
@@ -80,7 +80,7 @@ export async function judgeFold($: EngineInterface, messages: readonly SessionMe
   for (let start = 0; start < candidates.length; start += 24) {
     const batch = candidates.slice(start, start + 24)
     const t0 = await $.clock.now()
-    const questions = Object.fromEntries(batch.map((candidate, i) => [`r${i}`, foldQuestion(scrub(candidate.call, home))]))
+    const questions = Object.fromEntries(batch.map((candidate, i) => [`r${i}`, foldQuestion(clip(scrub(candidate.call, home), CALL_CHARS))]))
     const result = await judge($, { sessionId, point: FOLD_POINT, cap: settings.foldCap }, key.key, sent, questions, settings.timeoutMs * 2)
     for (const [i, candidate] of batch.entries()) {
       const answer = result.ok ? result.answers[`r${i}`] : undefined
@@ -95,7 +95,7 @@ export async function judgeFold($: EngineInterface, messages: readonly SessionMe
         mode: 'shadow',
         // Positive means "fold": what the fold did, and Jev's probability that the output is done with.
         heuristic: archived.has(candidate.id),
-        sent: { ...sent, call: scrub(candidate.call, home) },
+        sent: { ...sent, call: clip(scrub(candidate.call, home), CALL_CHARS) },
         jev: needed === undefined ? undefined : 1 - needed,
         usage: result.ok && i === 0 ? result.usage : undefined,
         error: errorOf(result),

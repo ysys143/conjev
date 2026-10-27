@@ -46,6 +46,15 @@ export function scrub(text: string, home?: string): string {
 // leave half a mark, so a cut never falls inside one.
 const MARK = new RegExp(`<(?:secret|email|user)>|\\[(?:${Object.values(DEFAULT_LABELS).join('|')})\\d*\\]`, 'g')
 
+/** How long a scrubbed tool-call line may be when it goes to Jev. */
+export const CALL_CHARS = 200
+
+/** How long a scrubbed command may be when it goes to Jev. */
+export const COMMAND_CHARS = 200
+
+/** How much of a scrubbed request goes to Jev, from its start. */
+export const REQUEST_CHARS = 400
+
 /** At most `max` characters of scrubbed text, from its start or its end, ending short of a mark the cut would split. */
 export function clip(text: string, max: number, keep: 'head' | 'tail' = 'head'): string {
   if (text.length <= max) return text

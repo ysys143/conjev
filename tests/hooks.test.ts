@@ -199,6 +199,22 @@ test('tool jev, shadow: the tool runs first, then the path is judged and recorde
   expect((record?.facts as Record<string, string>).class).toBe('standard')
 })
 
+test('a command long enough to be cut is scrubbed before the cut, so no value reaches Jev in part', { options: EXTERNAL_JEV }, async ($, on) => {
+  // A phone number sits across the 200-character bound: its label starts at
+  // 197, so a cut at 200 lands inside it. Cutting first would leave "010" in
+  // what is sent; scrubbing first leaves the whole label, and the cut then
+  // falls short of it.
+  const command = `${'a b '.repeat(50).slice(0, 197)}010-1234-5678 tail`
+  const io = setup(on, { env: KEY_ENV, fetch: () => STANDARD })
+  await $.tool.call({ tool: 'Bash', command })
+  await settle(() => records(io.writes, 'tool').length > 0)
+
+  const target = (io.fetches[0]?.body.state as Record<string, string> | undefined)?.target ?? ''
+  expect(target).not.toContain('010')
+  expect(target).not.toContain('1234')
+  expect(target.length).toBeLessThanOrEqual(200)
+})
+
 test('tool jev sends nothing in a first-party session', { options: { toolJev: 'shadow' } }, async ($, on) => {
   const io = setup(on, { env: KEY_ENV })
   await $.tool.call({ tool: 'Read', file_path: '/proj/src/app.py' })

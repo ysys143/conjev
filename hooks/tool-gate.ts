@@ -276,10 +276,14 @@ export function targetOfPath(absolute: string, home: string, cwd: string): strin
   return absolute
 }
 
-/** How a command is shown to Jev: the working folder as ., home as ~, at most 200 characters. */
+/**
+ * How a command is shown to Jev: the working folder as ., home as ~. The
+ * caller scrubs this and then bounds its length, so a cut never lands inside a
+ * secret the scrub has yet to replace.
+ */
 export function targetOfCommand(command: string, home: string, cwd: string): string {
   const root = cwd.replace(/\/+$/, '')
-  const local = root.length > 1 ? command.split(`${root}/`).join('./').split(root).join('.') : command
 
-  return local.slice(0, 200)
+  return root.length > 1 ? command.split(`${root}/`).join('./').split(root).join('.') : command
 }
+

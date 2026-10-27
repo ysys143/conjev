@@ -16,7 +16,7 @@ import { clip, scrub } from './scrub'
 import { harnessSettingsFrom, usesJev } from './settings'
 import { newId, runtime, startRuntime } from './state'
 import { showStatus } from './status'
-import { STOP_MESSAGE, STOP_POINT, STOP_QUESTION, announcesByRule, lastParagraph, stopSkipReason } from './stop-gate'
+import { PARAGRAPH_CHARS, STOP_MESSAGE, STOP_POINT, STOP_QUESTION, announcesByRule, lastParagraph, stopSkipReason } from './stop-gate'
 import { cleanupRecords, homeOf, legacyArchiveRoot, readArchived, readRecords, stateRoot, writeArchive, writeLabel, writeRecord } from './storage'
 import { judgeTool } from './tool-flow'
 import { WEB_POINT, WEB_TOOL_DESCRIPTION, readWeb, shadowWebFetch } from './web-flow'
@@ -455,7 +455,8 @@ export const register: Register = (on, options) => {
       return below
     }
 
-    const sent = { last_paragraph: scrub(paragraph, await homeOf($)) }
+    // Scrubbed first, then bounded to its end.
+    const sent = { last_paragraph: clip(scrub(paragraph, await homeOf($)), PARAGRAPH_CHARS, 'tail') }
     const run = async (hookMs: number): Promise<number | undefined> => {
       const result = await judge($, { sessionId: e.session_id, point: STOP_POINT, cap: settings.stopCap }, key.key, sent, { stop: STOP_QUESTION }, settings.timeoutMs)
       const probability = result.ok ? probabilityOf(result.answers.stop!, 'announce') : undefined

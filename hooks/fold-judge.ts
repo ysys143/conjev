@@ -57,7 +57,7 @@ export function describeCall(use: Pick<ToolUseSummary, 'tool' | 'input'> | undef
   }
   for (const key of OTHER_KEYS) {
     const value = input[key]
-    if (typeof value === 'string') return `${use.tool} "${value.slice(0, 120)}"`
+    if (typeof value === 'string') return `${use.tool} "${value}"`
   }
 
   return use.tool
