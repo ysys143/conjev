@@ -120,6 +120,22 @@ test('of two OMC blocks at different versions, the older one leaves whole', () =
   expect(omcVersionOf('no marker')).toBe(undefined)
 })
 
+test('an organization file is never superseded by a newer OMC block elsewhere', () => {
+  // The managed file's own OMC block is older, but nothing this plugin does may
+  // drop it: only user, project and local files are changeable.
+  const managed = file('/etc/claude/managed.md', 'managed', omc())
+  const newer = file('/u/.claude/CLAUDE.md', 'project', omc('\n- A rule the newer version added.'))
+  const chunks = chunksOf([managed, newer])
+  const versions = new Map([
+    [managed.path, omcVersionOf('<!-- OMC:VERSION:5.2.0 -->')!],
+    [newer.path, omcVersionOf('<!-- OMC:START -->\n<!-- OMC:VERSION:5.7.8 -->')!],
+  ])
+  const drops = supersededOmc(chunks, versions)
+
+  expect([...drops.values()].some(chunk => chunk.file === managed.path)).toBe(false)
+  expect(chunks.filter(c => c.file === managed.path && drops.has(c.id)).length).toBe(0)
+})
+
 const one = (heading: string, kind: DocFile['kind'] = 'user', body = 'Some instruction that is long enough to count.'): Chunk =>
   chunksOf([file('/u/A.md', kind, `${heading}\n\n${body}\n`)])[0]!
 
