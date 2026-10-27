@@ -212,6 +212,93 @@
         "active"
       ],
       "default": "off"
+    },
+    "webRead": {
+      "type": "string",
+      "title": "Web reading (web_read)",
+      "description": "off: nothing. shadow: after each WebFetch call, the same page is fetched and Jev judges which of its blocks answer the call's prompt; what web_read would have returned is recorded, WebFetch's answer is unchanged. active: adds the web_read tool, which returns only the blocks of a page that answer the question, verbatim, and keeps the whole page for read_coordinate. The page's text and your question, scrubbed, are sent to TypeSafe.",
+      "options": [
+        "off",
+        "shadow",
+        "active"
+      ],
+      "default": "off"
+    },
+    "webReadCap": {
+      "type": "number",
+      "title": "Web reading calls per session",
+      "description": "Jev requests web reading may make in one session (a long page takes tens).",
+      "default": 600
+    },
+    "webTimeoutMs": {
+      "type": "number",
+      "title": "Block judgment timeout (ms)",
+      "description": "One Jev request of web reading or kept fold blocks that takes longer is dropped; its blocks count as unjudged.",
+      "default": 10000
+    },
+    "foldBlocks": {
+      "type": "string",
+      "title": "Kept blocks at a fold",
+      "description": "off: nothing. shadow: at each compaction, Jev judges which blocks of the largest folded results your last prompt still needs, and records it. active: those blocks stay verbatim under the pointer; the rest is in read_coordinate. The results' text and your last prompt, scrubbed, are sent to TypeSafe.",
+      "options": [
+        "off",
+        "shadow",
+        "active"
+      ],
+      "default": "off"
+    },
+    "foldBlocksCap": {
+      "type": "number",
+      "title": "Kept-block calls per session",
+      "description": "Jev requests the kept-block judgment may make in one session.",
+      "default": 300
+    },
+    "foldBlocksResults": {
+      "type": "number",
+      "title": "Results judged per fold",
+      "description": "The largest folded results judged for kept blocks at each compaction.",
+      "default": 4
+    },
+    "foldBlocksBudgetMs": {
+      "type": "number",
+      "title": "Kept-block time per fold (ms)",
+      "description": "How long a compaction waits for the kept-block judgment; results still being judged then are folded to a pointer alone.",
+      "default": 10000
+    },
+    "browserRoute": {
+      "type": "string",
+      "title": "Browser routing",
+      "description": "off: nothing. shadow: for each prompt you write, records whether it needs a web browser operated (keywords, else Jev) and which installed tool would be used. active: such a prompt gets one instruction naming the tool to use, in the order ego-browser, Aside, agent-browser, Playwright, then a CDP tool you name; with none installed, you are told once in 14 days. Your prompt (scrubbed, first 600 characters) is sent to TypeSafe when no keyword decides.",
+      "options": [
+        "off",
+        "shadow",
+        "active"
+      ],
+      "default": "off"
+    },
+    "browserThreshold": {
+      "type": "number",
+      "title": "Browser routing threshold",
+      "description": "Jev's probability that a request needs a browser operated, at or above which it is routed.",
+      "default": 0.9
+    },
+    "browserCap": {
+      "type": "number",
+      "title": "Browser routing calls per session",
+      "description": "Jev calls browser routing may make in one session.",
+      "default": 200
+    },
+    "browserBlocked": {
+      "type": "string",
+      "title": "Browser tools never suggested",
+      "description": "Comma-separated: ego, aside, agent-browser, playwright, cdp. A tool your settings or hooks block belongs here, so it is never suggested.",
+      "default": ""
+    },
+    "browserCdp": {
+      "type": "string",
+      "title": "CDP tool to suggest last",
+      "description": "How to name a Chrome DevTools Protocol tool you use (for example an MCP server), suggested when none of the others is installed. Empty: none.",
+      "default": ""
     }
   }
 }

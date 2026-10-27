@@ -22,6 +22,18 @@ export type HarnessSettings = {
   foldJev: 'off' | 'shadow'
   foldCap: number
   instructionFilter: Mode
+  webRead: Mode
+  webReadCap: number
+  webTimeoutMs: number
+  foldBlocks: Mode
+  foldBlocksCap: number
+  foldBlocksResults: number
+  foldBlocksBudgetMs: number
+  browserRoute: Mode
+  browserThreshold: number
+  browserCap: number
+  browserBlocked: string
+  browserCdp: string
 }
 
 const modeOf = (value: unknown): Mode => (value === 'shadow' || value === 'active' ? value : 'off')
@@ -54,6 +66,18 @@ export function harnessSettingsFrom(options: Readonly<Record<string, unknown>>):
     foldJev: options.foldJev === 'shadow' ? 'shadow' : 'off',
     foldCap: numberOf(options.foldCap, 20, 0, 1000),
     instructionFilter: modeOf(options.instructionFilter),
+    webRead: modeOf(options.webRead),
+    webReadCap: numberOf(options.webReadCap, 600, 0, 100_000),
+    webTimeoutMs: numberOf(options.webTimeoutMs, 10_000, 1000, 60_000),
+    foldBlocks: modeOf(options.foldBlocks),
+    foldBlocksCap: numberOf(options.foldBlocksCap, 300, 0, 100_000),
+    foldBlocksResults: numberOf(options.foldBlocksResults, 4, 1, 24),
+    foldBlocksBudgetMs: numberOf(options.foldBlocksBudgetMs, 10_000, 1000, 60_000),
+    browserRoute: modeOf(options.browserRoute),
+    browserThreshold: numberOf(options.browserThreshold, 0.9, 0, 1),
+    browserCap: numberOf(options.browserCap, 200, 0, 10_000),
+    browserBlocked: typeof options.browserBlocked === 'string' ? options.browserBlocked : '',
+    browserCdp: typeof options.browserCdp === 'string' ? options.browserCdp : '',
   }
 }
 
@@ -64,6 +88,9 @@ export function usesJev(settings: HarnessSettings): boolean {
     settings.toolJev !== 'off' ||
     settings.instructions !== 'off' ||
     settings.foldJev !== 'off' ||
-    settings.instructionFilter !== 'off'
+    settings.instructionFilter !== 'off' ||
+    settings.webRead !== 'off' ||
+    settings.foldBlocks !== 'off' ||
+    settings.browserRoute !== 'off'
   )
 }

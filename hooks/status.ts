@@ -26,7 +26,7 @@ export function jevStatus(
   const isJev = usesJev(settings)
   if (!isJev && settings.toolGate === 'off') return undefined
   if (isJev && hasNoKey) return 'jev: no key'
-  const recorded = counts.judged + counts.failed + counts.floor + counts.toolJudged + counts.attached + counts.foldJudged
+  const recorded = counts.judged + counts.failed + counts.floor + counts.toolJudged + counts.attached + counts.foldJudged + counts.webRead + counts.foldBlocks + counts.browserRouted
   if (recorded === 0 && filtered === 0) return undefined
   const parts = ['jev']
   if (settings.stopGate !== 'off') parts.push(`stop ${settings.stopGate} ${counts.judged} judged${counts.failed ? `, ${counts.failed} failed` : ''}`)
@@ -36,6 +36,9 @@ export function jevStatus(
     parts.push(`instr ${settings.instructions} ${fragments ? `${fragments.list.length} #${fragments.hash.slice(0, 6)}` : '-'}, ${counts.attached} attached`)
   }
   if (settings.foldJev !== 'off') parts.push(`fold ${settings.foldJev} ${counts.foldJudged} judged`)
+  if (settings.webRead !== 'off') parts.push(`web ${settings.webRead} ${counts.webRead} read`)
+  if (settings.foldBlocks !== 'off') parts.push(`fold blocks ${settings.foldBlocks} ${counts.foldBlocks} judged`)
+  if (settings.browserRoute !== 'off') parts.push(`browser ${settings.browserRoute} ${counts.browserRouted} judged`)
   if (settings.instructionFilter !== 'off') parts.push(`instr filter ${settings.instructionFilter}${filtered ? ` −${Math.round(filtered / 100) / 10}k dup` : ''}`)
 
   return parts.join(' · ')

@@ -1,12 +1,15 @@
 import type { Register } from 'claude-code'
 import { DEFAULT_SETTINGS, SETTING_KEYS, dueBeforeFold, dueNote, foldTranscript, makePolicy, reportFor, settingsFrom, sliceLines, transcriptChars, type PolicySettings } from './fold'
+import { routeBrowser } from './browser-flow'
+import { BROWSER_BLOCK, BROWSER_POINT } from './browser-route'
+import { FOLD_BLOCKS_POINT, judgeBlocks, withKeptBlocks } from './fold-blocks'
 import { FOLD_POINT } from './fold-judge'
 import { afterCompaction, anchorsOf, judgeFold, note, since, type Continuity } from './fold-flow'
 import { askConditions, attachedNow, forgetAttached, fragmentsDirOf, loadFragments, pendingOf, recordFragments, rememberWouldAttach, wouldAttach } from './fragment-flow'
-import { INSTRUCTIONS_POINT, decideFragments, fragmentBlock, keywordHit, pinnedSection } from './instructions'
+import { INSTRUCTIONS_POINT, attachedNames, decideFragments, fragmentBlock, keywordHit, pinnedSection } from './instructions'
 import { probabilityOf, type JevResult } from './jev'
 import { errorOf, judge, keyFor, trustFor } from './jev-call'
-import { filterReport, pointReport, type ShadowRecord } from './report'
+import { blockReport, filterReport, pointReport, type ShadowRecord } from './report'
 import { chunksOf, exactDuplicates, normalized, supersededOmc, withoutChunks, type DocFile } from './instruction-docs'
 import { judgeDeferred, omcVersionsOf, recordFilter, recordToolUse, stateKeyOf } from './filter-flow'
 import { scrub } from './scrub'
@@ -16,6 +19,7 @@ import { showStatus } from './status'
 import { STOP_MESSAGE, STOP_POINT, STOP_QUESTION, announcesByRule, lastParagraph, stopSkipReason } from './stop-gate'
 import { cleanupRecords, homeOf, legacyArchiveRoot, readArchived, readRecords, stateRoot, writeArchive, writeLabel, writeRecord } from './storage'
 import { judgeTool } from './tool-flow'
+import { WEB_POINT, WEB_TOOL_DESCRIPTION, readWeb, shadowWebFetch } from './web-flow'
 import {
   TOOL_POINT,
   archivedReason,
@@ -101,6 +105,21 @@ export const register: Register = (on, options) => {
           'Give only the values to change. Call it only after the person agreed to the values.',
         inputSchema: SETTINGS_SCHEMA,
       })
+      if (settings.webRead === 'active') {
+        await $.tool.register({
+          name: 'web_read',
+          description: WEB_TOOL_DESCRIPTION,
+          inputSchema: {
+            type: 'object',
+            properties: {
+              url: { type: 'string', description: 'The page to read (http or https)' },
+              question: { type: 'string', description: 'What to find on the page: the question, every sub-question, or keywords' },
+            },
+            required: ['url', 'question'],
+          },
+          isDeferred: false,
+        })
+      }
     } catch (error) {
       $.ui.log(`${$.plugin.name}: could not register its tools (${String(error)})`)
     }
@@ -158,7 +177,26 @@ export const register: Register = (on, options) => {
 
   // E1, conditional fragments: appended to the prompt that first meets their
   // condition, and again only once the conversation no longer carries them.
-  on('prompt.submit', async ($, e, next) => {
+  on('prompt.submit', async ($, e, nextBelow) => {
+    // Browser routing first: a prompt that needs a browser operated gets the tool to use, once
+    // while the conversation carries it. Whatever the fragments below decide, the block rides along.
+    const origin0 = e.origin
+    const isPersons0 =
+      origin0 !== undefined &&
+      (origin0.kind === 'composer' || origin0.kind === 'bridge' || origin0.kind === 'sdk' || (origin0.kind === 'plugin' && origin0.asUser === true))
+    let browserBlock: string | undefined
+    if (settings.browserRoute !== 'off' && e.command === undefined && !e.isMeta && isPersons0) {
+      try {
+        const carried = settings.browserRoute === 'active' && attachedNames(await $.session.messages({ as: 'api' })).has(BROWSER_BLOCK)
+        browserBlock = await routeBrowser($, e.text, e.turnId, carried)
+      } catch (error) {
+        $.ui.log(`${$.plugin.name}: browser routing skipped (${String(error)})`)
+      }
+    }
+    const next: typeof nextBelow = Object.assign(
+      (ev: typeof e) => nextBelow(browserBlock === undefined ? ev : { ...ev, context: [...(ev.context ?? []), browserBlock] }),
+      nextBelow,
+    )
     if (settings.instructionFilter !== 'off') {
       const text = e.command !== undefined ? `/${e.command.name} ${e.command.args ?? ''}` : e.text
       void judgeDeferred($, text, e.origin?.kind ?? 'unknown', e.turnId).catch(() => undefined)
@@ -267,6 +305,20 @@ export const register: Register = (on, options) => {
       return summarized
     }
 
+    // Blocks of the largest folded results that the current request still needs.
+    if (settings.foldBlocks === 'active') {
+      try {
+        const decided = await judgeBlocks($, e.messages, outcome.archived, 'active')
+        const kept = withKeptBlocks(outcome.messages, outcome.archived, decided)
+        outcome.messages = kept.messages
+        outcome.savedChars -= kept.addedChars
+      } catch (error) {
+        $.ui.log(`${$.plugin.name}: kept no blocks (${String(error)})`)
+      }
+    } else if (settings.foldBlocks === 'shadow') {
+      void judgeBlocks($, e.messages, outcome.archived, 'shadow').catch(() => undefined)
+    }
+
     const { context } = await $.session.usage()
     const tokensAfter = transcriptChars(outcome.messages) / CHARS_PER_TOKEN
     const isSummarized = tokensAfter > context.window * SUMMARIZE_ABOVE_SHARE
@@ -339,7 +391,7 @@ export const register: Register = (on, options) => {
     const trust = await trustFor($)
     const fragments = settings.instructions === 'off' ? undefined : await loadFragments($)
     const header = [
-      `context-harness: stop ${settings.stopGate}, tool ${settings.toolGate}, tool jev ${settings.toolJev}, instructions ${settings.instructions}, fold ${settings.foldJev}, instruction filter ${settings.instructionFilter}`,
+      `context-harness: stop ${settings.stopGate}, tool ${settings.toolGate}, tool jev ${settings.toolJev}, instructions ${settings.instructions}, fold ${settings.foldJev}, instruction filter ${settings.instructionFilter}, web ${settings.webRead}, fold blocks ${settings.foldBlocks}, browser ${settings.browserRoute}`,
       `key ${key ? `from ${key.source}` : 'none'}, provider ${trust.trust} (${trust.why})`,
       ...(fragments
         ? [`fragments: ${fragments.list.length} in ${fragments.dir} (#${fragments.hash.slice(0, 6)})${fragments.problems.length ? `; skipped: ${fragments.problems.join('; ')}` : ''}`]
@@ -351,7 +403,9 @@ export const register: Register = (on, options) => {
       pointReport(TOOL_POINT, records, labels, settings.toolThreshold),
       pointReport(INSTRUCTIONS_POINT, records, labels, settings.instructionThreshold),
       pointReport(FOLD_POINT, records, labels, 0.5),
+      ...(records.some(r => r.point === BROWSER_POINT) ? [pointReport(BROWSER_POINT, records, labels, settings.browserThreshold)] : []),
       ...(settings.instructionFilter === 'off' && !records.some(r => r.point === 'instr-filter') ? [] : [filterReport(records)]),
+      ...[WEB_POINT, FOLD_BLOCKS_POINT].filter(point => records.some(r => r.point === point)).map(point => blockReport(point, records)),
     ]
 
     return { text: [...header, ...reports].join('\n\n') }
@@ -562,6 +616,32 @@ export const register: Register = (on, options) => {
 
     return { isReadOnly: true, result: `${head}\n${part.body}` }
   }).catch($ => ({ isError: true, result: `${$.plugin.name}: could not read the folded result.` }))
+
+  on('tool.call', { tool: 'mcp__context-harness__web_read' }, async ($, e) => {
+    const input = e as unknown as { url?: unknown; question?: unknown }
+    const url = typeof input.url === 'string' ? input.url.trim() : ''
+    const question = typeof input.question === 'string' ? input.question.trim() : ''
+    if (url === '' || question === '') return { isError: true, result: 'web_read needs a url and a question.' }
+    const answer = await readWeb($, url, question, e.tool_use_id)
+
+    return answer.isError ? { isError: true, result: answer.text } : { isReadOnly: true, result: answer.text }
+  }).catch($ => ({ isError: true, result: `${$.plugin.name}: web_read failed; use WebFetch instead.` }))
+
+  // Shadow: what web_read would have returned, measured after WebFetch answered.
+  on('tool.call', { tool: 'WebFetch' }, async ($, e, next) => {
+    const result = await next(e)
+    if (settings.webRead !== 'shadow' || 'deny' in result) return result
+    try {
+      const answer = result.result as { result?: unknown } | string | undefined
+      const text = typeof answer === 'string' ? answer : answer?.result
+      const chars = typeof text === 'string' ? text.length : 0
+      void shadowWebFetch($, e.url, e.prompt, e.tool_use_id, chars).catch(() => undefined)
+    } catch {
+      // A measurement that cannot start leaves WebFetch's answer as it is.
+    }
+
+    return result
+  }).catch((_, e, next) => next(e))
 
   on('tool.call', { tool: 'mcp__context-harness__policy_report' }, async ($, e) => {
     const input = e as unknown as Record<string, unknown>

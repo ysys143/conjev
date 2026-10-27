@@ -178,3 +178,39 @@ export function filterReport(records: readonly ShadowRecord[]): string {
 
   return lines.join('\n')
 }
+
+/**
+ * A block judgment (web pages, kept fold blocks): how often it ran, what it
+ * returned, how much of the original it passed on, and what it cost in Jev.
+ */
+export function blockReport(point: string, records: readonly ShadowRecord[]): string {
+  const rs = records.filter(r => r.point === point)
+  const judged = rs.filter(r => r.facts?.status !== undefined)
+  const statuses = new Map<string, number>()
+  for (const r of judged) statuses.set(r.facts!.status!, (statuses.get(r.facts!.status!) ?? 0) + 1)
+  const shares = judged.filter(r => Number(r.facts?.docTokens) > 0).map(r => Number(r.facts?.outTokens) / Number(r.facts?.docTokens))
+  const jevTokens = judged.reduce((sum, r) => sum + (r.usage?.input_tokens ?? 0), 0)
+  const requests = judged.reduce((sum, r) => sum + Number(r.facts?.requests ?? 0), 0)
+  const failed = judged.reduce((sum, r) => sum + Number(r.facts?.failed ?? 0), 0)
+  const ms = judged.map(r => r.jevMs).filter((v): v is number => typeof v === 'number')
+  const median = (values: number[]): number | undefined => percentile(values, 0.5)
+  const share = median(shares)
+  const lines = [
+    `${point}: ${rs.length} records, ${judged.length} judged, ${rs.length - judged.length} not (${[...new Set(rs.filter(r => r.facts?.status === undefined).map(r => r.skipped ?? r.error ?? '?'))].join(', ') || '-'})`,
+    `  status: ${[...statuses].map(([s, n]) => `${s} ${n}`).join(', ') || '-'}`,
+    `  passed on: median ${share === undefined ? '-' : `${Math.round(share * 1000) / 10}%`} of the original's tokens`,
+    `  Jev: ${requests} requests, ${failed} failed, ${jevTokens} input tokens; time median ${median(ms) ?? '-'} ms, p90 ${percentile(ms, 0.9) ?? '-'} ms`,
+  ]
+  const decisions = new Map<string, number>()
+  for (const r of judged) if (r.decision !== undefined) decisions.set(r.decision, (decisions.get(r.decision) ?? 0) + 1)
+  if (point !== 'web') lines.push(`  decision: ${[...decisions].map(([d, n]) => `${d} ${n}`).join(', ') || '-'}`)
+  if (point === 'web') {
+    const fetched = judged.filter(r => r.facts?.webFetchChars !== undefined)
+    if (fetched.length > 0) {
+      const wf = median(fetched.map(r => Number(r.facts!.webFetchChars)))
+      lines.push(`  beside WebFetch: ${fetched.length} calls, WebFetch answer median ${wf ?? '-'} chars`)
+    }
+  }
+
+  return lines.join('\n')
+}

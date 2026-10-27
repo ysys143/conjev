@@ -132,8 +132,37 @@ Each gate is set on its own to one of three modes:
 | Conditional instructions | `instructions` | Attaches an instruction fragment to the prompt that first meets its condition | Your prompt, scrubbed, first 600 characters, and the fragments' conditions (never their bodies) |
 | Instruction filter | `instructionFilter` | Leaves instruction chunks loaded twice out (`active`), and records Jev's reading of the rest ([Instruction files](#instruction-files)) | With a key: the instruction files' text, scrubbed, when they change; for chunks Jev would defer, each prompt's first 600 characters, scrubbed |
 | Fold relevance | `foldJev` (shadow only) | Records which of the largest earlier results your request still needs, beside what the fold did | Your last prompt, scrubbed, first 400 characters, and for each result its tool and target: the path, the start of the command, or the search pattern, URL or description it was called with (never its output) |
+| Web reading | `webRead` | `active` adds a `web_read` tool that returns only the blocks of a page that answer the question, verbatim, and keeps the whole page for `read_coordinate`; `shadow` measures the same beside each WebFetch call and changes nothing ([Blocks](#blocks-web-reading-and-kept-fold-blocks)) | The page's text and the question, scrubbed |
+| Browser routing | `browserRoute` | For each prompt you write, decides whether it needs a web browser operated (keywords, else Jev); `active` attaches one instruction naming the installed tool to use, in the order ego-browser, Aside, agent-browser, Playwright, then a CDP tool you name in `browserCdp`. With none installed, the model is told so and you are told once in 14 days | Your prompt, scrubbed, first 600 characters, when no keyword decides |
+| Kept fold blocks | `foldBlocks` | At a compaction, keeps the blocks of the largest folded results that your last prompt still needs, verbatim under the pointer (`active`), or records which it would keep (`shadow`) | Those results' text and your last prompt (first 400 characters), scrubbed |
 
 Scrubbing removes secret-shaped strings, `NAME=value` secrets, email addresses and your home folder.
+
+### Blocks: web reading and kept fold blocks
+
+Both settings split a text into blocks (paragraphs, list items, table rows, code blocks, runs of up to 40 output lines), each under its heading path, and ask Jev in two stages which blocks answer a question: one request per window of blocks, then each candidate again with the text around it. What they keep goes out quoted, never paraphrased; the whole text stays in the archive, so a block judged wrongly is one `read_coordinate` away. The splitting and the judgment are ported from [jevfetch](https://github.com/a2sys-ai/jevfetch) (MIT, commit 167fe8f), with its questions and thresholds unchanged. They are the two gates that send text itself, not a description of it.
+
+`web_read` output, as the model sees it:
+
+```text
+# web_read: https://www.rfc-editor.org/rfc/rfc9110.html
+# status: filtered (blocks are quoted from the page; '##' lines are the page's heading path)
+# 5/2122 blocks, about 387 of 117469 tokens
+# whole page: read_coordinate("web-mh3k2a07")
+## HTTP Semantics > 15. Status Codes > 15.5. Client Error 4xx > 15.5.20. 421 Misdirected Request
+The 421 (Misdirected Request) status code indicates that the request was directed at a server that is unable or unwilling to produce an authoritative response for the target URI. ...
+```
+
+A kept fold looks like a pointer with the needed lines under it:
+
+```text
+[folded Read · hooks/register.ts · 598 lines — read_coordinate("toolu_…")]
+[kept from the original, verbatim; the rest is in read_coordinate]
+   441	    const below = await next(e)
+   ...
+```
+
+Blocks are kept only when the judgment found an answer and they come to at most half of the result. `foldBlocksBudgetMs` (10 s) bounds how long a compaction waits; results still being judged then fold to a pointer alone.
 
 ### Turning it on
 
@@ -237,6 +266,17 @@ Jev bills input tokens only, $0.042 per million ([TypeSafe's Models page](https:
 
 The session caps (`stopCap` 200, `instructionCap` 200, `foldCap` 20, `toolCap` 300 calls) bound one session at about 670,000 input tokens: $0.03. The instruction filter draws on `instructionCap` too.
 
+Web reading and kept fold blocks send text, so they cost more per use and are left out of the figures above. Measured on 2026-10-27 (seven documentation pages; three files of this repository read as `Read` returns them):
+
+| Use | Jev requests | Input tokens | Cost |
+| --- | --- | --- | --- |
+| A short page (under ~2,000 tokens) | 0 | 0 | none: returned whole |
+| A documentation page of 2,000-8,000 tokens | 6-9 | 17,000-37,000 | $0.0007-0.0015 |
+| A long reference (Node.js `fs`, RFC 9110; 87,000-117,000 tokens) | 38-58 | 345,000-536,000 | $0.014-0.023 |
+| One folded result of 16,000-40,000 characters | 5-9 | 12,000-25,000 | $0.0005-0.001 |
+
+`webReadCap` (600 requests) and `foldBlocksCap` (300) bound a session at roughly $0.25 and $0.04 more. The time is in the tool call or the compaction: 0.2-1.6 s per page in that measurement, the requests running 16 at a time.
+
 The author's own use, priced as if every gate were on (2026-10-23, counted from Claude Code transcripts; nothing was sent), one Claude Max 20x account on two machines:
 
 | Period | Sessions | Prompts | Tool calls | Compactions | Typical | Upper |
@@ -261,7 +301,7 @@ Everything the plugin keeps is under one folder only you can open; every folder 
   replay/                                replay output
 ```
 
-An archive file holds exactly what the tool returned. A record holds what was sent (scrubbed), the verdicts and the timings.
+An archive file holds exactly what the tool returned; `web_read` adds the page it read, as blocks, under `web-<id>`. A record holds what was sent (scrubbed), the verdicts and the timings; for web reading and kept fold blocks, which send text, it keeps the question and the size of the text, not the text.
 
 Folds from before the rename stay at `~/.claude-context-fold/<session>/`; the plugin reads them and never writes or deletes there. Without `HOME`, it folds nothing and lets the engine summarize, rather than write into the project. To remove what it kept:
 
@@ -359,6 +399,10 @@ Jev answers a question in one of three shapes: a choice among named options, a s
 - A changed setting reloads the plugin, which starts its counters and its count of consolidation requests over.
 - In `shadow`, nothing is attached, so what would have been is remembered, and forgotten only when the plugin sees a compaction summarized or the conversation cleared; `active` counts the conversation instead.
 - The instruction filter sees only what loads at the start and after a compaction; a subfolder's `CLAUDE.md` and `.claude/rules` arrive later, as Claude Code reads files, and pass it by.
+- `web_read` reads what the server sends, up to 4 million characters: no JavaScript is run, PDFs and other files are refused, and local and private-network addresses are never fetched (in `shadow`, neither is a WebFetch URL that carries a secret-shaped value). The address is checked as written: a public name that resolves to a private address, or a redirect to one, is fetched, since Claude Code fetches and follows redirects itself. Its HTML reader is written for the plugin, which can load no packages, so a malformed page can split differently from jevfetch; asides marked as notes stay in the page rather than being judged apart. XML is read as text.
+- Token counts in web reading are estimates (about four ASCII characters or one other character per token); the plugin has no tokenizer.
+- Browser routing finds tools by rules only: a command on `PATH` (`which`) or in `~/.local/bin`, `/opt/homebrew/bin`, `/usr/local/bin`, `~/.bun/bin` or `~/.npm-global/bin`; Playwright in the project's `node_modules` or its browser cache. It launches nothing and probes no debugging port, so a CDP tool counts only when `browserCdp` names it. It cannot read your permission rules or other plugins' hooks: list a tool they block in `browserBlocked`, or it may be suggested.
+- Kept fold blocks group output lines by 40, so a kept code block can carry lines around the one that mattered.
 - Not yet: fold relevance as a decision rather than a record; applying Jev's instruction readings; whether attached fragments make answers better; the Stop gate's accuracy on real announcements.
 
 ## Upgrading
@@ -380,11 +424,11 @@ claude plugin test /path/to/context-harness    # tests/*.test.ts
 claude plugin validate /path/to/context-harness
 ```
 
-The suite has 134 tests. Nineteen defects planted back one at a time each made at least one of them fail. For the instruction filter: the always-kept list ignored, a deferred chunk counted as already saying another, a project rule dropped for a user one, a late Jev answer dropped, chunk names the attached-fragment count cannot read, the memory or organization file cut, a heading inside a code fence taken for a section, and records written while the setting is off. From 0.0.1: the cleanup over the whole folder, a fixed size floor for the judgment, the earlier turn count, folders left readable, a failed `chmod` ignored, archives readable directly, a `/compact` without `HOME`, fragments counted without the conversation, queued prompts not remembered, a failure after the fold undoing it, and a quoted opening tag taken for a block.
+The suite has 175 tests. Nine defects planted in browser routing each made at least one fail: Aside put before ego, shadow attaching, the block attached again while the conversation carries it, keywords skipped for Jev, a blocked tool suggested, the install notice on every prompt, the prompt sent unscrubbed, the common install folders ignored, and the threshold ignored. Eighteen defects planted in web reading and kept fold blocks each made at least one fail: the first block dropped, stage 2 skipped, text sent unscrubbed, kept blocks judged while the setting is off, WebFetch measured while web reading is off, kept blocks that no longer start with the fold mark, a table row without its header, navigation left in, the compaction's time budget ignored, the call cap counted only after concurrent calls return, requests started after the judgment was stopped, a late judgment recorded as kept, local and private-network addresses fetched, a signed link fetched a second time, page nesting left unbounded, a long opening tag read as text, a loopback address written as 127.1 or 0x7f.0.0.1 taken as public, and an end tag past the nesting cap closing an ancestor. From 0.0.3 and before, 134 tests. Nineteen defects planted back one at a time each made at least one of them fail. For the instruction filter: the always-kept list ignored, a deferred chunk counted as already saying another, a project rule dropped for a user one, a late Jev answer dropped, chunk names the attached-fragment count cannot read, the memory or organization file cut, a heading inside a code fence taken for a section, and records written while the setting is off. From 0.0.1: the cleanup over the whole folder, a fixed size floor for the judgment, the earlier turn count, folders left readable, a failed `chmod` ignored, archives readable directly, a `/compact` without `HOME`, fragments counted without the conversation, queued prompts not remembered, a failure after the fold undoing it, and a quoted opening tag taken for a block.
 
 ## Credits
 
-The idea of folding completed tool output into addressed one-line pointers, instead of summarizing, comes from Hwang Dae Jin and Yeni, *The Context Coordinate System and the Principle of Unbroken Memory* (Philosophy That Works, 2026; DOI [10.5281/zenodo.23377916](https://doi.org/10.5281/zenodo.23377916); [repository](https://github.com/philosophythatworks/context-lattice)). This plugin is an independent implementation and contains no code from that project. Related work: observation masking in [Lindenbauer et al., 2025](https://arxiv.org/abs/2508.21433), and Anthropic's [context editing](https://platform.claude.com/docs/en/build-with-claude/context-editing).
+The idea of folding completed tool output into addressed one-line pointers, instead of summarizing, comes from Hwang Dae Jin and Yeni, *The Context Coordinate System and the Principle of Unbroken Memory* (Philosophy That Works, 2026; DOI [10.5281/zenodo.23377916](https://doi.org/10.5281/zenodo.23377916); [repository](https://github.com/philosophythatworks/context-lattice)). This plugin is an independent implementation and contains no code from that project. Block splitting and the two-stage relevance judgment (`hooks/blocks.ts`, `hooks/relevance.ts`) are ported from [jevfetch](https://github.com/a2sys-ai/jevfetch) by Deukwoong Woo, a2sys (MIT), at commit 167fe8f. Related work: observation masking in [Lindenbauer et al., 2025](https://arxiv.org/abs/2508.21433), and Anthropic's [context editing](https://platform.claude.com/docs/en/build-with-claude/context-editing).
 
 ## Versions
 
