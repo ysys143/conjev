@@ -91,6 +91,20 @@ test('a chunk loaded twice keeps its first copy; organization and memory files a
   expect(out[2]?.content).toBe('[context-harness: left out "산출물", loaded from ~/AGENTS.md]\n\n')
 })
 
+test('an organization file loaded after a copy of its section is never cut, by the duplicate rule or by any drop', () => {
+  const user = file('/u/AGENTS.md', 'user', '## 문체\n\nLead with the result, then give the evidence.\n')
+  const managed = file('/etc/CLAUDE.md', 'managed', '## 문체\n\nLead   with the result, then give the evidence.\n\n## 산출물\n\nWrite reports in Markdown, always.\n')
+  const project = file('/p/AGENTS.md', 'project', '## 산출물\n\nWrite reports in Markdown, always.\n')
+  const chunks = chunksOf([user, managed, project])
+  const drops = exactDuplicates(chunks)
+  expect(chunks.filter(c => drops.has(c.id)).map(c => c.file)).toEqual(['/p/AGENTS.md'])
+
+  // Even a drop that names its chunks, as a judgment's would, leaves the file whole.
+  const every = new Map(chunks.filter(c => c.file === managed.path).map(c => [c.id, chunks[0]!]))
+  expect(withoutChunks([user, managed, project], chunks, every, '/u')[1]).toBe(managed)
+  expect(withoutChunks([user, managed, project], chunks, drops, '/u')[1]).toBe(managed)
+})
+
 test('of two OMC blocks at different versions, the older one leaves whole', () => {
   const older = file('/u/.claude-3/CLAUDE.md', 'user', omc())
   const newer = file('/u/.claude/CLAUDE.md', 'project', omc('\n- A rule the newer version added.'))
