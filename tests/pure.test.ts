@@ -90,6 +90,14 @@ test('scrub removes secrets, addresses and the home folder', () => {
   expect(scrub(`changed ${path}`, HOME)).toBe(`changed ${path}`)
 })
 
+test('scrub sends Korean personal information as labels', () => {
+  expect(scrub('고객 홍길동님 연락처 010-9876-5432, 주민번호 800101-1234560, 생년월일 1990-03-15', HOME)).toBe(
+    '고객 [이름]님 연락처 [전화번호], 주민번호 [주민등록번호], 생년월일 [생년월일]',
+  )
+  // Positions count UTF-16 units: an astral character before the number does not shift the label.
+  expect(scrub('\u{1F600} 담당 김민수 대리 010-1234-5678', HOME)).toBe('\u{1F600} 담당 [이름] 대리 [전화번호]')
+})
+
 test('the budget stops at the cap and opens the circuit after three failures in a row', () => {
   expect(admit({ ...EMPTY_BUDGET, calls: 2 }, 2, 0)).toBe('cap')
   let state = EMPTY_BUDGET

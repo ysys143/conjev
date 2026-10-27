@@ -152,6 +152,14 @@ test('active: a keyword hit attaches without asking Jev about it', ACTIVE, async
   expect(io.submitted[0]?.context?.[0]).toContain('name="prose"')
 })
 
+test('active: a Korean phone number, resident number and name in the prompt reach Jev as labels', ACTIVE, async ($, on) => {
+  const io = setup(on, { files: FILES })
+  await $.prompt.submit(typed('Publish the release. 담당자 김민수 010-1234-5678, 주민번호 800101-1234560 확인 부탁'))
+  const sent = JSON.stringify(io.fetches[0]?.body.state)
+  expect(sent).toContain('담당자 [이름] [전화번호], 주민번호 [주민등록번호]')
+  for (const value of ['김민수', '010-1234-5678', '800101-1234560']) expect(sent).not.toContain(value)
+})
+
 const DEPLOY_APPLIES = () => choice({ deploy: { applies: 0.99, not: 0.01 }, prose: { applies: 0.01, not: 0.99 } })
 
 test('after a compaction the engine summarized, a fragment is attached again', ACTIVE, async ($, on) => {

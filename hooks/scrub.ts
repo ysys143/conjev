@@ -1,5 +1,7 @@
 // What leaves the machine for Jev is scrubbed first: secret-shaped strings,
-// email addresses and the home folder never go out.
+// email addresses and the home folder never go out, and Korean personal
+// information (names, phone, resident and card numbers, ...) goes as labels.
+import { anonymize } from './pii/pipeline'
 
 const SECRET_PATTERNS: readonly RegExp[] = [
   /\bBearer\s+[A-Za-z0-9._~+/=-]{8,}/gi,
@@ -33,5 +35,7 @@ export function scrub(text: string, home?: string): string {
   out = out.replace(NAMED_SECRET, (_, name: string, sep: string) => `${name}${sep}<secret>`)
   for (const pattern of SECRET_PATTERNS) out = out.replace(pattern, '<secret>')
 
-  return out.replace(EMAIL, '<email>')
+  out = out.replace(EMAIL, '<email>')
+
+  return anonymize(out, 'label').text
 }
