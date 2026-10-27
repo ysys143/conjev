@@ -13,8 +13,17 @@ type Block = ApiMessage['content'][number]
 
 const BIG = 'L'.repeat(3000)
 const PNG: Block = { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'iVBORw0KGgo=' } }
+// A PDF page, the other shape the engine hands back as a block of its own. It
+// leaves the same way an image does when the message is rebuilt, so the fold
+// must treat it the same.
+const PDF: Block = { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: 'JVBERi0=' } }
 const ARCHIVE = `${HOME}/.local/state/context-harness/archive/sess-1`
 const hasImage = (message: unknown): boolean => JSON.stringify(message).includes('"type":"image"')
+const hasMedia = (message: unknown): boolean => {
+  const json = JSON.stringify(message)
+
+  return json.includes('"type":"image"') || json.includes('"type":"document"')
+}
 
 const engineAssembles = (handed: readonly SessionMessage[], copies: ReadonlyMap<string, ApiMessage>): ApiMessage[] =>
   handed.map(m => (m.handle !== undefined && copies.has(m.handle) ? copies.get(m.handle)! : apiOf(m)))
@@ -118,6 +127,55 @@ test('an image the person pasted beside a large result keeps the message whole',
   const built = engineAssembles(handed, copies)[5]!
   expect(built.content.some(b => b.type === 'text' && b.text === ASK)).toBe(true)
   expect(hasImage(built)).toBe(true)
+})
+
+test('a large text result beside a Read of a PDF page is not folded either', async ($, on) => {
+  const { messages, api, copies } = conversation([
+    [
+      { role: 'assistant', text: '', toolUses: [useOf('toolu_doc', 'Bash', { command: 'cat build.log' }), useOf('toolu_pdf', 'Read', { file_path: '/proj/spec.pdf' })], handle: 'a1' },
+      { role: 'assistant', content: [{ type: 'tool_use', id: 'toolu_doc', name: 'Bash', input: {} }, { type: 'tool_use', id: 'toolu_pdf', name: 'Read', input: {} }] },
+    ],
+    [
+      {
+        role: 'user',
+        text: '',
+        toolUses: [],
+        toolResults: [
+          { tool_use_id: 'toolu_doc', text: BIG, isError: false },
+          { tool_use_id: 'toolu_pdf', text: '', isError: false },
+        ],
+        handle: 'u1',
+      },
+      { role: 'user', content: [resultOf('toolu_doc', [{ type: 'text', text: BIG }]), resultOf('toolu_pdf', [PDF])] },
+    ],
+    [{ role: 'assistant', text: 'Checked.', toolUses: [], handle: 'a2' }, { role: 'assistant', content: [{ type: 'text', text: 'Checked.' }] }],
+  ])
+  const io = setup(on, { api })
+  const handed = await compact($, messages)
+
+  expect(handed[5]!.handle).toBe('u1')
+  expect(hasMedia(engineAssembles(handed, copies)[5])).toBe(true)
+  expect(io.writes.some(w => w.path === `${ARCHIVE}/toolu_doc.json`)).toBe(false)
+})
+
+test('a result holding text and a document is not folded', async ($, on) => {
+  const { messages, api, copies } = conversation([
+    [
+      { role: 'assistant', text: '', toolUses: [useOf('toolu_spec', 'Read', { file_path: '/proj/spec.pdf' })], handle: 'a1' },
+      { role: 'assistant', content: [{ type: 'tool_use', id: 'toolu_spec', name: 'Read', input: {} }] },
+    ],
+    [
+      { role: 'user', text: '', toolUses: [], toolResults: [{ tool_use_id: 'toolu_spec', text: BIG, isError: false }], handle: 'u1' },
+      { role: 'user', content: [resultOf('toolu_spec', [{ type: 'text', text: BIG }, PDF])] },
+    ],
+    [{ role: 'assistant', text: 'Checked.', toolUses: [], handle: 'a2' }, { role: 'assistant', content: [{ type: 'text', text: 'Checked.' }] }],
+  ])
+  const io = setup(on, { api })
+  const handed = await compact($, messages)
+
+  expect(handed[5]!.handle).toBe('u1')
+  expect(hasMedia(engineAssembles(handed, copies)[5])).toBe(true)
+  expect(io.writes.some(w => w.path === `${ARCHIVE}/toolu_spec.json`)).toBe(false)
 })
 
 test('a result holding text and an image is not folded, so nothing of it leaves for the archive', async ($, on) => {
