@@ -85,6 +85,39 @@ test('canary: no tool output and no unshown input reaches Jev', { options: NON_D
   expect(io.fetches[0]?.body.state).toEqual({ current_request: 'Now fix the parser test' })
 })
 
+test('the fold judgment scrubs the request before it cuts it', { options: NON_DEFAULT }, async ($, on) => {
+  // The person's last prompt carries a phone number starting at 393, so a cut
+  // at 400 lands inside the label scrubbing leaves. Cutting first would send
+  // part of the number.
+  const ask = `${'가 나 '.repeat(200).slice(0, 393)}010-1234-5678`
+  const io = setup(on, { transcript: [...BUSY, prompt(ask)], env: KEY_ENV, fetch: everyQuestion })
+  await $.session.compact({ trigger: 'manual', messages: [...BUSY, prompt(ask)] } as never)
+  await settle(() => records(io.writes, 'fold').length >= 48)
+
+  const state = io.fetches[0]?.body.state as Record<string, string> | undefined
+  expect(state?.current_request).not.toContain('010')
+  expect((state?.current_request ?? '').length).toBeLessThanOrEqual(400)
+})
+
+test('the fold judgment scrubs a tool call line before it cuts it', { options: NON_DEFAULT }, async ($, on) => {
+  // A Grep whose pattern starts a phone number at 110: the call line is cut at
+  // 120, so a cut before the scrub would leave part of the number. Grep is
+  // used because a path key would be shown instead, and a path is scrubbed as
+  // a path, not as free text.
+  const input = { pattern: `${'p'.repeat(110)}010-1234-5678` }
+  const messages = [prompt('Refactor'), call('t0', 'Grep', input), answer('t0', 'y'.repeat(2000)), prompt('next'), prompt('and next')]
+  const io = setup(on, { transcript: messages, env: KEY_ENV, fetch: everyQuestion })
+  await $.session.compact({ trigger: 'manual', messages } as never)
+  await settle(() => records(io.writes, 'fold').length > 0)
+
+  const bodies = io.fetches.map(f => JSON.stringify(f.body))
+  for (const body of bodies) {
+    expect(body).not.toContain('1234')
+    expect(body).not.toContain('5678')
+  }
+  expect(bodies.join()).toContain('Grep')
+})
+
 const BIG = 'x\n'.repeat(1500)
 const RECENT: SessionMessage[] = [prompt('Look at a.ts'), call('a', 'Read', { file_path: '/proj/a.ts' }), answer('a', BIG)]
 const OLD: SessionMessage[] = [...RECENT, prompt('next'), prompt('and next')]
