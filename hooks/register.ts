@@ -1,5 +1,5 @@
 import type { Register } from 'claude-code'
-import { DEFAULT_SETTINGS, SETTING_KEYS, dueBeforeFold, dueNote, foldTranscript, makePolicy, reportFor, settingsFrom, sliceLines, transcriptChars, type PolicySettings } from './fold'
+import { DEFAULT_SETTINGS, SETTING_KEYS, dueBeforeFold, dueNote, foldTranscript, makePolicy, messageViewOf, reportFor, settingsFrom, sliceLines, transcriptChars, type MessageView, type PolicySettings } from './fold'
 import { routeBrowser } from './browser-flow'
 import { BROWSER_BLOCK, BROWSER_POINT } from './browser-route'
 import { FOLD_BLOCKS_POINT, judgeBlocks, withKeptBlocks } from './fold-blocks'
@@ -287,7 +287,10 @@ export const register: Register = (on, options) => {
       if (settings.foldJev !== 'off') void judgeFold($, e.messages, new Set(archivedIds)).catch(() => undefined)
     }
 
-    const outcome = foldTranscript(e.messages, policy)
+    // Nothing in the types promises the api view here; without it no message
+    // can be shown free of media, so nothing folds and the engine summarizes.
+    const view = await $.session.messages({ as: 'api' }).then(messageViewOf, () => new Map() as MessageView)
+    const outcome = foldTranscript(e.messages, policy, view)
     if (outcome.archived.length === 0) {
       const summarized = await next(e)
       if (summarized.skip === undefined) await after(0, [], true)
@@ -356,7 +359,8 @@ export const register: Register = (on, options) => {
     // removes enough of the transcript.
     const messages = await $.session.messages()
     const before = transcriptChars(messages)
-    const { savedChars } = foldTranscript(messages, policy)
+    const view = await $.session.messages({ as: 'api' }).then(messageViewOf, () => new Map() as MessageView)
+    const { savedChars } = foldTranscript(messages, policy, view)
     if (before === 0 || (savedChars / before) * 100 < policySettings.minSavedPercent) return done
 
     // What this stretch of work produced goes to the canonical files before

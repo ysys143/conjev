@@ -175,9 +175,9 @@ test('after a compaction the engine summarized, a fragment is attached again', A
 })
 
 test('after a compaction that only folded, a fragment still in the conversation is not attached again', ACTIVE, async ($, on) => {
-  const io = setup(on, { files: FILES, fetch: DEPLOY_APPLIES })
-  await $.prompt.submit(typed('Publish the release'))
   const transcript = [prompt('Publish the release'), call('x', 'Read', { file_path: '/proj/big.txt' }), answer('x', BIG), prompt('next'), prompt('and next')]
+  const io = setup(on, { transcript, files: FILES, fetch: DEPLOY_APPLIES })
+  await $.prompt.submit(typed('Publish the release'))
   const compacted = await $.session.compact({ trigger: 'manual', messages: transcript } as never)
   // The plugin answered the compaction itself: the result became a pointer, the block stayed.
   expect(JSON.stringify(compacted)).toContain('[folded Read')
@@ -221,7 +221,7 @@ test('a changed fragment set is announced', ACTIVE, async ($, on) => {
 })
 
 test('fold shadow: the judgment rides the fold, and its rule verdict is what the fold did', { options: { foldJev: 'shadow' } }, async ($, on) => {
-  const io = setup(on, { fetch: () => choice({ r0: { needed: 0.9, done: 0.1 }, r1: { needed: 0.2, done: 0.8 } }) })
+  const io = setup(on, { transcript: TRANSCRIPT, fetch: () => choice({ r0: { needed: 0.9, done: 0.1 }, r1: { needed: 0.2, done: 0.8 } }) })
   await $.session.compact({ trigger: 'manual', messages: TRANSCRIPT } as never)
   await settle(() => records(io.writes, 'fold').length >= 2)
   expect(io.fetches[0]?.body.state).toEqual({ current_request: 'Fix the rounding bug in invoice totals' })
@@ -253,10 +253,10 @@ const wouldAttachDeploy = (writes: readonly { path: string; text: string }[]) =>
   records(writes, 'instructions').filter(r => r.decision === 'would-attach' && (r.facts as Record<string, string>).fragment === 'deploy').length
 
 test('shadow: after a compaction that only folded, it would not attach again', SHADOW, async ($, on) => {
-  const io = setup(on, { files: FILES, fetch: DEPLOY_APPLIES })
+  const transcript = [prompt('Publish the release'), call('x', 'Read', { file_path: '/proj/big.txt' }), answer('x', BIG), prompt('next'), prompt('and next')]
+  const io = setup(on, { transcript, files: FILES, fetch: DEPLOY_APPLIES })
   await $.prompt.submit(typed('Publish the release'))
   await settle(() => wouldAttachDeploy(io.writes) === 1)
-  const transcript = [prompt('Publish the release'), call('x', 'Read', { file_path: '/proj/big.txt' }), answer('x', BIG), prompt('next'), prompt('and next')]
   await $.session.compact({ trigger: 'manual', messages: transcript } as never)
   await $.classic.PostCompact({ trigger: 'manual', compact_summary: '' } as never)
   await $.classic.SessionStart({ source: 'compact' } as never)

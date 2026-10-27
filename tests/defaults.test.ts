@@ -22,6 +22,7 @@ const START = { cwd: '/proj', surface: 'terminal', isInteractive: true } as neve
 // Only the key is set; every mode is the manifest's.
 test('defaults: a key in every source, every hook run, nothing sent and no judgment recorded', { options: { apiKey: 'tk-config' } }, async ($, on) => {
   const io = setup(on, {
+    transcript: FOLDABLE,
     env: KEY_ENV,
     dotenv: 'TYPESAFE_API_KEY=tk-dotenv\n',
     messages: FOLDABLE,

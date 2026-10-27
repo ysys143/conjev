@@ -112,7 +112,7 @@ const TRANSCRIPT: SessionMessage[] = [
 
 test('fold blocks active: the needed lines stay verbatim under the pointer; the rest is archived', { options: { foldBlocks: 'active' } }, async ($, on) => {
   // A stopped timer: only Jev's answers settle the judgment, never its time budget.
-  const io = setup(on, { env: KEY_ENV, fetch: jev, isTimerStopped: true })
+  const io = setup(on, { transcript: TRANSCRIPT, env: KEY_ENV, fetch: jev, isTimerStopped: true })
   const out = await $.session.compact({ trigger: 'manual', messages: TRANSCRIPT } as never)
   const folded = out.messages?.flatMap(m => m.toolResults ?? []).find(r => r.tool_use_id === 'big')?.text ?? ''
 
@@ -128,7 +128,7 @@ test('fold blocks active: the needed lines stay verbatim under the pointer; the 
 })
 
 test('fold blocks shadow: the fold is a pointer alone, and what would be kept is recorded', { options: { foldBlocks: 'shadow' } }, async ($, on) => {
-  const io = setup(on, { env: KEY_ENV, fetch: jev })
+  const io = setup(on, { transcript: TRANSCRIPT, env: KEY_ENV, fetch: jev })
   const out = await $.session.compact({ trigger: 'manual', messages: TRANSCRIPT } as never)
   const folded = out.messages?.flatMap(m => m.toolResults ?? []).find(r => r.tool_use_id === 'big')?.text ?? ''
   expect(folded).not.toContain(KEPT_MARK)
@@ -138,7 +138,7 @@ test('fold blocks shadow: the fold is a pointer alone, and what would be kept is
 })
 
 test('fold blocks active: when Jev fails, the fold is a pointer alone', { options: { foldBlocks: 'active' } }, async ($, on) => {
-  setup(on, { env: KEY_ENV, isTimerStopped: true, fetch: () => ({ status: 500, ok: false, headers: {}, text: '' }) })
+  setup(on, { transcript: TRANSCRIPT, env: KEY_ENV, isTimerStopped: true, fetch: () => ({ status: 500, ok: false, headers: {}, text: '' }) })
   const out = await $.session.compact({ trigger: 'manual', messages: TRANSCRIPT } as never)
   const folded = out.messages?.flatMap(m => m.toolResults ?? []).find(r => r.tool_use_id === 'big')?.text ?? ''
   expect(folded.startsWith(FOLD_MARK)).toBe(true)
@@ -146,7 +146,7 @@ test('fold blocks active: when Jev fails, the fold is a pointer alone', { option
 })
 
 test('fold blocks off: no tool output reaches Jev', { options: { foldJev: 'shadow' } }, async ($, on) => {
-  const io = setup(on, { env: KEY_ENV, fetch: jev })
+  const io = setup(on, { transcript: TRANSCRIPT, env: KEY_ENV, fetch: jev })
   await $.session.compact({ trigger: 'manual', messages: TRANSCRIPT } as never)
   await drain()
   expect(sent(io)).not.toContain('line 12 ')
@@ -155,7 +155,7 @@ test('fold blocks off: no tool output reaches Jev', { options: { foldJev: 'shado
 
 test('fold blocks active: past the time budget the fold goes ahead as pointers alone', { options: { foldBlocks: 'active', foldBlocksBudgetMs: 3000 } }, async ($, on) => {
   // Jev never answers; the budget's timer does.
-  const io = setup(on, { env: KEY_ENV, fetch: () => new Promise<HttpResponse>(() => undefined) })
+  const io = setup(on, { transcript: TRANSCRIPT, env: KEY_ENV, fetch: () => new Promise<HttpResponse>(() => undefined) })
   const out = await $.session.compact({ trigger: 'manual', messages: TRANSCRIPT } as never)
   expect(io.sleeps).toContain(3000)
   const folded = out.messages?.flatMap(m => m.toolResults ?? []).find(r => r.tool_use_id === 'big')?.text ?? ''
@@ -189,7 +189,7 @@ test('the call cap holds while a page is judged many requests at once', { option
 test('fold blocks active: a judgment that ends past the budget is recorded late and changes nothing', { options: { foldBlocks: 'active', foldBlocksBudgetMs: 3000 } }, async ($, on) => {
   let release: () => void = () => undefined
   const gate = new Promise<void>(resolve => (release = resolve))
-  const io = setup(on, { env: KEY_ENV, fetch: async body => (await gate, jev(body)) })
+  const io = setup(on, { transcript: TRANSCRIPT, env: KEY_ENV, fetch: async body => (await gate, jev(body)) })
   const out = await $.session.compact({ trigger: 'manual', messages: TRANSCRIPT } as never)
   const folded = out.messages?.flatMap(m => m.toolResults ?? []).find(r => r.tool_use_id === 'big')?.text ?? ''
   expect(folded).not.toContain(KEPT_MARK)

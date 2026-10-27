@@ -224,6 +224,48 @@ export function turnsAgoOf(messages: readonly SessionMessage[]): number[] {
   return turnsAgoAt
 }
 
+type ApiBlock = { type: string; [field: string]: unknown }
+
+/**
+ * What the engine holds for each user message that carries tool results,
+ * keyed by every tool_use_id in it: whether the message holds an image or a
+ * document anywhere (its own blocks or inside a result), and its top-level
+ * text blocks joined.
+ *
+ * The rows the compaction hands the plugin have no field for media, so this
+ * is read from `$.session.messages({ as: 'api' })`.
+ */
+export type MessageView = ReadonlyMap<string, { hasMedia: boolean; text: string }>
+
+const isMedia = (block: ApiBlock): boolean => block.type === 'image' || block.type === 'document'
+
+export function messageViewOf(api: readonly { role: string; content: readonly ApiBlock[] }[]): MessageView {
+  const view = new Map<string, { hasMedia: boolean; text: string }>()
+  for (const message of api) {
+    if (message.role !== 'user') continue
+    const results = message.content.filter(block => block.type === 'tool_result')
+    if (results.length === 0) continue
+
+    const hasMedia = message.content.some(
+      block => isMedia(block) || (Array.isArray(block.content) && (block.content as ApiBlock[]).some(isMedia)),
+    )
+    const text = message.content
+      .filter(block => block.type === 'text' && typeof block.text === 'string')
+      .map(block => block.text as string)
+      .join('\n')
+    for (const block of results) if (typeof block.tool_use_id === 'string') view.set(block.tool_use_id, { hasMedia, text })
+  }
+
+  return view
+}
+
+// A message the fold changes loses the engine's handle and is built anew from
+// its rows, which hold no media: with a view, a message is foldable only when
+// the view finds every result in it and none holds media. A message the view
+// cannot find is left whole.
+const isFoldable = (message: SessionMessage, view: MessageView | undefined): boolean =>
+  view === undefined || (message.toolResults ?? []).every(result => view.get(result.tool_use_id)?.hasMedia === false)
+
 /** One completed tool result not yet folded, and what the fold would do with it. */
 export type FoldableResult = FoldCandidate & {
   id: string
@@ -239,13 +281,14 @@ export type FoldableResult = FoldCandidate & {
  * fold's decision. The fold and its judgment both read this, so they agree on
  * what was eligible and what was folded.
  */
-export function foldableResults(messages: readonly SessionMessage[], policy: FoldPolicy): FoldableResult[] {
+export function foldableResults(messages: readonly SessionMessage[], policy: FoldPolicy, view?: MessageView): FoldableResult[] {
   const uses = toolUses(messages)
   const turnsAgoAt = turnsAgoOf(messages)
   const found: FoldableResult[] = []
 
   messages.forEach((message, i) => {
     if (message.role !== 'user') return
+    const canFold = isFoldable(message, view)
     ;(message.toolResults ?? []).forEach((result, j) => {
       if (result.text.startsWith(FOLD_MARK)) return
 
@@ -259,7 +302,7 @@ export function foldableResults(messages: readonly SessionMessage[], policy: Fol
       }
       const pointer = pointerFor(result.tool_use_id, candidate)
       // A pointer longer than what it replaces saves nothing.
-      found.push({ ...candidate, id: result.tool_use_id, at: [i, j], pointer, fold: policy(candidate) && pointer.length < result.text.length })
+      found.push({ ...candidate, id: result.tool_use_id, at: [i, j], pointer, fold: canFold && policy(candidate) && pointer.length < result.text.length })
     })
   })
 
@@ -271,11 +314,13 @@ export function foldableResults(messages: readonly SessionMessage[], policy: Fol
  *
  * Messages it does not change keep the engine's handle and stay whole. A user
  * message with a folded result is rebuilt from its text and tool results, so
- * it carries no handle and the engine builds it anew.
+ * it carries no handle and the engine builds it anew. With a view, the text is
+ * the view's top-level text blocks, which the row's text can lack, and a
+ * message holding media is never folded.
  */
-export function foldTranscript(messages: readonly SessionMessage[], policy: FoldPolicy): FoldOutcome {
+export function foldTranscript(messages: readonly SessionMessage[], policy: FoldPolicy, view?: MessageView): FoldOutcome {
   const chosen = new Map(
-    foldableResults(messages, policy)
+    foldableResults(messages, policy, view)
       .filter(result => result.fold)
       .map(result => [`${result.at[0]}:${result.at[1]}`, result]),
   )
@@ -297,7 +342,10 @@ export function foldTranscript(messages: readonly SessionMessage[], policy: Fold
       return { tool_use_id: result.tool_use_id, text: pick.pointer, isError: result.isError }
     })
 
-    return isChanged ? { role: 'user', text: message.text, toolUses: [], toolResults: nextResults } : message
+    if (!isChanged) return message
+    const text = view?.get(results[0]!.tool_use_id)?.text ?? message.text
+
+    return { role: 'user', text, toolUses: [], toolResults: nextResults }
   })
 
   return { messages: folded, archived, savedChars }

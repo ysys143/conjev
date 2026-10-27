@@ -46,7 +46,7 @@ BUSY.push(prompt('Now fix the parser test'))
 const NON_DEFAULT = { keepRecentTurns: 1, minFoldChars: 500, foldJev: 'shadow' }
 
 test('every fold record states what the fold did, under a policy that is not the default', { options: NON_DEFAULT }, async ($, on) => {
-  const io = setup(on, { env: KEY_ENV, fetch: everyQuestion })
+  const io = setup(on, { transcript: BUSY, env: KEY_ENV, fetch: everyQuestion })
   await $.session.compact({ trigger: 'manual', messages: BUSY } as never)
   await settle(() => records(io.writes, 'fold').length >= 48)
   await drain()
@@ -75,7 +75,7 @@ test('every fold record states what the fold did, under a policy that is not the
 })
 
 test('canary: no tool output and no unshown input reaches Jev', { options: NON_DEFAULT }, async ($, on) => {
-  const io = setup(on, { env: KEY_ENV, fetch: everyQuestion })
+  const io = setup(on, { transcript: BUSY, env: KEY_ENV, fetch: everyQuestion })
   await $.session.compact({ trigger: 'manual', messages: BUSY } as never)
   await settle(() => records(io.writes, 'fold').length >= 48)
 
@@ -90,7 +90,7 @@ const RECENT: SessionMessage[] = [prompt('Look at a.ts'), call('a', 'Read', { fi
 const OLD: SessionMessage[] = [...RECENT, prompt('next'), prompt('and next')]
 
 test('nothing folded: the engine summarizes, and the judgment records that nothing was folded', { options: { foldJev: 'shadow' } }, async ($, on) => {
-  const io = setup(on, { env: KEY_ENV, fetch: everyQuestion })
+  const io = setup(on, { transcript: RECENT, env: KEY_ENV, fetch: everyQuestion })
   const result = await $.session.compact({ trigger: 'manual', messages: RECENT } as never)
   expect(JSON.stringify(result)).toContain('summary')
   await settle(() => records(io.writes, 'fold').length > 0)
@@ -99,7 +99,7 @@ test('nothing folded: the engine summarizes, and the judgment records that nothi
 })
 
 test('a skipped compaction with nothing to fold records nothing and counts nothing', { options: { foldJev: 'shadow' } }, async ($, on) => {
-  const io = setup(on, { env: KEY_ENV, fetch: everyQuestion, compactBelow: 'skip' })
+  const io = setup(on, { transcript: RECENT, env: KEY_ENV, fetch: everyQuestion, compactBelow: 'skip' })
   expect((await $.session.compact({ trigger: 'manual', messages: RECENT } as never)).skip).toBe('skipped below')
   await drain()
   expect(records(io.writes, 'fold').length).toBe(0)
@@ -108,7 +108,7 @@ test('a skipped compaction with nothing to fold records nothing and counts nothi
 
 test('folded but still too large, then skipped: nothing recorded and nothing counted', { options: { foldJev: 'shadow' } }, async ($, on) => {
   // The folded transcript still fills the window, so the engine is asked to summarize it, and skips.
-  const io = setup(on, { env: KEY_ENV, fetch: everyQuestion, compactBelow: 'skip', window: 10 })
+  const io = setup(on, { transcript: OLD, env: KEY_ENV, fetch: everyQuestion, compactBelow: 'skip', window: 10 })
   expect((await $.session.compact({ trigger: 'manual', messages: OLD } as never)).skip).toBe('skipped below')
   await drain()
   expect(records(io.writes, 'fold').length).toBe(0)
@@ -117,14 +117,14 @@ test('folded but still too large, then skipped: nothing recorded and nothing cou
 })
 
 test('status: with Jev off it reads exactly as it did; with a gate on, both parts stay', async ($, on) => {
-  const io = setup(on)
+  const io = setup(on, { transcript: OLD })
   const { savedChars } = foldTranscript(OLD, makePolicy(DEFAULT_SETTINGS))
   await $.session.compact({ trigger: 'manual', messages: OLD } as never)
   expect(io.statuses.at(-1)).toBe(`folded 1 · −${Math.round(savedChars / 1000)}k chars`)
 })
 
 test('status keeps the fold part when the judgment layer updates it', { options: { stopGate: 'shadow' } }, async ($, on) => {
-  const io = setup(on, { env: KEY_ENV, fetch: () => ({ status: 500, ok: false, headers: {}, text: '' }) })
+  const io = setup(on, { transcript: OLD, env: KEY_ENV, fetch: () => ({ status: 500, ok: false, headers: {}, text: '' }) })
   await $.session.compact({ trigger: 'manual', messages: OLD } as never)
   await $.classic.Stop({ stop_hook_active: false, last_assistant_message: 'Fixed it.' } as never)
   await settle(() => records(io.writes, 'stop').length > 0)
@@ -134,7 +134,7 @@ test('status keeps the fold part when the judgment layer updates it', { options:
 })
 
 test('after a fold the model is pointed back at what was folded', async ($, on) => {
-  const io = setup(on)
+  const io = setup(on, { transcript: OLD })
   await $.session.compact({ trigger: 'manual', messages: OLD } as never)
   await settle(() => io.appended.length > 0)
   expect(io.appended[0]).toContain('[context-harness] This conversation was just compacted; 1 tool results were folded')
@@ -204,14 +204,14 @@ test('the session start runs no cleanup without a records folder', async ($, on)
 })
 
 test('folders are made private before the first file is written in them', async ($, on) => {
-  const io = setup(on)
+  const io = setup(on, { transcript: OLD })
   await $.session.compact({ trigger: 'manual', messages: OLD } as never)
   expect(io.disk.slice(0, 3)).toEqual(['run mkdir', 'run chmod', `write ${ARCHIVE}/a.json`])
   expect(io.runs[1]).toEqual(['chmod', '700', ROOT, `${ROOT}/archive`, ARCHIVE])
 })
 
 test('without HOME nothing is written: the engine summarizes instead of folding', async ($, on) => {
-  const io = setup(on, { env: { HOME: '' } })
+  const io = setup(on, { transcript: OLD, env: { HOME: '' } })
   const result = await $.session.compact({ trigger: 'manual', messages: OLD } as never)
   expect(JSON.stringify(result)).toContain('summary')
   expect(io.writes).toEqual([])
@@ -256,7 +256,7 @@ test('read_coordinate judges a folded path by what it leads to as well', EXTERNA
 })
 
 test('a folder that cannot be made private gets nothing written: the engine summarizes', async ($, on) => {
-  const io = setup(on, { failRun: 'chmod' })
+  const io = setup(on, { transcript: OLD, failRun: 'chmod' })
   const result = await $.session.compact({ trigger: 'manual', messages: OLD } as never)
   expect(JSON.stringify(result)).toContain('summary')
   expect(io.writes).toEqual([])
@@ -285,14 +285,14 @@ test('without HOME the session still starts its judgment layer', { options: { st
 
 test('a failure after the fold keeps the fold', { options: { episodeDir: '/proj/sessions' } }, async ($, on) => {
   // The episode folder exists but cannot be listed.
-  const io = setup(on, { files: { '/proj/sessions/2026-10-22.md': 'x' }, failList: '/proj/sessions' })
+  const io = setup(on, { transcript: OLD, files: { '/proj/sessions/2026-10-22.md': 'x' }, failList: '/proj/sessions' })
   const result = await $.session.compact({ trigger: 'manual', messages: OLD } as never)
   expect(JSON.stringify(result)).toContain('[folded Read')
   expect(io.logs.some(line => line.includes('after the compaction'))).toBe(true)
 })
 
 test('an archive that could not be written still leaves the note that follows a compaction', { options: { phaseFile: '/proj/PHASE.md' } }, async ($, on) => {
-  const io = setup(on, { failWrite: '/archive/', files: { '/proj/PHASE.md': 'now' } })
+  const io = setup(on, { transcript: OLD, failWrite: '/archive/', files: { '/proj/PHASE.md': 'now' } })
   await $.session.compact({ trigger: 'manual', messages: OLD } as never)
   await settle(() => io.appended.length > 0)
   expect(io.appended[0]).toContain('[context-harness] This conversation was just compacted.')

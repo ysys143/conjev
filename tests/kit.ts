@@ -25,6 +25,12 @@ export type Setup = {
   stopBelow?: { block?: string }
   /** The transcript $.session.messages() returns. */
   messages?: SessionMessage[]
+  /** Rows the api view holds from the start, as Messages API blocks, beside its prompts; `messages` when absent. */
+  transcript?: SessionMessage[]
+  /** The api view from the start, blocks as given, in place of `transcript`. */
+  api?: ApiMessage[]
+  /** $.session.messages({ as: 'api' }) is refused. */
+  apiFails?: boolean
   /** How full the context window is, in percent, and its size in tokens. */
   percent?: number
   window?: number
@@ -44,7 +50,17 @@ export type Setup = {
   pages?: Record<string, HttpResponse>
 }
 
-type ApiMessage = { role: 'user' | 'assistant'; content: { type: string; text?: string }[] }
+export type ApiMessage = { role: 'user' | 'assistant'; content: { type: string; [field: string]: unknown }[] }
+
+/** A row as the engine holds it in Messages API form: its text, tool uses and tool results. */
+export const apiOf = (message: SessionMessage): ApiMessage => ({
+  role: message.role,
+  content: [
+    ...(message.toolResults ?? []).map(r => ({ type: 'tool_result', tool_use_id: r.tool_use_id, content: [{ type: 'text', text: r.text }] })),
+    ...(message.text === '' ? [] : [{ type: 'text', text: message.text }]),
+    ...message.toolUses.map(use => ({ type: 'tool_use', id: use.tool_use_id, name: use.tool, input: use.input })),
+  ],
+})
 
 export const prompt = (text: string): SessionMessage => ({ role: 'user', text, toolUses: [] })
 
@@ -70,7 +86,7 @@ export const setup = (on: On, s: Setup = {}) => {
   const loaded: { path: string; kind: string; content: string }[][] = []
   const sleeps: number[] = []
   // The messages the next request is built from: what $.session.messages({ as: 'api' }) answers.
-  const api: ApiMessage[] = []
+  const api: ApiMessage[] = s.api ? [...s.api] : (s.transcript ?? s.messages ?? []).map(apiOf)
   let now = 1_700_000_000_000
   const under = (dir: string): string[] => [...Object.keys(files), ...writes.map(w => w.path)].filter(p => p.startsWith(`${dir}/`))
 
@@ -136,7 +152,7 @@ export const setup = (on: On, s: Setup = {}) => {
   on('session.authorize', () => ({ value: s.isAuthorized === false ? null : { handle: 'h', kind: 'bearer' as const } }))
   on('session.id', () => ({ value: 'sess-1' }))
   on('session.cwd', () => (s.cwdFails ? { deny: 'no cwd' } : { value: '/proj' }))
-  on('session.messages', (_, e) => ({ value: (e.as === 'api' ? api : (s.messages ?? [])) as never }))
+  on('session.messages', (_, e) => (e.as === 'api' && s.apiFails ? { deny: 'no api view' } : { value: (e.as === 'api' ? api : (s.messages ?? [])) as never }))
   on('session.usage', () => ({ value: { startedAt: 0, context: { window: s.window ?? 200_000, percent: s.percent ?? 10 }, rateLimits: [] } as never }))
   on('session.append', (_, e, next) => {
     appended.push(JSON.stringify(e.message))
