@@ -1,7 +1,7 @@
 // Around a compaction: the canonical files the model is pointed back at, and
 // the shadow judgment of what was folded.
 import type { EngineInterface, SessionMessage } from 'claude-code'
-import { anchorNote, dueBeforeFold, type AnchorFile, type PolicySettings } from './fold'
+import { anchorNote, dueBeforeFold, type AnchorFile, type MessageView, type PolicySettings } from './fold'
 import { FOLD_POINT, currentRequest, foldCandidates, foldQuestion } from './fold-judge'
 import { probabilityOf } from './jev'
 import { errorOf, judge, keyFor } from './jev-call'
@@ -66,7 +66,7 @@ export async function afterCompaction($: EngineInterface, settings: PolicySettin
  * the compaction. `archived` holds the ids this compaction actually folded:
  * each record's rule verdict is what the fold did, not a guess at it.
  */
-export async function judgeFold($: EngineInterface, messages: readonly SessionMessage[], archived: ReadonlySet<string>): Promise<void> {
+export async function judgeFold($: EngineInterface, messages: readonly SessionMessage[], archived: ReadonlySet<string>, view?: MessageView): Promise<void> {
   const settings = settingsOf()
   const policy = runtime.policy
   const key = await keyFor($)
@@ -75,7 +75,7 @@ export async function judgeFold($: EngineInterface, messages: readonly SessionMe
   if (key === undefined || request === undefined || policy === undefined || home === undefined) return
   const cwd = await $.session.cwd()
   const sessionId = await $.session.id()
-  const candidates = foldCandidates(messages, policy, home, cwd, 48)
+  const candidates = foldCandidates(messages, policy, home, cwd, 48, view)
   const sent = { current_request: clip(scrub(request, home), 400) }
   for (let start = 0; start < candidates.length; start += 24) {
     const batch = candidates.slice(start, start + 24)

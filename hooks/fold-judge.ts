@@ -68,8 +68,8 @@ export function describeCall(use: Pick<ToolUseSummary, 'tool' | 'input'> | undef
  * most `limit`, largest first. Built from the fold's own list, so the rule's
  * verdict here is the fold's.
  */
-export function foldCandidates(messages: readonly SessionMessage[], settings: PolicySettings, home: string, cwd: string, limit: number): FoldCandidate[] {
-  return foldableResults(messages, makePolicy(settings))
+export function foldCandidates(messages: readonly SessionMessage[], settings: PolicySettings, home: string, cwd: string, limit: number, view?: MessageView): FoldCandidate[] {
+  return foldableResults(messages, makePolicy(settings), view)
     .filter(result => result.text.length >= settings.minFoldChars)
     .map(result => ({
       id: result.id,

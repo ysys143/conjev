@@ -274,6 +274,9 @@ export const register: Register = (on, options) => {
     if (e.agentId !== undefined || e.trigger === 'precompute') return next(e)
 
     const sessionId = await $.session.id()
+    // Nothing in the types promises the api view here; without it no message
+    // can be shown free of media, so nothing folds and the engine summarizes.
+    const view = await $.session.messages({ as: 'api' }).then(messageViewOf, () => new Map() as MessageView)
     // What follows a compaction that stands. A failure here leaves the
     // compaction as it is: the hook's .catch would otherwise summarize the
     // unfolded transcript.
@@ -284,12 +287,9 @@ export const register: Register = (on, options) => {
       } catch (error) {
         $.ui.log(`${$.plugin.name}: after the compaction (${String(error)})`)
       }
-      if (settings.foldJev !== 'off') void judgeFold($, e.messages, new Set(archivedIds)).catch(() => undefined)
+      if (settings.foldJev !== 'off') void judgeFold($, e.messages, new Set(archivedIds), view).catch(() => undefined)
     }
 
-    // Nothing in the types promises the api view here; without it no message
-    // can be shown free of media, so nothing folds and the engine summarizes.
-    const view = await $.session.messages({ as: 'api' }).then(messageViewOf, () => new Map() as MessageView)
     const outcome = foldTranscript(e.messages, policy, view)
     if (outcome.archived.length === 0) {
       const summarized = await next(e)
@@ -650,11 +650,14 @@ export const register: Register = (on, options) => {
   on('tool.call', { tool: 'mcp__context-harness__policy_report' }, async ($, e) => {
     const input = e as unknown as Record<string, unknown>
     const messages = await $.session.messages()
+    // The dry run must fold what a real compaction would, so it reads the same
+    // api view: without it a message holding media looks foldable here.
+    const view = await $.session.messages({ as: 'api' }).then(messageViewOf, () => new Map() as MessageView)
     const hasCandidate = SETTING_KEYS.some(key => input[key] !== undefined)
     const candidate = settingsFrom(input, policySettings)
     const report = {
-      current: { settings: policySettings, ...reportFor(messages, policySettings) },
-      ...(hasCandidate ? { candidate: { settings: candidate, folds: reportFor(messages, candidate).folds } } : {}),
+      current: { settings: policySettings, ...reportFor(messages, policySettings, view) },
+      ...(hasCandidate ? { candidate: { settings: candidate, folds: reportFor(messages, candidate, view).folds } } : {}),
       anchors: await anchorsOf($, policySettings),
       defaults: DEFAULT_SETTINGS,
     }

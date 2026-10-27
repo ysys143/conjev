@@ -279,7 +279,8 @@ export type FoldableResult = FoldCandidate & {
 /**
  * Every tool result in the user messages that is not folded yet, with the
  * fold's decision. The fold and its judgment both read this, so they agree on
- * what was eligible and what was folded.
+ * what was eligible and what was folded — as long as both are handed the same
+ * view. Without one, a message holding media reads as foldable here.
  */
 export function foldableResults(messages: readonly SessionMessage[], policy: FoldPolicy, view?: MessageView): FoldableResult[] {
   const uses = toolUses(messages)
@@ -380,7 +381,7 @@ export type PolicyReport = {
 
 const percent = (part: number, whole: number): number => (whole === 0 ? 0 : Math.round((part / whole) * 1000) / 10)
 
-export function reportFor(messages: readonly SessionMessage[], settings: PolicySettings): PolicyReport {
+export function reportFor(messages: readonly SessionMessage[], settings: PolicySettings, view?: MessageView): PolicyReport {
   const uses = toolUses(messages)
   const turnsAgoAt = turnsAgoOf(messages)
   const rows: { tool: string; chars: number; turnsAgo: number }[] = []
@@ -398,7 +399,7 @@ export function reportFor(messages: readonly SessionMessage[], settings: PolicyS
   }
 
   const whole = transcriptChars(messages)
-  const outcome = foldTranscript(messages, makePolicy(settings))
+  const outcome = foldTranscript(messages, makePolicy(settings), view)
 
   return {
     results: rows.length,

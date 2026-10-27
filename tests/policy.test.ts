@@ -1,6 +1,7 @@
 import type { SessionMessage } from 'claude-code'
 import { expect, test } from 'claude-code/testing'
 import { DEFAULT_SETTINGS, makePolicy, reportFor, settingsFrom, type FoldCandidate } from '../hooks/fold'
+import { apiOf } from './kit'
 
 const BIG = 'x'.repeat(5000)
 const SMALL = 'y'.repeat(600)
@@ -63,7 +64,9 @@ test('the report measures tools, sizes and recent turns, and what the policy wou
 })
 
 test('policy_report reports the current policy and a dry-run candidate', async ($, on) => {
-  on('session.messages', () => ({ value: TRANSCRIPT }))
+  // The report reads the api view too, to see which messages hold media; here
+  // it is the rows in Messages API form, holding none.
+  on('session.messages', (_, e) => ({ value: (e.as === 'api' ? TRANSCRIPT.map(apiOf) : TRANSCRIPT) as never }))
   on('fs.exists', () => ({ value: false }))
 
   const plain = await $.tool.call({ tool: 'mcp__context-harness__policy_report' })
@@ -77,8 +80,31 @@ test('policy_report reports the current policy and a dry-run candidate', async (
   expect(both.candidate.settings.keepRecentTurns).toBe(1)
 })
 
+test('the dry run folds what a real compaction would: a message holding media is left out', async ($, on) => {
+  // The same transcript, with a screenshot result in the message the Bash
+  // result sits in. The report must not count that message's results.
+  const withShot: SessionMessage[] = TRANSCRIPT.map(message =>
+    message.toolResults?.some(r => r.tool_use_id === 'c')
+      ? { ...message, toolResults: [...message.toolResults, { tool_use_id: 'c2', text: BIG, isError: false }] }
+      : message,
+  )
+  const shotApi = withShot.map((message, i) =>
+    i === 7
+      ? { role: 'user' as const, content: [{ type: 'tool_result', tool_use_id: 'c', content: [{ type: 'text', text: BIG }] }, { type: 'tool_result', tool_use_id: 'c2', content: [{ type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'iVBORw0KGgo=' } }] }] }
+      : apiOf(message),
+  )
+  on('session.messages', (_, e) => ({ value: (e.as === 'api' ? shotApi : withShot) as never }))
+  on('fs.exists', () => ({ value: false }))
+
+  const plain = await $.tool.call({ tool: 'mcp__context-harness__policy_report', keepRecentTurns: 1, minFoldChars: 500 })
+  const report = JSON.parse(String(plain.result)) as { candidate: { folds: { results: number } } }
+  // Both results in that message are held back, so the count is the Read and
+  // the Grep only: without the view it would also count the Bash result.
+  expect(report.candidate.folds.results).toBe(2)
+})
+
 test('the plugin reads its policy from its options', { options: { keepRecentTurns: 1, minFoldChars: 500 } }, async ($, on) => {
-  on('session.messages', () => ({ value: TRANSCRIPT }))
+  on('session.messages', (_, e) => ({ value: (e.as === 'api' ? TRANSCRIPT.map(apiOf) : TRANSCRIPT) as never }))
   on('fs.exists', () => ({ value: false }))
 
   const plain = await $.tool.call({ tool: 'mcp__context-harness__policy_report' })
