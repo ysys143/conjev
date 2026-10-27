@@ -1,0 +1,397 @@
+# context-harness
+
+[English](README.md) · 한국어
+
+**요약하지 말고 접는다: 긴 Claude Code 세션에서도 모든 도구 결과를 호출 한 번으로 다시 읽을 수 있다.**
+
+Claude Code 대화가 압축되면 엔진은 대화를 요약으로 바꾸고, 그동안 읽은 파일과 실행한 명령의 정확한 출력도 함께 사라진다. 그래서 모델은 파일을 다시 읽거나 바꿔 쓴 요약에 기대어 작업하게 된다. context-harness는 요약하는 대신 접는다. 크고 오래된 도구 결과는 한 줄짜리 포인터로 바뀌고, 원본은 디스크에 보관되며, 모델은 `read_coordinate`로 원본을 다시 읽는다. 사용자 메시지, 도구 호출, 가장 최근의 결과는 그대로 남는다. 측정한 세션에서는 압축 한 번으로 컨텍스트가 137,469 토큰에서 36,995 토큰으로 줄었고 30 ms가 걸렸다(context-fold 0.0.2 기준이며, 이 플러그인은 그 접기 기능을 그대로 이어받았다. [측정 결과](#측정-결과) 참고).
+
+이 플러그인은 Claude Code의 mod API(function hooks)로 작성한 Claude Code 플러그인이다. 접기 기능은 별도 설정이나 키 없이 동작한다. **선택 기능인 [판단 계층](#판단-계층-선택)은 TypeSafe의 판단 모델 Jev를 쓰는 게이트를 추가한다. 모든 게이트는 기본값이 꺼짐이며, 꺼져 있는 동안에는 어떤 데이터도 사용자의 컴퓨터 밖으로 나가지 않는다.**
+
+[설치](#설치) · [명령](#명령) · [접기의 동작 방식](#접기의-동작-방식) · [비교](#비교) · [프로젝트 상태](#프로젝트-상태와-메모리) · [지시 파일](#지시-파일) · [판단 계층](#판단-계층-선택) · [데이터와 개인정보](#데이터와-개인정보) · [측정 결과](#측정-결과) · [한계](#한계)
+
+![압축 전에는 두 프롬프트 전에 나온 큰 도구 결과 두 개가 transcript를 채우고 있다. 접은 뒤에도 메시지는 그대로 남고 두 결과만 한 줄 포인터로 바뀐다. 원본은 디스크 아카이브에 있고 read_coordinate가 이를 돌려주며, 노트가 모델에게 INTENT.md와 PHASE.md를 다시 읽으라고 안내한다.](docs/fold.svg)
+
+모델이 실제로 보는 포인터의 예시는 다음과 같다. id는 `read_coordinate`에 넘기는 값이다.
+
+```text
+[folded Read · src/billing/invoice.ts · 1201 lines — read_coordinate("toolu_01J7igoRSuY8xw8F8skCSEY3")]
+```
+
+## 설치
+
+Claude Code 2.1.306 이상이 필요하다. 이 플러그인이 쓰는 mod API는 early access로 표시되어 있어 릴리스 사이에 바뀔 수 있다. Claude Code 터미널 세션의 프롬프트에서 다음을 실행한다.
+
+```text
+/plugin install context-harness --marketplace ysys143/context-harness
+```
+
+marketplace를 추가할지 물으면 `y`로 답하고 scope를 고른다. 설치 화면에 설정이 지정되지 않았다고 나올 수 있는데, `/config`에서 바꾸기 전까지는 [아래](#접기의-동작-방식)의 기본값이 적용된다.
+
+<details>
+<summary>셸이나 데스크톱 앱에서 설치하기</summary>
+
+- 셸: `claude plugin install context-harness --marketplace ysys143/context-harness`
+- `/plugin`이 동작하지 않는 데스크톱 앱: 프롬프트 입력창 옆의 + → Plugins → Add marketplace에 `ysys143/context-harness`를 입력한 뒤 Add plugin을 누른다.
+
+</details>
+
+context-fold나 jev-harness를 쓰고 있었다면 먼저 제거한 뒤 [업그레이드](#업그레이드)를 참고한다.
+
+**동작 확인.** 모델에게 수백 줄짜리 파일을 읽게 하고, 그 결과가 최근 결과에서 벗어나도록 프롬프트를 두 번 더 보낸 뒤 `/compact`를 실행한다. 상태 줄에 `folded 1 · −Nk chars`가 표시된다. 그 파일을 다시 열지 말고 특정 줄을 물어보면 모델이 `read_coordinate`로 원본을 가져온다.
+
+## 명령
+
+| 명령 또는 도구 | 하는 일 |
+| --- | --- |
+| `/compact` | 지금 압축한다. 플러그인은 이 압축에 접기로 응답한다 |
+| `read_coordinate` | 모델이 쓰는 도구(`mcp__context-harness__read_coordinate`). 접힌 원본 전체나 지정한 줄 범위를 돌려준다 |
+| `/context-harness:tune-policy` | 사용자의 세션을 측정하고 사용자와 함께 접기 설정을 정한다 |
+| `/context-harness:project-state` | `INTENT.md`와 `PHASE.md`를 관리한다 |
+| `/context-harness:consolidate` | 한동안 진행한 작업을 오래 남는 메모리로 정리한다 |
+| `/jev-report` | [판단 계층](#판단-계층-선택)이 기록한 내용을 보여 준다 |
+| `/jev-mark <id> y\|n` | 판단 기록 하나에 예 또는 아니요 라벨을 붙인다 |
+| `/config` | context-harness 항목 아래의 모든 설정 |
+| `/plugin configure context-harness@context-harness` | Jev 키를 보안 저장소에 보관한다 |
+
+## 접기의 동작 방식
+
+도구 결과는 완료되었고 클 때 접힌다. 구체적으로는 최근 `keepRecentTurns`턴보다 오래되었고, 길이가 `minFoldChars` 이상이며, `keepErrorsUnder`보다 짧은 오류가 아니고, `keepTools`에 속한 도구의 결과가 아니어야 한다. 포인터가 원본보다 길어지는 결과는 접지 않는다.
+
+1. **압축 시점**(`/compact`, 엔진의 자동 압축, 또는 3단계)에 플러그인이 엔진의 요약보다 먼저 응답한다. 조건을 충족한 결과는 아카이브에 기록된 뒤 포인터로 바뀌고, 나머지 메시지는 손대지 않고 그대로 돌려준다.
+2. **접기만으로 부족하면** 엔진의 요약이 원래대로 실행된다. 접을 결과가 없거나 아카이브에 쓸 수 없으면([데이터와 개인정보](#데이터와-개인정보)) 전체 transcript를 요약하고, 접은 뒤에도 창의 60% 이상을 차지하면 접힌 transcript를 요약한다(60%는 고정 비율이며 `foldAtPercent`와는 무관하다. 또한 실제 토큰 수가 아니라 transcript의 문자 수로 추정한 값을 기준으로 한다).
+3. **대기 상태에 들어가는 시점**, 즉 창이 `foldAtPercent` 이상 찬 상태로 턴이 끝나면 플러그인이 직접 `/compact`를 실행한다. 다만 압축할 때마다 prompt cache를 한 번 다시 만들어야 하므로, 접기로 transcript가 `minSavedPercent` 이상 줄어들 때만 실행한다. 프로젝트에 `PHASE.md`나 에피소드 로그가 있고([프로젝트 상태](#프로젝트-상태와-메모리)) 지난 압축 이후 갱신되지 않았다면, 먼저 에이전트에게 갱신을 요청하고 그 턴에서는 접지 않는다. 다음 턴이 끝날 때 다시 판단하며, 요청을 두 번 한 뒤에는 묻지 않고 접는다.
+4. **압축이 끝난 뒤**, 접은 결과가 있었거나 프로젝트가 위의 파일을 관리하고 있으면 노트를 덧붙인다. 노트에는 접은 결과의 개수와 다시 읽어야 할 프로젝트 파일이 적힌다.
+5. **`read_coordinate`** 는 포인터에 있는 id로 원본을 돌려준다. `offset`과 `limit`을 지정하지 않으면 한 번에 400줄씩 돌려준다.
+
+| 설정 | 기본값 | 이유 |
+| --- | --- | --- |
+| `keepRecentTurns` | 2 | 진행 중인 작업은 여전히 가장 최근 턴을 읽는다 |
+| `minFoldChars` | 1000 | 측정한 세션에서 결과의 44%가 전체 도구 출력의 90%를 차지했다 |
+| `keepErrorsUnder` | 2000 | 짧은 오류가 남아 있어야 모델이 같은 실수를 반복하지 않는다 |
+| `keepTools` | `TodoWrite,AskUserQuestion,ExitPlanMode` | 작고, 현재 결정 사항을 담고 있다 |
+| `foldAtPercent` | 60 | 턴이 끝난 뒤 스스로 접기를 시작하는 시점이다. 0이면 끈다 |
+| `minSavedPercent` | 20 | 이 비율 이상 줄어들 때만 스스로 접는다 |
+| `intentFile` | `INTENT.md` | 사용자가 원하는 것을 에이전트가 이해한 내용이다. 비우면 끈다 |
+| `phaseFile` | `PHASE.md` | 상태판이다. 비우면 끈다 |
+| `episodeDir` | `sessions` | 에피소드 로그 폴더다. 비우면 끈다 |
+
+`/context-harness:tune-policy`는 접기 코드 자체(`policy_report`)로 사용자의 세션을 측정하고, 사용자에게 몇 가지를 물은 뒤, 고른 값을 현재 값과 나란히 dry-run해 보여 준다. 사용자가 동의한 뒤에만 값을 적용한다(`set_policy`는 위의 아홉 가지 설정만 쓰고 그 밖의 설정은 건드리지 않는다).
+
+## 비교
+
+- **Claude Code 자체의 압축**은 대화를 요약으로 바꾼다. context-harness는 같은 압축에 먼저 응답해 접는다. 요약은 접을 것이 없거나 접은 transcript가 여전히 창의 60% 이상을 차지할 때만 실행되며, 그때도 접힌 transcript를 대상으로 한다.
+- **메모리 플러그인**은 세션을 넘어 배운 내용을 자체 저장소에 보관한다. context-harness는 세션 안에서 동작한다. 정확한 도구 출력은 호출 한 번이면 다시 읽을 수 있고, 오래 남겨야 할 내용은 에이전트가 프로젝트 자체의 파일(`INTENT.md`, `PHASE.md`, `sessions/`)에 기록한다.
+
+## 프로젝트 상태와 메모리
+
+압축 요약은 결코 정본이 아니며, 정본은 프로젝트가 관리하는 파일이다. 플러그인은 세 가지 파일을 각각 존재할 때만 사용하고, 직접 쓰지는 않는다. 파일은 에이전트가 쓰고, 플러그인은 확인하고 가리키기만 한다.
+
+| 파일 | 담는 내용 | 작성 시점 |
+| --- | --- | --- |
+| `INTENT.md` | 사용자가 원하는 것을 에이전트가 이해한 내용: 목표, 완료 조건, 범위, 제약, 열린 질문. 각 줄은 사용자 자신의 말을 인용한다 | 사용자가 목표를 말하거나 바꿀 때 |
+| `PHASE.md` | 사용자가 읽는 상태판: 지금 할 일, 다음 할 일, 사용자가 필요한 일, 근거와 함께 완료된 일, 재개 메모. 에이전트가 여럿이면 누가 무엇을 맡았는지 | 단계가 끝나거나 막혔을 때, 사용자가 결정했을 때, 핸드오프 전, 플러그인이 요청할 때 |
+| `sessions/<date>-<slug>.md` | 에피소드: 무슨 일이 언제 있었는지와 그 근거(경로, 커밋, 접힌 결과의 `read_coordinate` id) | 작업 단위마다, 추가만 한다 |
+
+- `/context-harness:project-state`는 `INTENT.md`와 `PHASE.md`를 관리한다. 혼자 작업할 때와 여러 에이전트 세션이 함께 작업할 때 모두 쓸 수 있으며, 상태판 하나를 일관되게 유지하는 규칙을 담고 있다.
+- `/context-harness:consolidate`는 한동안 진행한 작업을 오래 남는 메모리로 정리한다. 상태판과 에피소드를 갱신하고, 반복되는 절차는 프로젝트 스킬로 만들며, 오래 유지할 원칙은 사용자가 동의하면 `AGENTS.md`에 넣는다. 반복되는 결정론적 절차는 코드로 만들도록 제안한다. [just-dag-it](https://github.com/ysys143/just-dag-it)을 참고한다.
+
+## 지시 파일
+
+Claude Code는 대화를 시작할 때와 압축할 때마다 지시 파일을 통째로 불러온다. 대상은 사용 중인 프로필의 사용자 `CLAUDE.md`, 프로젝트의 `CLAUDE.md`와 `AGENTS.md`, 이 파일들이 `@`로 가져오는 모든 파일, 그리고 작업 폴더의 모든 상위 폴더에 있는 `.claude/CLAUDE.md`다. 마지막 규칙 때문에 홈 폴더 안에서 실행한 세션은 `~/.claude/CLAUDE.md`를 프로젝트 파일로도 불러온다. 다른 프로필의 `CLAUDE.md`(예: `~/.claude-3/CLAUDE.md`)가 그 파일의 사본이라면 같은 내용이 두 번 로드된다.
+
+**이 문제는 플러그인 없이 해결할 수 있다.** 자체 사본을 두는 `~/.claude` 이외의 각 프로필에서 공유 파일을 제외한다.
+
+```json
+{ "claudeMdExcludes": ["/Users/you/.claude/CLAUDE.md"] }
+```
+
+이 설정을 `~/.claude/settings.json` 자체에는 절대 넣지 않는다. 그 프로필에서는 같은 파일이 프로필 자신의 사용자 파일이므로, 넣으면 프로필이 그 파일을 잃는다. 작성자의 환경에서는 이 설정으로 첫 요청이 69,152 토큰에서 66,655 토큰으로 줄었다(5.9k자 분량의 OMC 블록이 두 번이 아니라 한 번만 로드되었다).
+
+**`instructionFilter`**(`off`, `shadow`, `active`, 기본값 `off`)는 그러고도 남는 중복을 처리한다. 이 설정은 엔진의 `prompt.context` 훅을 쓰는데, 이 훅은 지시 파일이 전송되기 직전에 그 내용을 플러그인에 넘긴다. 플러그인은 지시 파일을 제목과 태그 블록 단위의 chunk로 나누되 코드 펜스는 쪼개지 않고, 그다음 아래와 같이 처리한다.
+
+- **바이트 단위로 똑같이 두 번 로드된 chunk**(공백 차이는 무시): `active`에서는 뒤쪽 사본을 빼고 그 자리에 한 줄짜리 노트(`[context-harness: left out "…", loaded from …]`)를 넣어 모델이 이를 알 수 있게 한다. 버전이 다른 OMC 블록이 두 개 있으면 오래된 쪽을 뺀다. 조직(`managed`) 파일과 auto-memory 색인은 절대 바꾸지 않는다.
+- **나머지에 대한 Jev의 판단은 두 모드 모두에서 기록만 한다.** 요청이 전송된 뒤에 Jev에게 각 chunk가 거의 모든 요청에 필요한지 묻고, 사용자 수준의 각 chunk에 대해서는 앞선 chunk들이 이미 그 내용을 모두 말하고 있는지 묻는다. `/jev-report`는 그 판단에 따라 빼거나 미룰 chunk와 이유를 나열한다. 다음 규칙은 절대 빼거나 미루지 않는다: 정체성, 언어, 자율 실행과 승인, 질문에 먼저 답하기, 셸, git, API 키, 브라우저, 의도적 반복이라는 제목이 붙은 모든 내용, 그리고 OMC 블록. Orca 절은 Jev가 아니라 실행 환경이 결정한다.
+- **누락 위험(would-miss):** 슬래시 명령을 포함한 모든 프롬프트에 대해, 미뤄 둘 chunk가 그 프롬프트에 해당하는지 Jev에게 묻는다. 그런 chunk와 관련된 종류의 도구 사용(브라우저, 웹 조회, `orca`, `claude -p`)도 기록하며, `/jev-report`는 해당 chunk가 아직 첨부되지 않은 상태로 그런 작업이 시작된 횟수를 센다.
+
+Jev의 판단은 기록이 뒷받침할 때만 적용한다. 그 조건은 covered 라벨이 붙은 chunk가 20개 이상이고, partly 또는 new 라벨이 붙은 chunk가 60개 이상이며, 임계값에서의 precision이 0.95 이상이고, 실제 세션 30개 이상에서 누락 위험 비율이 5% 미만인 것이다. 그 전까지 이 판단은 백그라운드에서 수백 밀리초를 쓸 뿐 요청 경로에는 비용을 더하지 않는다. `prompt.context` 자체는 약 30 ms가 걸린다.
+
+## 판단 계층 (선택)
+
+![Claude Code의 네 가지 이벤트와 각 이벤트를 판단하는 게이트, 그리고 Jev로 보내는 내용: 프롬프트 시점의 지시, 도구 호출마다의 도구 게이트, 턴이 끝날 때의 Stop 게이트, 압축 시점의 접기 관련성.](docs/turn.svg)
+
+각 게이트는 따로따로 다음 세 모드 가운데 하나로 설정한다.
+
+- **`off`**(기본값): 게이트가 아무것도 하지 않고 아무것도 보내지 않는다.
+- **`shadow`**: 게이트가 판단하고(Jev, 또는 도구 게이트 floor의 경우 규칙) 그 판단을 기록만 한다. 아무것도 바뀌지 않는다. 여기서 시작한다.
+- **`active`**: 판단이 실제로 작동한다. 모델을 다시 작업으로 돌려보내거나, 호출을 거부하거나, fragment를 첨부한다. Jev의 판단이 작동하는 동안에는 Jev가 답할 때까지 턴, 호출 또는 프롬프트가 멈춰 있다. 보통 0.2~0.35초, 최대 2초(`timeoutMs`)가 걸린다.
+
+| 게이트 | 설정 | 하는 일 | 컴퓨터 밖으로 나가는 것 |
+| --- | --- | --- | --- |
+| Stop 게이트 | `stopGate` | 사용자의 Stop 훅이 모두 실행된 뒤, 턴이 아직 하지 않은 일을 예고하며 끝나면("이어서 리팩터링하겠습니다", "Next, I will…") 모델을 다시 작업으로 돌려보낸다 | 민감 정보를 제거한 턴의 마지막 문단 |
+| 도구 게이트 floor | `toolGate` | 다른 공급자가 세션을 제공할 때(예: Bedrock, Vertex, 프록시, Anthropic이 아닌 base URL. *도구 게이트 상세* 참고) 비밀 파일을 건드리거나 비밀을 출력하는 호출을 거부하며, `read_coordinate`도 대상이다. 모든 세션에서 이 플러그인의 파일, 아카이브, Claude 설정 파일에 대한 쓰기를 거부한다 | 없음 |
+| 도구 게이트 Jev | `toolJev` | 다른 공급자가 세션을 제공할 때, floor가 통과시킨 각 호출을 경로나 명령에 따라 open, standard, restricted, custom으로 분류하고 restricted와 custom을 거부한다 | 도구 이름과 민감 정보를 제거한 대상 |
+| 조건부 지시 | `instructions` | 조건을 처음 충족한 프롬프트에 지시 fragment를 첨부한다 | 민감 정보를 제거한 프롬프트의 앞 600자, fragment들의 조건(본문은 보내지 않음) |
+| 지시 필터 | `instructionFilter` | 두 번 로드된 지시 chunk를 빼고(`active`), 나머지에 대한 Jev의 판단을 기록한다([지시 파일](#지시-파일)) | 키가 있으면: 지시 파일이 바뀔 때 민감 정보를 제거한 지시 파일 텍스트, Jev가 미룰 chunk가 있으면 민감 정보를 제거한 각 프롬프트의 앞 600자 |
+| 접기 관련성 | `foldJev` (shadow 전용) | 앞서 나온 가장 큰 결과들 가운데 사용자의 요청에 아직 필요한 것을 접기 결과와 나란히 기록한다 | 민감 정보를 제거한 마지막 프롬프트의 앞 400자, 각 결과의 도구와 대상: 경로, 명령의 앞부분, 또는 호출에 쓴 검색 패턴·URL·설명(출력은 보내지 않음) |
+
+민감 정보 제거(scrubbing)는 비밀처럼 생긴 문자열, `NAME=value` 형태의 비밀, 이메일 주소, 사용자의 홈 폴더 경로를 지운다.
+
+### 켜는 방법
+
+1. [TypeSafe 콘솔](https://console.typesafe.ai/home)에서 키를 발급받는다.
+2. `/plugin configure context-harness@context-harness`로 플러그인에 키를 넘긴다(보안 저장소에 보관된다). 플러그인 폴더에 있는 `.env`의 `TYPESAFE_API_KEY=` 줄이나 `TYPESAFE_API_KEY` 환경 변수에서도 이 순서로 읽는다.
+3. 원하는 게이트를 `/config`의 context-harness 항목이나 `settings.json`에서 `shadow`로 설정한다.
+
+   ```json
+   {
+     "pluginConfigs": {
+       "context-harness@context-harness": {
+         "options": {
+           "stopGate": "shadow",
+           "toolGate": "shadow",
+           "toolJev": "shadow",
+           "instructions": "shadow",
+           "foldJev": "shadow"
+         }
+       }
+     }
+   }
+   ```
+
+4. `/jev-report`를 읽고 `/jev-mark`로 기록에 라벨을 붙인 뒤, 충분한 근거가 쌓인 게이트를 `active`로 바꾼다([기록과 라벨](#기록과-라벨) 참고).
+
+키가 없으면 상태 줄에는 `jev: no key`만 표시되고 아무것도 전송되지 않는다. 도구 게이트 floor는 키가 필요 없다. 그 밖의 경우 판단 계층의 상태 줄은 어떤 게이트가 무언가를 기록하기 전까지 비어 있다. Claude Code는 모든 플러그인 상태 줄에 경고 표시를 붙여 그리고 플러그인은 이를 바꿀 수 없기 때문에, 게이트가 켜져 있다는 말만 있는 상태 줄은 오류처럼 보이기 때문이다. `toolGate: active`에서는 에이전트가 플러그인의 `.env`나 Claude 설정 파일에 쓸 수 없으므로, 이 파일들은 사용자가 직접 설정한다.
+
+<details>
+<summary>Stop 게이트 상세</summary>
+
+1. 사용자 설정의 Stop 훅이 먼저 실행된다. 그중 하나가 막으면 그 결과를 따른다.
+2. 다음은 판단하지 않는다: 재진입, plan 모드, 백그라운드 또는 예약 작업, 서브에이전트, 마지막 문장이 질문인 경우, 조건이 붙은 문장("알려주시면 처리하겠습니다", "once the checks pass…").
+3. 규칙이 예고로 끝나는 문장을 찾고, Jev에게 `announce`와 `report` 가운데 하나를 고르는 양자택일 질문을 한다.
+4. `shadow`에서는 턴이 즉시 끝나고 판단은 나중에 기록된다. `active`에서는 `stopThreshold`(0.7) 이상으로 `announce`가 나오면 모델을 다시 작업으로 돌려보낸다. 모델은 지금 그 일을 하거나, 사용자에게 무엇이 필요한지 분명히 말해야 한다.
+
+</details>
+
+<details>
+<summary>도구 게이트 상세</summary>
+
+- **공급자 신뢰.** 모든 신호가 일치할 때만 first-party로 본다: Anthropic 자격 증명이 있고, `HTTPS_PROXY`/`HTTP_PROXY`가 없고, `NODE_EXTRA_CA_CERTS`가 없고, Bedrock/Vertex/Foundry가 아니며, `ANTHROPIC_BASE_URL`이 비어 있거나 `https://*.anthropic.com`이어야 한다. 로컬 프록시는 `trustedProxies`에 등록되지 않았다면 외부로 본다. `providerTrust: external`은 외부로 강제하며, first-party로 강제하는 설정은 없다.
+- **비밀 파일.** `.env`와 `.env.*`(`.example`, `.sample`, `.template` 제외), `*.env`, `~/.ssh`(`*.pub` 제외), `~/.aws`, `~/.gnupg`, gcloud, `~/.kube/config`, `~/.docker/config.json`, `~/.config/gh/hosts.yml`, Codex와 Claude의 자격 증명 파일, `.netrc`, `.npmrc`, `.pypirc`, `.pgpass`, `.git-credentials`, `*.pem`, `*.p12`, `*.pfx`, `*.kdbx`, `id_rsa`와 그 계열. `~`, `$HOME`, `..`, 심볼릭 링크를 따라가 실제 경로로 판정한다.
+- **셸.** Bash 명령의 모든 인자를 검사하며, git pathspec, `--opt=path`, 리다이렉트도 포함한다. `env`, `printenv`, `export -p`, `security … -w`, `gh auth token`도 대상이다.
+- **접힌 원본.** 외부 세션에서 게이트가 켜져 있으면, `read_coordinate`는 접힌 결과를 만든 원래 호출을 그 호출이 받았을 판정과 똑같이 판정한다. 아직 존재하는 경로라면 그 경로가 가리키는 대상까지 따라간다. 아카이브 폴더를 직접 읽는 것도 같은 방식으로 거부한다. 따라서 앞서 접힌 비밀 파일은 어느 쪽으로도 다시 나오지 않는다.
+- `active`에서 가드가 고장 나면 호출을 거부한다. `toolJev`는 대상과 세션마다 한 번만 묻고, floor가 지정한 경로에 대해서는 묻지 않는다.
+
+</details>
+
+<details>
+<summary>조건부 지시 상세</summary>
+
+Claude Code는 이미 경로에 따라 지시를 불러온다(`paths:`가 있는 `.claude/rules/*.md`, 하위 폴더의 CLAUDE.md). fragment는 사용자가 무엇을 요청하는지처럼 경로로는 알 수 없는 조건을 위한 것이다. fragment는 `fragmentsDir`(기본값 `~/.agents/fragments`)에 두는 Markdown 파일이며, 최대 24개, 각각 최대 4 KB까지 둘 수 있다.
+
+```markdown
+---
+when: The person asks for prose meant for human readers, such as a report, an email or documentation.
+keywords: report, email, 보고서
+---
+Lead with the conclusion. One idea per paragraph. Cut filler.
+```
+
+- **한 번 첨부하면 유지된다.** fragment는 조건을 처음 충족한 프롬프트에 덧붙고 대화 안에 계속 남으므로 캐시된 prefix가 유지된다. 플러그인은 각 프롬프트 전에 다음 요청에 여전히 실려 있는 fragment와, 실행 중인 턴 뒤에 대기 중인 프롬프트에 첨부된 fragment를 센다. 접기만 한 압축은 fragment를 유지하고, 엔진이 요약한 압축은 fragment를 버린다. 버려진 fragment만 다시 첨부될 수 있다.
+- **키워드가 맞으면 Jev 없이 결정한다.** 그렇지 않으면 요청 한 번으로 아직 첨부되지 않은 모든 fragment를 묻고, `instructionThreshold`(0.95) 이상이면 첨부한다. `pin: true`를 쓰면 fragment가 system prompt 끝의 고정된 절 하나에 들어간다.
+- 사용자가 직접 쓴 프롬프트만 판단한다. 조건은 좁게 쓴다. 범위가 넓은 산문 조건은 "이 파일이 무엇을 보여 주는지 한 문장으로 말해 줘" 같은 질문에서도 0.92~0.96이 나왔다.
+- `examples/fragments/`에 복사해서 쓸 수 있는 범용 fragment 세 개가 있다.
+
+</details>
+
+<details>
+<summary>접기 관련성 상세</summary>
+
+압축 시점에는 어차피 prompt cache를 다시 만들기 때문에, 무엇을 남길지 판단해도 캐시 비용이 더 들지 않는다. 접기 대상이 될 수 있는 가장 큰 결과(최소 `minFoldChars`) 최대 48개에 대해, 사용자의 현재 요청에 그 결과가 아직 필요한지 Jev에게 묻는다. 이때 결과는 도구, 대상, 크기로만 보여 준다. 각 기록에는 접기가 그 결과를 어떻게 처리했는지와, 그 결과가 더는 필요 없다는 Jev의 확률이 담긴다. 아직은 이 판단이 압축을 바꾸지 않는다.
+
+</details>
+
+### 기록과 라벨
+
+- `/jev-report`: 게이트별로 기록, 이유별 건너뜀, 커버리지, 종류별 실패, 지연 시간, 토큰, Cohen's kappa를 포함한 규칙 대 Jev 비교표, 라벨이 없는 불일치, 그리고 라벨이 붙은 뒤에는 여러 임계값에서의 precision과 recall을 보여 준다.
+- `/jev-mark <id> y|n`: 기록에 직접 라벨을 붙인다.
+
+Stop 게이트를 `active`로 바꾸기 전에 양성 라벨 50개 이상과 음성 라벨 100개 이상을 모으고, 그 라벨에서 precision이 0.9 이상인 임계값을 찾는 것을 목표로 한다. 규칙과 일치한다는 것만으로는 근거가 되지 않는다. 규칙은 턴 종료의 약 5%만 표시하므로, 항상 "아니요"라고 답하는 게이트도 약 95%는 일치하기 때문이다.
+
+`scripts/replay.ts`(`bun`으로 실행)는 과거 transcript(`$CLAUDE_CONFIG_DIR/projects` 또는 `~/.claude/projects`)를 오프라인에서 Stop 규칙에 다시 통과시킨다. `--jev N`을 주면 민감 정보를 제거한 문단을 최대 N개까지 Jev에 보낸다.
+
+### Jev 비용
+
+모든 게이트를 켜도 세션 하나에 드는 비용은 최대 약 $0.03이며, 작성자가 Claude Max 20x 요금제로 최근 30일 동안 쓴 양이라면 $0.28~1.00이 들었을 것이다. 더 큰 비용은 시간이다. `active`에서는 판단 대상인 턴 종료, 외부 세션에서 각 대상에 대한 첫 호출, 첨부되지 않은 fragment가 있고 키워드가 맞지 않는 프롬프트가 각각 Jev를 기다린다. 보통 0.2~0.35초, 최대 2초(`timeoutMs`)가 걸린다.
+
+<details>
+<summary>호출당, 세션당, 요금제당 비용</summary>
+
+Jev는 입력 토큰에만 과금하며 100만 토큰당 $0.042이다([TypeSafe Models 페이지](https://docs.typesafe.ai/models), 2026-10-23 기준). 출력은 무료다. 이 플러그인의 호출 한 번은 입력 토큰 370~500개를 보내고, 같은 요청에 질문이 하나 늘 때마다 약 70개가 더해진다.
+
+| 게이트 | 호출 시점 | 호출당 입력 토큰 | 비용 |
+| --- | --- | --- | --- |
+| Stop 게이트 | 판단하는 턴 종료마다(약 60%, 나머지는 건너뜀) | ~400 | 턴 종료 1,000회당 $0.017 |
+| 조건부 지시 | 첨부되지 않은 fragment가 있는 동안 사용자가 쓰는 프롬프트마다 | fragment 3개일 때 ~400, 24개일 때 ~2,000 | 프롬프트 1,000개당 $0.017~0.084 |
+| 접기 관련성 | 압축마다, 결과 24개당 호출 한 번, 최대 두 번 | 최대 ~2,500 | 압축 1,000회당 $0.21 |
+| 도구 게이트 Jev | 다른 공급자가 제공하는 세션에서 새 대상마다 | ~455 | 대상 1,000개당 $0.019 |
+| 지시 필터 | 새 지시 파일 묶음마다(호출 두 번), 그 뒤로 미룰 chunk가 있는 동안 프롬프트마다 | 묶음당 ~13,600, 프롬프트당 ~1,730 | 묶음당 $0.0006, 프롬프트 1,000개당 $0.073 |
+
+세션 상한(`stopCap` 200, `instructionCap` 200, `foldCap` 20, `toolCap` 300회)이 있어 세션 하나는 입력 토큰 약 670,000개, 즉 $0.03을 넘지 않는다. 지시 필터도 `instructionCap`을 함께 쓴다.
+
+다음은 작성자 자신의 사용량을 모든 게이트가 켜져 있다고 가정해 계산한 값이다(2026-10-23, Claude Code transcript에서 집계했으며 실제로 전송한 것은 없다). Claude Max 20x 계정 하나를 컴퓨터 두 대에서 썼다.
+
+| 기간 | 세션 | 프롬프트 | 도구 호출 | 압축 | 일반 | 상한 |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1주, 주간 한도의 68% 사용 | 121 | 1,495 | 30,485 | 66 | $0.05 | $0.25 |
+| 같은 주를 한도의 100%로 환산 | | | | | $0.07 | $0.37 |
+| 30일 | 764 | 5,812 | 182,775 | 165 | $0.28 | $1.00 |
+
+*일반*은 fragment 3개를 쓰고, 도구 게이트의 Jev는 다른 공급자가 세션을 제공한 경우에만 쓴 값이다(그 주에는 없었고, 30일 동안은 세션 764개 가운데 38개였다). *상한*은 fragment 24개를 모든 프롬프트에서 묻고 모든 세션을 다른 공급자가 제공했다고 가정한 값이다. Max 20x 요금제를 주간 한도까지 쓰면 한 달에 일반 약 $0.32, 상한 $1.57이 들며, 이는 요금제 가격 $200의 0.2~0.8%다([Claude 요금](https://claude.com/pricing)). Max 5x는 Max 20x 사용량의 4분의 1을 허용하므로 비용도 대략 4분의 1이다. 주간 한도에는 플러그인이 실행되지 않는 Claude Code 밖의 사용량도 포함되므로, Claude Code만으로 100%를 쓰면 비용이 조금 더 든다.
+
+</details>
+
+## 데이터와 개인정보
+
+플러그인이 보관하는 모든 것은 사용자만 열 수 있는 폴더 하나 아래에 있다. 모든 폴더는 그 안에 무언가를 쓰기 전에 권한 700으로 만들어지고, 세션 도중 지워졌다면 같은 방식으로 다시 만들어진다. 이 과정이 실패하면 아무것도 쓰지 않고 엔진이 요약한다.
+
+```text
+~/.local/state/context-harness/
+  archive/<session>/<tool_use_id>.json   접힌 원본, 삭제하지 않음
+  records/<session>/<gate>/<id>.json     판단 기록, 14일 보관
+  records/labels/labels/<id>.json        사용자가 붙인 라벨, 보관
+  replay/                                replay 출력
+```
+
+아카이브 파일에는 도구가 돌려준 내용이 그대로 담긴다. 기록에는 전송한 내용(민감 정보 제거 후), 판정, 소요 시간이 담긴다.
+
+이름이 바뀌기 전에 접은 결과는 `~/.claude-context-fold/<session>/`에 남아 있다. 플러그인은 이 결과를 읽기만 하고 그곳에 쓰거나 지우지 않는다. `HOME`이 없으면 프로젝트 안에 쓰는 대신 아무것도 접지 않고 엔진이 요약하게 둔다. 보관된 내용을 지우려면 다음을 실행한다.
+
+```sh
+rm -rf ~/.local/state/context-harness/archive/<session-id>   # 한 세션의 원본
+rm -rf ~/.local/state/context-harness ~/.claude-context-fold # 전부
+```
+
+플러그인은 다음을 오직 이 용도로만 쓴다: 네트워크(Jev 설정이 켜져 있고 키가 있을 때 Jev에만), 프로세스(자기 폴더에 대한 `mkdir`, `chmod`, `find`), 환경 변수(`HOME`, `TYPESAFE_API_KEY`, 그리고 신뢰 판정이 읽는 프록시와 공급자 변수). 접기를 포함해 이 모두를 모듈 하나가 쓰기 때문에, 모듈이 쓰는 기능으로 모듈을 판단하는 정책은 접기 기능도 이 기능들과 함께 판단하게 된다.
+
+## 측정 결과
+
+| 항목 | 결과 | 측정 버전 |
+| --- | --- | --- |
+| 압축 한 번 | 137,469 → 36,995 토큰, 30 ms | context-fold 0.0.2 |
+| 접힌 파일의 777번째 행을 물음 | `read_coordinate`(`offset: 777, limit: 1`)로 다시 읽어 정확히 답함 | context-fold 0.0.2 |
+| 압축 한 번에서의 접기와 그 판단 | 결과 2개를 접음(−32k자). 각 기록이 아카이브와 일치함 | context-harness 0.0.1 |
+| 접기만 한 압축 뒤의 fragment | 한 번만 유지되고 다시 첨부되지 않음(jev-harness는 두 번 첨부함) | context-harness 0.0.1 |
+| Stop 게이트, `active`, 일반 턴 12개 | 잘못 막은 경우 없음 | jev-harness 0.0.3 |
+| 도구 게이트, 외부 세션 | `.env`, `.pem`을 가리키는 심볼릭 링크, `printenv`를 거부함. 호출당 2~4 ms | jev-harness 0.0.3 |
+| Jev 호출 한 번, 양자택일 | p50 206 ms, p95 339 ms | jev-1.14.0 |
+| 두 번째 프로필에서 공유 `CLAUDE.md`를 제외 | OMC 블록이 두 번이 아니라 한 번 로드됨. 첫 요청 69,152 → 66,655 토큰 | Claude Code 2.1.309 |
+| 두 번 로드된 chunk, `instructionFilter: active` | 한 번만 로드되고 사본 자리에 노트가 들어감. `prompt.context` 31 ms | context-harness 0.0.2 |
+| 실제 지시 chunk 34개에 대한 Jev의 판단 | 5개(1,770자)를 미루고 0개를 뺌. 항상 유지 목록에 든 것은 없음 | context-harness 0.0.2 |
+| Stop 규칙 대 Jev, 문단 100개 | 일치도 κ 0.35 | jev-harness 0.0.3 |
+| 범위가 넓은 fragment 조건 | 관련 없는 한 문장 질문에서 0.92~0.96 | jev-harness 0.0.3 |
+| 실제 예고 문장에 대한 Stop 게이트 | 아직 측정하지 못함: 일반 턴이 예고로 끝난 적이 없음 | jev-harness 0.0.3 |
+
+실사용 실행은 작성자의 폴더에서 Claude Code 2.1.306~2.1.308과 Haiku 5.5로 진행했다. Jev 소요 시간은 API를 직접 호출해 잰 값이고, 규칙 replay에는 작성자의 transcript를 썼다.
+
+<details>
+<summary>context-harness 0.0.2 (2026-10-23, Claude Code 2.1.309, Haiku 5.5, 작성자의 지시 파일)</summary>
+
+- **`prompt.context`** 는 첫 프롬프트 전에 한 번, 그리고 `/compact`와 `/clear` 뒤의 첫 프롬프트에서 다시 실행되었다. general-purpose 서브에이전트는 훅이 다시 실행되지 않았는데도 다시 쓴 파일을 받았다. 서브에이전트에 기록된 지시에는 훅이 뺀 절이 없었다.
+- **두 번 로드된 chunk.** `~/.agents/AGENTS.md`의 한 절을 프로젝트 `CLAUDE.md`에 복사해 두자, `shadow`에서는 두 사본이 모두 로드되었고(모델이 받은 첫 메시지에 두 번 들어감) 그 사본이 `active`에서 빠질 대상으로 기록되었다. `active`에서는 한 번만 로드되고 사본 자리에 노트가 들어갔다. 훅은 31 ms가 걸렸다.
+- **Jev의 판단.** chunk 34개(12,344자)를 두 번의 호출로 판단했다. 입력 토큰은 7,592개와 6,043개였고, 요청이 전송된 뒤 298 ms와 214 ms 만에 답이 왔다. Jev는 "작업 방식"(0.97), "웹 페이지 가져오기"(1.00), "LLM 호출 경로"(0.99), 그리고 테스트 프로젝트 자체의 도입부(0.98)를 미루겠다고 판단했다. Orca는 실행 환경에 따라 미뤄졌고, covered로 판단된 것은 없었다. 전송된 내용에는 홈 경로, 계정 이름, 이메일 주소가 없었다.
+- **누락 위험.** 이후 프롬프트마다 입력 토큰 약 1,730개짜리 호출이 한 번씩 백그라운드에서 일어났다(232~320 ms). "Reply with the single word ok" 같은 프롬프트에는 미뤄 둔 chunk가 해당한다고 판단되지 않았다. 비율을 내기에는 아직 세션 수가 적다.
+
+</details>
+
+<details>
+<summary>context-harness 0.0.1 (2026-10-23, Claude Code 2.1.308, Haiku 5.5, 301줄짜리 로그와 248줄짜리 Python 파일이 있는 폴더)</summary>
+
+- **압축 한 번에서 접기와 판단을 함께 수행.** `/compact`가 플러그인 자체 훅에서 두 파일을 모두 접었다(−32k자). 두 접기 기록에는 "folded"가 적혔고 같은 id가 아카이브에 있었으며, Jev는 로그를 0.82~0.84, Python 파일을 0.47~0.61로 더는 필요 없다고 판단했다(두 번 실행). 상태 줄은 `folded 2 · −32k chars | jev · tool active 1 hits · instr active 3 #34e698, 1 attached · fold shadow 2 judged`였다.
+- **`read_coordinate`** 는 접힌 로그의 5번째 줄을 정확히 돌려주었다. `toolGate: active`와 `providerTrust: external`에서는 `ls ~/.local/state/context-harness/archive`가 접힌 원본 접근으로 거부되었다.
+- **fragment.** `prose`는 키워드로 한 번 첨부되었다. 접기만 한 `/compact` 뒤의 다음 보고서 요청에서는 다시 첨부되지 않았고, 다음 요청에 실린 메시지에는 `prose` 블록이 정확히 하나 있었다.
+- **정리.** 15일 지난 판단 기록은 다음 세션 시작 때 삭제되었고, 그 옆의 15일 지난 아카이브 파일은 유지되었다.
+- **스스로 접기**(`foldAtPercent: 5`, 모든 Jev 설정 꺼짐): 세 번째 턴 뒤에 플러그인이 `/compact`를 실행해 결과 두 개를 접었고, 상태 줄은 `folded 2 · −32k chars`였다.
+- **엔진.** 플러그인이 `prompt.submit`에서 첨부한 컨텍스트는 `$.session.messages({ as: 'api' })`에 나타난다. 압축 전에는 한 번, 훅이 받은 메시지로 응답한 압축 뒤에는 한 번 나타나고, 엔진이 요약한 뒤에는 나타나지 않는다. fragment 개수 계산은 이 동작에 기대고 있다.
+
+</details>
+
+<details>
+<summary>context-fold 0.0.2 (Claude Code 2.1.306, Haiku 5.5)</summary>
+
+| 압축 | 접은 결과 | 압축 전 컨텍스트 | 압축 후 | 시간 |
+| --- | --- | --- | --- | --- |
+| 첫 번째 | 결과 2개 | 137,469 토큰 | 36,995 토큰 | 30 ms |
+| 두 번째 | 결과 1개 추가 | 103,638 토큰 | 23,373 토큰 | 32 ms |
+
+접힌 파일의 777번째 행을 묻자 모델은 `read_coordinate`를 `offset: 777, limit: 1`로 호출해 정확히 답했다. `INTENT.md`, `PHASE.md`, `sessions/`가 오래된 상태에서는 플러그인이 정리를 요청했고, 에이전트가 정리를 마친 뒤 플러그인이 결과 여섯 개를 20 ms 만에 접었다(89,108 → 26,223 토큰). `tune-policy`가 제안한 `keepRecentTurns: 1`을 적용하자 `/compact`가 dry run에서 지목한 결과 37개를 접었다(141,412 → 30,306 토큰).
+
+</details>
+
+<details>
+<summary>jev-harness 0.0.3 (Jev jev-1.14.0, 2026-10-22)</summary>
+
+Jev는 질문에 세 가지 형태 가운데 하나로 답한다: 이름 붙은 선택지 가운데 하나를 고르는 choice, 척도 위의 점수를 매기는 score, 그리고 예/아니요 질문에 0에서 1 사이의 수로 답하는 noul이다.
+
+| 질문 | p50 | p95 | 입력 / 출력 토큰 |
+| --- | --- | --- | --- |
+| noul | 217 ms | 448 ms | 366 / 20 |
+| choice (선택지 2개) | 206 ms | 339 ms | 373 / 31 |
+| score (4단계) | 312 ms | 363 ms | 356 / 17 |
+| 요청 하나에 noul 질문 12개 | 184 ms (n=1) | | 1132 / 210 |
+
+- **noul이 아니라 choice를 쓰는 이유:** "…Next I will refactor the cache layer."에 대해 noul은 0.45~0.55를, 양자택일 choice는 `announce`에 0.98~0.99를 주었다. 보고 문장에는 둘 다 0.01~0.02를 주었다.
+- **Stop 규칙 replay.** 작성자 transcript의 가장 최근 턴 종료 3,000개를 대상으로 했다. 1,205개를 건너뛰었고(조건문 898, 질문 297, 빈 문단 10), 나머지 1,795개 가운데 91개(5.1%)를 표시했다. 재촉("계속", "go")이 뒤따른 경우는 1.3%였고 규칙이 표시한 턴에는 하나도 없었으므로, 라벨은 `/jev-mark`로 붙여야 한다.
+- **규칙 대 Jev.** 작성자의 동의를 받아 보낸 문단 100개에 대해 0.7에서 둘 다 표시 17, 규칙만 23, Jev만 6, 둘 다 표시하지 않음 54였고 kappa는 0.35였다.
+- **Stop 게이트 실사용.** shadow에서는 턴 종료 7개를 판단했는데 모두 보고였고, 훅이 턴을 붙잡은 시간은 0~1 ms였다. active에서는 일반 턴 12개에서 잘못 막은 경우가 없었다. 예고로 끝나도록 요청한 턴 3개 가운데 판단 대상이 된 하나(0.99)는 다시 작업으로 돌려보내졌고 루프는 생기지 않았으며, 설정의 Stop 훅은 매번 실행되었다.
+- **도구 게이트 실사용**(`providerTrust: external`): `.env`, `.pem`을 가리키는 심볼릭 링크, `git diff --no-index /dev/null .ENV`, `printenv`를 거부했고 `README.md`와 `ls`는 허용했다. 호출당 2~4 ms가 걸렸다. Jev는 `./config/secrets.yaml`, `./infra/prod.tfvars`, `./data/customers.csv`, `./research/unpublished_model.py`를 1.00으로 restricted 또는 custom으로, `./README.md`를 0.00으로 open으로 분류했고 168~385 ms가 걸렸다.
+- **조건부 지시 실사용:** "Explain in three steps how you would put version 1.2 live"에서 release가 0.99로 첨부되었다. 한 문장짜리 질문 두 개에서 prose는 0.92(첨부 안 됨)와 0.96(첨부됨)이었다. context-fold가 접기로 응답한 `/compact` 뒤에 prose가 다시 첨부되었는데, context-harness는 바로 이 중복을 없앤다.
+- **접기 관련성 실사용:** "Look for a rounding problem in total()"을 요청으로 주자 Jev는 `./invoice.py`를 0.11, `./server.log`를 0.88로 더는 필요 없다고 판단했다. context-fold 뒤에 로드된 jev-harness는 압축 자체를 전혀 보지 못했다.
+
+</details>
+
+## 한계
+
+- 결과는 압축 시점에만 접힌다. 플러그인은 모델 요청을 턴마다 다시 쓸 수 없다.
+- Claude Code는 이미 아주 큰 Bash 출력을 파일로 저장한다. 가장 큰 효과는 `Read`처럼 Claude Code가 출력을 통째로 남겨 두는 도구에서 나온다.
+- "턴"은 텍스트가 있는 사용자 메시지다. 엔진이 주입하는 reminder도 턴으로 세므로, 최근 구간이 설정값보다 짧아질 수 있다.
+- 서브에이전트의 transcript는 접지 않으며, 엔진이 미리 계산하는(precompute) 압축도 접지 않는다. 접힌 결과는 그것을 접은 세션에서만 읽을 수 있으며, `/clear` 뒤나 fork에서는 읽을 수 없다.
+- 플러그인은 `/compact`를 실행해 스스로 접기를 시작하므로, 그 명령이 transcript에 나타난다.
+- 이 플러그인보다 먼저 로드되어 압축에 직접 응답하는 플러그인이 있으면 그 플러그인이 압축을 가져간다. 이때 이 플러그인은 그 압축을 접지도 판단하지도 않는다.
+- 설정을 바꾸면 플러그인이 다시 로드되면서 카운터와 정리 요청 횟수가 처음부터 다시 시작된다.
+- `shadow`에서는 아무것도 첨부하지 않으므로, 첨부되었을 fragment를 기억해 두었다가 압축 요약이나 대화 초기화를 볼 때만 잊는다. `active`에서는 대신 대화 내용을 센다.
+- 지시 필터는 시작 시점과 압축 뒤에 로드되는 것만 본다. 하위 폴더의 `CLAUDE.md`와 `.claude/rules`는 Claude Code가 파일을 읽으면서 나중에 들어오므로 필터를 거치지 않는다.
+- 아직 하지 않은 것: 접기 관련성을 기록이 아니라 결정으로 쓰는 것, Jev의 지시 판단을 적용하는 것, 첨부한 fragment가 답을 개선하는지 확인하는 것, 실제 예고 문장에 대한 Stop 게이트의 정확도를 재는 것.
+
+## 업그레이드
+
+context-harness는 각 아이디어를 시험하려고 따로 만든 두 플러그인, [context-fold](https://github.com/ysys143/context-fold)와 [jev-harness](https://github.com/ysys143/jev-harness)를 합친 것이다. 따로 있을 때는 압축 한 번에서 일어난 일을 서로 공유할 수 없었고, 로드 순서에 따라 두 번째 플러그인이 압축을 볼 수 있는지가 갈렸다. 이 플러그인을 설치하기 전에 두 플러그인을 모두 제거한다. 둘 중 하나와 함께 설치하면 접기나 Jev 전송이 두 번 일어난다.
+
+- **context-fold가 접은 결과**는 계속 읽을 수 있다. `read_coordinate`는 같은 세션에 대해 자체 아카이브를 먼저 보고 그다음 `~/.claude-context-fold/<session>/`을 본다.
+- **설정과 키**는 이어지지 않는다. context-harness 아래에서 다시 설정한다(`/config`, 키는 `/plugin configure context-harness@context-harness`).
+- **jev-harness 기록**(`~/.local/state/jev-harness/`)은 읽지 않는다. 그 기록의 접기 판정은 규칙의 사본에서 나왔는데, 이번 릴리스는 그 규칙을 접기 자체로 대체했다. 더 필요 없으면 그 폴더를 지운다.
+- **jev-harness만 쓰고 있었다면** 새로 압축 시점의 접기, 창이 60% 차면 자동으로 실행되는 `/compact`(`foldAtPercent`, 0이면 끔), 디스크에 보관되는 원본, 압축 뒤의 노트를 얻는다.
+- **context-fold만 쓰고 있었다면** 새로 `/jev-report`, `/jev-mark`, 게이트가 꺼져 있으면 그대로 통과시키는 모든 도구 호출의 훅, 세션 시작 때마다 14일 지난 판단 기록을 지우는 정리 기능을 얻는다.
+- **바뀐 동작:** 이미 대화에 있는 fragment는 접기만 한 압축 뒤에 다시 첨부되지 않는다(jev-harness는 다시 첨부했다). 접기 판단 기록은 접기가 실제로 한 일을 적으며, 턴을 접기와 같은 방식으로 센다.
+
+## 개발
+
+```sh
+claude --plugin-dir /path/to/context-harness   # 플러그인을 로드한 세션
+claude plugin test /path/to/context-harness    # tests/*.test.ts
+claude plugin validate /path/to/context-harness
+```
+
+테스트는 136개다. 결함 19개를 하나씩 다시 심어 보았고, 매번 테스트가 하나 이상 실패했다. 지시 필터에 대해 심은 결함은 다음과 같다: 항상 유지 목록을 무시함, 미룬 chunk를 다른 chunk의 내용을 이미 말하는 것으로 셈, 사용자 규칙 때문에 프로젝트 규칙을 뺌, 늦게 온 Jev 답을 버림, 첨부 fragment 개수 계산이 읽을 수 없는 chunk 이름, 메모리나 조직 파일을 자름, 코드 펜스 안의 제목을 절로 인식함, 설정이 꺼져 있는데 기록을 씀. 0.0.1부터 있던 결함은 다음과 같다: 폴더 전체를 대상으로 한 정리, 판단에 고정된 크기 하한을 씀, 예전 방식의 턴 계산, 읽을 수 있는 상태로 남은 폴더, 실패한 `chmod`를 무시함, 아카이브를 직접 읽을 수 있음, `HOME` 없이 실행한 `/compact`, 대화를 보지 않고 센 fragment 개수, 기억하지 못한 대기 중 프롬프트, 접기 뒤의 실패가 접기를 되돌림, 인용된 여는 태그를 블록으로 인식함.
+
+## 출처
+
+완료된 도구 출력을 요약하지 않고 주소가 붙은 한 줄 포인터로 접는다는 아이디어는 황대진과 Yeni의 *The Context Coordinate System and the Principle of Unbroken Memory*(Philosophy That Works, 2026; DOI [10.5281/zenodo.23377916](https://doi.org/10.5281/zenodo.23377916); [저장소](https://github.com/philosophythatworks/context-lattice))에서 왔다. 이 플러그인은 독립적으로 구현했으며 그 프로젝트의 코드를 포함하지 않는다. 관련 연구로는 [Lindenbauer et al., 2025](https://arxiv.org/abs/2508.21433)의 observation masking과 Anthropic의 [context editing](https://platform.claude.com/docs/en/build-with-claude/context-editing)이 있다.
+
+## 버전
+
+플러그인이 초기 단계인 동안 버전은 0.0.x에 머문다. 0.0.1은 context-fold 0.0.2와 jev-harness 0.0.3을 합친 첫 릴리스다. 0.0.2는 지시 필터를 추가했다. 0.0.3은 표시할 내용이 생기기 전까지 상태 줄을 비워 둔다.
+
+## 라이선스
+
+MIT
