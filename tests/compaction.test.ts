@@ -104,7 +104,7 @@ test('the fold judgment scrubs a tool call line before it cuts it', { options: N
   // 120, so a cut before the scrub would leave part of the number. Grep is
   // used because a path key would be shown instead, and a path is scrubbed as
   // a path, not as free text.
-  const input = { pattern: `${'p'.repeat(110)}010-1234-5678` }
+  const input = { pattern: `${'p'.repeat(110)} 010-1234-5678` }
   const messages = [prompt('Refactor'), call('t0', 'Grep', input), answer('t0', 'y'.repeat(2000)), prompt('next'), prompt('and next')]
   const io = setup(on, { transcript: messages, env: KEY_ENV, fetch: everyQuestion })
   await $.session.compact({ trigger: 'manual', messages } as never)
