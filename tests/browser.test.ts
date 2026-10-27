@@ -95,6 +95,18 @@ test('shadow: judged and recorded, nothing attached', { options: { browserRoute:
   expect((record?.facts as Record<string, string>).chosen).toBe('ego')
 })
 
+test('a prompt long enough to be cut is scrubbed before the cut, so no value reaches Jev in part', { options: { browserRoute: 'shadow' } }, async ($, on) => {
+  // No keyword, so Jev is asked; the phone number starts at 590, so a cut at
+  // 600 lands inside the label scrubbing leaves behind.
+  const io = setup(on, { env: KEY_ENV, fetch: operate(0.01) })
+  await $.prompt.submit(typed(`${'가 나 '.repeat(200).slice(0, 590)}010-1234-5678`))
+  await settle(() => records(io.writes, 'browser-route').length > 0)
+
+  const request = (io.fetches[0]?.body.state as Record<string, string> | undefined)?.request ?? ''
+  expect(request).not.toContain('010')
+  expect(request.length).toBeLessThanOrEqual(600)
+})
+
 test('a blocked tool is passed over for the next one installed', { options: { browserRoute: 'active', browserBlocked: 'ego,aside' } }, async ($, on) => {
   const io = setup(on, { env: KEY_ENV, fetch: operate(0.01) })
   await $.prompt.submit(typed('Click through the signup form'))
