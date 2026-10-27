@@ -128,10 +128,11 @@ test('fold blocks active: the needed lines stay verbatim under the pointer; the 
 })
 
 test('fold blocks: the request is scrubbed before it is cut at 400', { options: { foldBlocks: 'shadow' } }, async ($, on) => {
-  // The request carries a phone number starting at 393, so a cut at 400 lands
-  // inside the label scrubbing leaves. The judgment scrubs once more on the way
-  // out, so this site cannot leak on its own; the test holds the order anyway.
-  const ask = `${'가 나 '.repeat(200).slice(0, 393)} 010-1234-5678`
+  // A phone number straddles the 400-character bound: a cut made before the
+  // scrub leaves "010-98", and the judgment's own later scrub cannot recognize
+  // that fragment, so it would reach Jev. Scrubbing first leaves a label the
+  // cut then drops whole.
+  const ask = `${'가 나 '.repeat(200).slice(0, 393)} 010-9876-5432`
   const messages = [prompt('read the server'), call('big', 'Read', { file_path: '/proj/server.ts' }), answer('big', FILE), prompt('ok'), prompt(ask)]
   const io = setup(on, { transcript: messages, env: KEY_ENV, fetch: jev, isTimerStopped: true })
   await $.session.compact({ trigger: 'manual', messages } as never)
@@ -139,8 +140,9 @@ test('fold blocks: the request is scrubbed before it is cut at 400', { options: 
 
   expect(io.fetches.length).toBeGreaterThan(0)
   const bodies = sent(io)
-  expect(bodies).not.toContain('1234')
-  expect(bodies).not.toContain('5678')
+  // The cut would leave "010-98": no fragment of the number may reach Jev.
+  expect(bodies).not.toContain('010-98')
+  expect(bodies).not.toContain('9876')
 })
 
 test('fold blocks shadow: the fold is a pointer alone, and what would be kept is recorded', { options: { foldBlocks: 'shadow' } }, async ($, on) => {
