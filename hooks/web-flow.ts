@@ -7,7 +7,7 @@ import { parseDocument, render, type Block } from './blocks'
 import { probabilityOf, type JevQuestion } from './jev'
 import { errorOf, judge, keyFor } from './jev-call'
 import { DEFAULT_RELEVANCE, selectRelevant, type Ask, type Relevance } from './relevance'
-import { scrub } from './scrub'
+import { clip, scrub } from './scrub'
 import { newId, runtime, settingsOf } from './state'
 import { showStatus } from './status'
 import type { ShadowRecord } from './report'
@@ -111,7 +111,7 @@ async function measure($: EngineInterface, url: string, question: string, mode: 
   const t0 = await $.clock.now()
   const page = await fetchPage($, url)
   const base = { id: newId(t0), ts: new Date(t0).toISOString(), sessionId, joinKey, point: WEB_POINT, mode, hookMs: 0 }
-  const sent = { query: scrub(question, home).slice(0, 600), url: scrub(url, home) }
+  const sent = { query: clip(scrub(question, home), 600), url: scrub(url, home) }
   if (!page.ok) {
     await writeRecord($, { ...base, sent: null, skipped: page.error, facts: { url: sent.url, ...extra } })
     return { page }

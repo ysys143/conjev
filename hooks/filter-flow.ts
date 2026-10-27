@@ -23,7 +23,7 @@ import {
 } from './instruction-docs'
 import { probabilityOf } from './jev'
 import { errorOf, judge, keyFor } from './jev-call'
-import { scrub } from './scrub'
+import { clip, scrub } from './scrub'
 import { newId, runtime, settingsOf } from './state'
 import { showStatus } from './status'
 import { homeOf, writeRecord } from './storage'
@@ -238,8 +238,8 @@ export async function judgeDeferred($: EngineInterface, text: string, origin: st
   const sessionId = await $.session.id()
   const settings = settingsOf()
   const t0 = await $.clock.now()
-  const sent = { request: scrubInstruction(text, home).slice(0, 600) }
-  const questions = Object.fromEntries(deferred.map((chunk, i) => [`d${i}`, conditionQuestion(`The request calls for this instruction: ${scrubInstruction(chunk.text, home).slice(0, 1200)}`)]))
+  const sent = { request: clip(scrubInstruction(text, home), 600) }
+  const questions = Object.fromEntries(deferred.map((chunk, i) => [`d${i}`, conditionQuestion(`The request calls for this instruction: ${clip(scrubInstruction(chunk.text, home), 1200)}`)]))
   const result = await judge($, { sessionId, point: DEFER_POINT, cap: settings.instructionCap }, key.key, sent, questions, BACKGROUND_TIMEOUT_MS)
   for (const [i, chunk] of deferred.entries()) {
     const answer = result.ok ? result.answers[`d${i}`] : undefined

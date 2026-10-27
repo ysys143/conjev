@@ -9,6 +9,7 @@
 // pass several questions or a list of keywords at once.
 import { heading, mergeFragments, plain, render, tokenCount, type Block } from './blocks'
 import type { JevQuestion, JevUsage } from './jev'
+import { clip } from './scrub'
 
 export const QUESTION =
   '`query` may contain several topics or sub-questions, possibly as a list of keywords. ' +
@@ -182,8 +183,8 @@ export async function selectRelevant(
   const stage2 = new Map<number, number>()
   const rescore = (b: Block): (() => Promise<void>) => async () => {
     const i = at.get(b.id)!
-    const before = i > 0 ? jevText(blocks[i - 1]!, prepare).slice(-CONTEXT_CHARS) : ''
-    const after = i + 1 < blocks.length ? jevText(blocks[i + 1]!, prepare).slice(0, CONTEXT_CHARS) : ''
+    const before = i > 0 ? clip(jevText(blocks[i - 1]!, prepare), CONTEXT_CHARS, 'tail') : ''
+    const after = i + 1 < blocks.length ? clip(jevText(blocks[i + 1]!, prepare), CONTEXT_CHARS) : ''
     const answer = await call({ query: q, section: prepare(heading(b)), passage: jevText(b, prepare), context_before: before, context_after: after }, { rel: STAGE2_QUESTION })
     const v = answer?.rel
     if (v !== undefined) stage2.set(b.id, v)

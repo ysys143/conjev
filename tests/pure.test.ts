@@ -3,7 +3,7 @@ import { admit, afterCall, EMPTY_BUDGET } from '../hooks/budget'
 import { checkAnswer, parseResponse, probabilityOf, type JevQuestion } from '../hooks/jev'
 import { keyFromDotenv, pickKey } from '../hooks/key'
 import { confusion, kappa, percentile, pointReport, sweep, type ShadowRecord } from '../hooks/report'
-import { scrub } from '../hooks/scrub'
+import { clip, scrub } from '../hooks/scrub'
 import { STOP_QUESTION, announcesByRule, lastParagraph, stopSkipReason } from '../hooks/stop-gate'
 import {
   canWrite,
@@ -88,6 +88,17 @@ test('scrub removes secrets, addresses and the home folder', () => {
   // A long path is not a secret: seen scrubbed whole in a live run.
   const path = '/private/tmp/claude-501/-Users-me-Documents-GitHub-some-project-0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d/scratchpad/greet.py'
   expect(scrub(`changed ${path}`, HOME)).toBe(`changed ${path}`)
+})
+
+test('clip never cuts through a mark scrubbing left, from either end', () => {
+  const text = scrub('연락처 010-1234-5678 확인', HOME)
+  expect(text).toBe('연락처 [전화번호] 확인')
+  expect(clip(text, 7)).toBe('연락처 ')
+  expect(clip(text, 10)).toBe('연락처 [전화번호]')
+  expect(clip(text, 6, 'tail')).toBe(' 확인')
+  expect(clip('key <secret> here', 7)).toBe('key ')
+  expect(clip('a [b] c', 4)).toBe('a [b')
+  expect(clip(text, 100)).toBe(text)
 })
 
 test('scrub sends Korean personal information as labels', () => {

@@ -6,7 +6,7 @@ import { BROWSER_KEYWORDS, BROWSER_POINT, BROWSER_QUESTION, chooseBrowser, detec
 import { keywordHit } from './instructions'
 import { probabilityOf } from './jev'
 import { errorOf, judge, keyFor } from './jev-call'
-import { scrub } from './scrub'
+import { clip, scrub } from './scrub'
 import { newId, runtime, settingsOf } from './state'
 import { showStatus } from './status'
 import { homeOf, writeRecord } from './storage'
@@ -28,7 +28,7 @@ async function needsBrowser($: EngineInterface, text: string, sessionId: string)
   if (rule) return { needs: true, rule, sent: null }
   const key = await keyFor($)
   if (key === undefined) return { needs: false, rule, error: 'no-key', sent: null }
-  const sent = { request: scrub(text, await homeOf($)).slice(0, 600) }
+  const sent = { request: clip(scrub(text, await homeOf($)), 600) }
   const result = await judge($, { sessionId, point: BROWSER_POINT, cap: settings.browserCap }, key.key, sent, { browser: BROWSER_QUESTION }, settings.timeoutMs)
   const p = result.ok ? probabilityOf(result.answers.browser!, 'operate') : undefined
 

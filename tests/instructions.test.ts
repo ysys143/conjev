@@ -160,6 +160,15 @@ test('active: a Korean phone number, resident number and name in the prompt reac
   for (const value of ['김민수', '010-1234-5678', '800101-1234560']) expect(sent).not.toContain(value)
 })
 
+test('active: a phone number across the 600-character cut reaches Jev neither as half a label nor as part of the number', ACTIVE, async ($, on) => {
+  const io = setup(on, { files: FILES })
+  const before = `${'ab '.repeat(198)}go `
+  await $.prompt.submit(typed(`${before}010-1234-5678 끝`))
+  const request = (io.fetches[0]?.body.state as { request: string }).request
+  expect(request).toBe(before)
+  expect(request.length <= 600).toBe(true)
+})
+
 const DEPLOY_APPLIES = () => choice({ deploy: { applies: 0.99, not: 0.01 }, prose: { applies: 0.01, not: 0.99 } })
 
 test('after a compaction the engine summarized, a fragment is attached again', ACTIVE, async ($, on) => {

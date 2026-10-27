@@ -5,7 +5,7 @@ import { anchorNote, dueBeforeFold, type AnchorFile, type PolicySettings } from 
 import { FOLD_POINT, currentRequest, foldCandidates, foldQuestion } from './fold-judge'
 import { probabilityOf } from './jev'
 import { errorOf, judge, keyFor } from './jev-call'
-import { scrub } from './scrub'
+import { clip, scrub } from './scrub'
 import { runtime, newId, settingsOf } from './state'
 import { showStatus } from './status'
 import { homeOf, writeRecord } from './storage'
@@ -76,7 +76,7 @@ export async function judgeFold($: EngineInterface, messages: readonly SessionMe
   const cwd = await $.session.cwd()
   const sessionId = await $.session.id()
   const candidates = foldCandidates(messages, policy, home, cwd, 48)
-  const sent = { current_request: scrub(request, home).slice(0, 400) }
+  const sent = { current_request: clip(scrub(request, home), 400) }
   for (let start = 0; start < candidates.length; start += 24) {
     const batch = candidates.slice(start, start + 24)
     const t0 = await $.clock.now()

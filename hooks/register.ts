@@ -12,7 +12,7 @@ import { errorOf, judge, keyFor, trustFor } from './jev-call'
 import { blockReport, filterReport, pointReport, type ShadowRecord } from './report'
 import { chunksOf, exactDuplicates, normalized, supersededOmc, withoutChunks, type DocFile } from './instruction-docs'
 import { judgeDeferred, omcVersionsOf, recordFilter, recordToolUse, stateKeyOf } from './filter-flow'
-import { scrub } from './scrub'
+import { clip, scrub } from './scrub'
 import { harnessSettingsFrom, usesJev } from './settings'
 import { newId, runtime, startRuntime } from './state'
 import { showStatus } from './status'
@@ -229,7 +229,7 @@ export const register: Register = (on, options) => {
 
     const rule = new Map(candidates.map(fragment => [fragment.name, keywordHit(e.text, fragment.keywords)]))
     const key = await keyFor($)
-    const sent = key === undefined ? null : { request: scrub(e.text, await homeOf($)).slice(0, 600) }
+    const sent = key === undefined ? null : { request: clip(scrub(e.text, await homeOf($)), 600) }
     // Active asks Jev only where no keyword decided; shadow asks for every candidate, to compare.
     const toAsk = mode === 'active' ? candidates.filter(fragment => rule.get(fragment.name) !== true) : candidates
 
