@@ -127,6 +127,22 @@ test('fold blocks active: the needed lines stay verbatim under the pointer; the 
   expect(records(io.writes, 'fold-blocks')[0]?.decision).toBe('keep')
 })
 
+test('fold blocks: the request is scrubbed before it is cut at 400', { options: { foldBlocks: 'shadow' } }, async ($, on) => {
+  // The request carries a phone number starting at 393, so a cut at 400 lands
+  // inside the label scrubbing leaves. The judgment scrubs once more on the way
+  // out, so this site cannot leak on its own; the test holds the order anyway.
+  const ask = `${'가 나 '.repeat(200).slice(0, 393)} 010-1234-5678`
+  const messages = [prompt('read the server'), call('big', 'Read', { file_path: '/proj/server.ts' }), answer('big', FILE), prompt('ok'), prompt(ask)]
+  const io = setup(on, { transcript: messages, env: KEY_ENV, fetch: jev, isTimerStopped: true })
+  await $.session.compact({ trigger: 'manual', messages } as never)
+  await settle(() => records(io.writes, 'fold-blocks').length > 0)
+
+  expect(io.fetches.length).toBeGreaterThan(0)
+  const bodies = sent(io)
+  expect(bodies).not.toContain('1234')
+  expect(bodies).not.toContain('5678')
+})
+
 test('fold blocks shadow: the fold is a pointer alone, and what would be kept is recorded', { options: { foldBlocks: 'shadow' } }, async ($, on) => {
   const io = setup(on, { transcript: TRANSCRIPT, env: KEY_ENV, fetch: jev })
   const out = await $.session.compact({ trigger: 'manual', messages: TRANSCRIPT } as never)

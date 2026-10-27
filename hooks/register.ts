@@ -456,6 +456,7 @@ export const register: Register = (on, options) => {
     }
 
     // Scrubbed first, then bounded to its end.
+    // Scrubbed first, then bounded to its end.
     const sent = { last_paragraph: clip(scrub(paragraph, await homeOf($)), PARAGRAPH_CHARS, 'tail') }
     const run = async (hookMs: number): Promise<number | undefined> => {
       const result = await judge($, { sessionId: e.session_id, point: STOP_POINT, cap: settings.stopCap }, key.key, sent, { stop: STOP_QUESTION }, settings.timeoutMs)

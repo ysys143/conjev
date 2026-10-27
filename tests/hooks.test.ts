@@ -38,6 +38,20 @@ test('off by default: a key alone sends nothing', async ($, on) => {
   expect(io.writes.length).toBe(0)
 })
 
+test('the last paragraph is scrubbed before it is cut to its tail', { options: { stopGate: 'shadow' } }, async ($, on) => {
+  // The paragraph is longer than the 600 kept, and a phone number opens it, so
+  // the tail's cut falls inside the number: cutting first would send its
+  // second half, while scrubbing first leaves a label the cut then drops whole.
+  const filler = `010-1234-5678 ${'가 나 '.repeat(400).slice(0, 594)}`
+  const io = setup(on, { env: KEY_ENV, isTimerStopped: true, fetch: () => ANNOUNCE(0.99) })
+  await $.classic.Stop({ stop_hook_active: false, last_assistant_message: filler })
+  await settle(() => records(io.writes, 'stop').length > 0)
+
+  const sentText = JSON.stringify(records(io.writes, 'stop')[0]?.sent)
+  expect(sentText).not.toContain('1234')
+  expect(sentText).not.toContain('5678')
+})
+
 test('shadow: the turn ends at once and the judgment is recorded afterwards, scrubbed', { options: { stopGate: 'shadow' } }, async ($, on) => {
   let release: (r: HttpResponse) => void = () => undefined
   const io = setup(on, { env: KEY_ENV, isTimerStopped: true, fetch: () => new Promise<HttpResponse>(resolve => (release = resolve)) })

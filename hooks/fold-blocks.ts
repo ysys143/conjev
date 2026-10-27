@@ -44,7 +44,7 @@ export async function judgeBlocks($: EngineInterface, messages: readonly Session
   const sessionId = await $.session.id()
   // Scrubbed first, then bounded: a cut before the scrub could leave part
   // of a value the scrub would have replaced.
-  const query = clip(scrub(request, home), REQUEST_CHARS)
+  const query = scrub(request.slice(0, REQUEST_CHARS), home)
   const chosen = [...archived].filter(item => !item.isError).sort((a, b) => b.text.length - a.text.length).slice(0, settings.foldBlocksResults)
   const ask = jevAsker($, { sessionId, point: FOLD_BLOCKS_POINT, cap: settings.foldBlocksCap }, key.key, settings.webTimeoutMs)
   // Past the budget, or with the setting turned off, no further request goes out.
