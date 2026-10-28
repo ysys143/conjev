@@ -130,6 +130,9 @@ test('a ~/.conjev that holds only state still gets the key and the answers', asy
 
   expect(io.files[`${SHARED}/key`]).toBe('ts_old\n')
   expect(io.files[`${SHARED}/consent.json`]).toContain('"consent":true')
+  // The engine puts the plugin's name before a log line; the line does not repeat it.
+  expect(io.logs).toContain('moved ~/.context-harness to ~/.conjev')
+  expect(io.logs.filter(line => line.startsWith('conjev:'))).toEqual([])
   expect(io.files[`${SHARED}/state/records/a/stop/1.json`]).toBe('{}')
   expect(io.files[`${SHARED}/state/records/b/stop/1.json`]).toBe('{}')
   const report = await $.command.run({ command: 'jev-report', args: '' } as never)

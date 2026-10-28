@@ -91,8 +91,9 @@ async function demoteStop($: EngineInterface, threshold: number): Promise<StopDe
   if (!shouldDemoteStop(p)) return undefined
   const demotion = { precision: p.precision!, labeled: p.labeled, at: new Date(await $.clock.now()).toISOString() }
   await $.store.set(STOP_DEMOTED_KEY, demotion)
-  const text = `conjev: the Stop gate was right ${Math.round(demotion.precision * 100)}% of the time over ${demotion.labeled} labels, under ${DEMOTE_PRECISION * 100}%, so it now only records (shadow).`
-  $.ui.toast(text)
+  // The engine puts the plugin's name before a log line; a toast has no owner shown.
+  const text = `the Stop gate was right ${Math.round(demotion.precision * 100)}% of the time over ${demotion.labeled} labels, under ${DEMOTE_PRECISION * 100}%, so it now only records (shadow).`
+  $.ui.toast(`conjev: ${text}`)
   $.ui.log(text)
 
   return demotion
@@ -230,9 +231,9 @@ export const register: Register = (on, options) => {
   on('session.start', async ($, e, next) => {
     // Before anything reads it: the folder from before the rename becomes ~/.conjev.
     try {
-      if (await migrateShared($, await homeOf($))) $.ui.log(`${$.plugin.name}: moved ~/.context-harness to ~/.conjev`)
+      if (await migrateShared($, await homeOf($))) $.ui.log(`moved ~/.context-harness to ~/.conjev`)
     } catch (error) {
-      $.ui.log(`${$.plugin.name}: could not move ~/.context-harness to ~/.conjev (${String(error)})`)
+      $.ui.log(`could not move ~/.context-harness to ~/.conjev (${String(error)})`)
     }
     // The shared folder comes first, then whatever this profile's settings say:
     // a person with several profiles tunes one file rather than each of them.
@@ -240,7 +241,7 @@ export const register: Register = (on, options) => {
     try {
       apply(await sharedState($, options))
     } catch (error) {
-      $.ui.log(`${$.plugin.name}: the shared settings could not be read (${String(error)})`)
+      $.ui.log(`the shared settings could not be read (${String(error)})`)
     }
     // Each half starts on its own, so one that fails leaves the other working.
     try {
@@ -298,7 +299,7 @@ export const register: Register = (on, options) => {
         })
       }
     } catch (error) {
-      $.ui.log(`${$.plugin.name}: could not register its tools (${String(error)})`)
+      $.ui.log(`could not register its tools (${String(error)})`)
     }
     try {
       await $.command.register({ name: 'jev-report', description: 'conjev: what the gates recorded and how Jev agreed with the rules' })
@@ -314,23 +315,23 @@ export const register: Register = (on, options) => {
         showStatus($)
       }
     } catch (error) {
-      $.ui.log(`${$.plugin.name}: the judgment layer did not start (${String(error)})`)
+      $.ui.log(`the judgment layer did not start (${String(error)})`)
     }
     // B2: the state moves under ~/.conjev once; the old root stays readable.
     try {
-      if (await migrateState($)) $.ui.log(`${$.plugin.name}: moved its records and folded originals to ~/.conjev/state`)
+      if (await migrateState($)) $.ui.log(`moved its records and folded originals to ~/.conjev/state`)
     } catch (error) {
-      $.ui.log(`${$.plugin.name}: could not move its state, reading it where it is (${String(error)})`)
+      $.ui.log(`could not move its state, reading it where it is (${String(error)})`)
     }
     try {
       stopDemoted = ((await $.store.get(STOP_DEMOTED_KEY)) as StopDemotion | undefined) ?? (settings.stopGate === 'active' ? await demoteStop($, settings.stopThreshold) : undefined)
     } catch (error) {
-      $.ui.log(`${$.plugin.name}: could not check the Stop gate's labels (${String(error)})`)
+      $.ui.log(`could not check the Stop gate's labels (${String(error)})`)
     }
     try {
       await cleanupRecords($)
     } catch (error) {
-      $.ui.log(`${$.plugin.name}: could not drop old records (${String(error)})`)
+      $.ui.log(`could not drop old records (${String(error)})`)
     }
 
     return next(e)
@@ -389,7 +390,7 @@ export const register: Register = (on, options) => {
         const offer = await boardOffer($, policySettings.phaseFile)
         if (offer !== undefined) await note($, `[conjev] ${offer}`)
       } catch (error) {
-        $.ui.log(`${$.plugin.name}: the status board offer was skipped (${String(error)})`)
+        $.ui.log(`the status board offer was skipped (${String(error)})`)
       }
     }
     // Browser routing first: a prompt that needs a browser operated gets the tool to use, once
@@ -404,7 +405,7 @@ export const register: Register = (on, options) => {
         const carried = settings.browserRoute === 'active' && attachedNames(await $.session.messages({ as: 'api' })).has(BROWSER_BLOCK)
         browserBlock = await routeBrowser($, e.text, e.turnId, carried)
       } catch (error) {
-        $.ui.log(`${$.plugin.name}: browser routing skipped (${String(error)})`)
+        $.ui.log(`browser routing skipped (${String(error)})`)
       }
     }
     const next: typeof nextBelow = Object.assign(
@@ -557,7 +558,7 @@ export const register: Register = (on, options) => {
         if (isSummarized) await forgetAttached($, sessionId)
         await afterCompaction($, policySettings, state, folded)
       } catch (error) {
-        $.ui.log(`${$.plugin.name}: after the compaction (${String(error)})`)
+        $.ui.log(`after the compaction (${String(error)})`)
       }
       if (settings.foldJev === 'shadow') void judgeFold($, e.messages, new Set(archivedIds), view).catch(() => undefined)
     }
@@ -574,7 +575,7 @@ export const register: Register = (on, options) => {
         await writeArchive($, sessionId, [kept])
         isKept = true
       } catch (error) {
-        $.ui.log(`${$.plugin.name}: could not keep the summarized conversation (${String(error)})`)
+        $.ui.log(`could not keep the summarized conversation (${String(error)})`)
       }
       const below = await next({ ...e, messages, instructions })
 
@@ -590,7 +591,7 @@ export const register: Register = (on, options) => {
       try {
         foldPolicy = judgedPolicy(policySettings, await askNeeded($, e.messages, view), settings.foldThreshold)
       } catch (error) {
-        $.ui.log(`${$.plugin.name}: fold relevance skipped (${String(error)})`)
+        $.ui.log(`fold relevance skipped (${String(error)})`)
       }
     }
     const outcome = foldTranscript(e.messages, foldPolicy, view)
@@ -609,7 +610,7 @@ export const register: Register = (on, options) => {
     try {
       await writeArchive($, sessionId, outcome.archived)
     } catch (error) {
-      $.ui.log(`${$.plugin.name}: could not keep folded results, summarizing instead (${String(error)})`)
+      $.ui.log(`could not keep folded results, summarizing instead (${String(error)})`)
       const summarized = await next({ ...e, instructions })
       if (summarized.skip === undefined) {
         await recordCompaction(true)
@@ -627,7 +628,7 @@ export const register: Register = (on, options) => {
         outcome.messages = kept.messages
         outcome.savedChars -= kept.addedChars
       } catch (error) {
-        $.ui.log(`${$.plugin.name}: kept no blocks (${String(error)})`)
+        $.ui.log(`kept no blocks (${String(error)})`)
       }
     } else if (settings.foldBlocks === 'shadow') {
       void judgeBlocks($, e.messages, outcome.archived, 'shadow').catch(() => undefined)
@@ -1009,7 +1010,7 @@ export const register: Register = (on, options) => {
     if (home === undefined) return next(e)
     const smaller = await imageToRead($, filePath, settings.imageMaxPx, stateRoot(home))
     if (smaller === undefined) return next(e)
-    $.ui.log(`${$.plugin.name}: read ${smaller} instead of ${filePath} (over ${settings.imageMaxPx}px)`)
+    $.ui.log(`read ${smaller} instead of ${filePath} (over ${settings.imageMaxPx}px)`)
 
     return next({ ...e, file_path: smaller })
   }).catch((_, e, next) => next(e))
