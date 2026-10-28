@@ -1,5 +1,5 @@
 import type { Register } from 'claude-code'
-import { DEFAULT_SETTINGS, SETTING_KEYS, dueBeforeFold, dueNote, foldTranscript, makePolicy, messageViewOf, partialCut, pointerMessage, reportFor, settingsFrom, sliceLines, transcriptChars, type MessageView, type PolicySettings } from './fold'
+import { DEFAULT_SETTINGS, SETTING_KEYS, dueBeforeFold, dueNote, foldTranscript, makePolicy, messageViewOf, partialCut, pointerMessage, reportFor, settingsFrom, sliceLines, splitForSummary, transcriptChars, type MessageView, type PolicySettings } from './fold'
 import { routeBrowser } from './browser-flow'
 import { BROWSER_BLOCK, BROWSER_POINT } from './browser-route'
 import { FOLD_BLOCKS_POINT, judgeBlocks, withKeptBlocks } from './fold-blocks'
@@ -331,15 +331,18 @@ export const register: Register = (on, options) => {
     const kept = partialCut(outcome.messages, policySettings.keepRecentTurns)
     const isCrowded = transcriptChars(outcome.messages) > context.window * SUMMARIZE_ABOVE_SHARE * CHARS_PER_TOKEN
     const cut = kept > 0 && isCrowded ? kept : 0
-    const below = cut > 0 ? await next({ ...e, messages: outcome.messages.slice(0, cut) }) : undefined
+    const split = cut > 0 ? splitForSummary(outcome.messages, cut) : undefined
+    const below = split !== undefined ? await next({ ...e, messages: split.older }) : undefined
     // A summary the engine refused leaves the conversation as it is: the
     // compaction does not stand, so nothing is recorded or counted.
     if (below !== undefined && below.skip !== undefined) return below
     const isSummarized = below !== undefined
     // A summary carries none of the folded ids it replaced, so the plugin puts
-    // them back itself: the model keeps a way to reach every original.
-    const messages = isSummarized
-      ? [...below.messages, pointerMessage(outcome.archived), ...outcome.messages.slice(cut)]
+    // them back itself: the model keeps a way to reach every original. The
+    // person's own prompts come back the same way — a summary would have
+    // replaced the only copy of what they said.
+    const messages = isSummarized && split !== undefined
+      ? [...below.messages, pointerMessage(outcome.archived), ...split.keptPrompts, ...outcome.messages.slice(cut)]
       : outcome.messages
     runtime.folded.results += outcome.archived.length
     runtime.folded.savedChars += outcome.savedChars

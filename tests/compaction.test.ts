@@ -402,3 +402,20 @@ test('an uncrowded fold leaves the transcript whole; no summary runs', { options
 
   expect(io.summarizedOver.length).toBe(0)
 })
+
+test('a summary never swallows what the person said: their prompts come back whole', { options: { foldJev: 'shadow' } }, async ($, on) => {
+  // A tiny window makes the folded transcript look crowded, so the summary
+  // runs. The middle prompt is older than the recent window.
+  const io = setup(on, { transcript: OLD, env: KEY_ENV, fetch: everyQuestion, window: 10 })
+  const out = await $.session.compact({ trigger: 'manual', messages: OLD } as never)
+
+  // What the engine was handed holds no message the person wrote.
+  const handed = io.summarizedOver[0] ?? []
+  expect(handed).not.toContain('Look at a.ts')
+  expect(handed).not.toContain('next')
+  // Their words are in the result, before the recent window.
+  const texts = (out.messages ?? []).map(m => m.text)
+  expect(texts).toContain('Look at a.ts')
+  expect(texts).toContain('next')
+  expect(texts.indexOf('Look at a.ts')).toBeLessThan(texts.indexOf('and next'))
+})

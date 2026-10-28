@@ -221,6 +221,27 @@ export function pointerMessage(archived: readonly Archived[]): SessionMessage {
 const isPrompt = (message: SessionMessage): boolean =>
   message.role === 'user' && (message.toolResults ?? []).length === 0 && message.text.trim() !== ''
 
+/**
+ * A prompt the person wrote: not a tool result, an injected `<tag>` block, a
+ * `/command`, or one of this plugin's own notes.
+ *
+ * The partial cut turns on this rather than on `isPrompt`: a reminder the
+ * engine injected counts as a turn for the fold's own counting, but it is not
+ * something the person said, so it does not have to be carried over a summary.
+ */
+export const isPersonsPrompt = (message: SessionMessage): boolean => {
+  const text = message.text.trimStart()
+
+  return (
+    message.role === 'user' &&
+    (message.toolResults ?? []).length === 0 &&
+    text !== '' &&
+    !text.startsWith('<') &&
+    !text.startsWith('/') &&
+    !NOTE_MARKS.some(mark => text.startsWith(mark))
+  )
+}
+
 const toolUses = (messages: readonly SessionMessage[]): Map<string, ToolUseSummary> => {
   const uses = new Map<string, ToolUseSummary>()
   for (const message of messages) for (const use of message.toolUses) uses.set(use.tool_use_id, use)
@@ -260,6 +281,24 @@ export function turnsAgoOf(messages: readonly SessionMessage[]): number[] {
   }
 
   return turnsAgoAt
+}
+
+/**
+ * What the engine is handed for a partial summary: everything before `cut`,
+ * with the person's own prompts taken out.
+ *
+ * A summary replaces what it is handed, and the person's words are the one
+ * thing in the transcript that exists nowhere else — the canonical files hold
+ * the agent's reading of them, not the words. So they are lifted out here and
+ * put back by the caller, in order, ahead of the recent window.
+ */
+export function splitForSummary(messages: readonly SessionMessage[], cut: number): { older: SessionMessage[]; keptPrompts: SessionMessage[] } {
+  const before = messages.slice(0, cut)
+
+  return {
+    older: before.filter(message => !isPersonsPrompt(message)),
+    keptPrompts: before.filter(isPersonsPrompt),
+  }
 }
 
 type ApiBlock = { type: string; [field: string]: unknown }
