@@ -1,6 +1,6 @@
 import type { SessionMessage } from 'claude-code'
 import { expect, test } from 'claude-code/testing'
-import { FOLD_MARK, foldTranscript, pointerFor, shouldFold, sliceLines, type FoldCandidate, type FoldPolicy } from '../hooks/fold'
+import { FOLD_MARK, foldTranscript, partialCut, pointerFor, shouldFold, sliceLines, type FoldCandidate, type FoldPolicy } from '../hooks/fold'
 
 const BIG = Array.from({ length: 300 }, (_, i) => `line ${i + 1}`).join('\n')
 
@@ -123,4 +123,26 @@ test('read_coordinate answers with the archived lines', async ($, on) => {
   const missing = await $.tool.call({ tool: 'mcp__context-harness__read_coordinate', id: 'toolu_gone' })
   expect(missing.isError).toBe(true)
   expect(typeof missing.result).toBe('string')
+})
+
+test('the partial cut falls on a prompt, keeping that many turns whole', () => {
+  // Six messages, two prompts: "read the app" and "now the config".
+  expect(partialCut(TRANSCRIPT, 1)).toBe(3)
+  expect(partialCut(TRANSCRIPT, 2)).toBe(0)
+  expect(partialCut(TRANSCRIPT, 3)).toBe(0)
+  expect(partialCut(TRANSCRIPT, 0)).toBe(0)
+})
+
+test('the partial cut never splits a tool_use from its tool_result', () => {
+  const cut = partialCut(TRANSCRIPT, 1)
+  const older = TRANSCRIPT.slice(0, cut)
+  const recent = TRANSCRIPT.slice(cut)
+
+  // The older part ends before the kept window's prompt; every call before the
+  // cut has its answer before it too, so no pair is split.
+  expect(older.at(-1)?.toolResults?.[0]?.tool_use_id).toBe('toolu_old')
+  expect(TRANSCRIPT[cut]?.text).toBe('now the config')
+  // The kept window opens with the prompt whose call and answer follow it.
+  expect(recent[1]?.toolUses[0]?.tool_use_id).toBe('toolu_new')
+  expect(recent[2]?.toolResults?.[0]?.tool_use_id).toBe('toolu_new')
 })

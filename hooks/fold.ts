@@ -212,6 +212,28 @@ const toolUses = (messages: readonly SessionMessage[]): Map<string, ToolUseSumma
   return uses
 }
 
+/**
+ * Where to split a transcript for a partial summary: the index of the first
+ * message the recent window keeps whole, or 0 when there is nothing to
+ * summarize.
+ *
+ * The cut falls on a prompt the person wrote, never inside a tool_use and its
+ * tool_result: the engine is handed everything before it and keeps the rest as
+ * it stands, so a pair is never split across the boundary. `keepTurns` counts
+ * prompts backwards from the end; 0 or fewer means nothing is kept.
+ */
+export function partialCut(messages: readonly SessionMessage[], keepTurns: number): number {
+  if (keepTurns <= 0) return 0
+  let seen = 0
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (!isPrompt(messages[i]!)) continue
+    seen++
+    if (seen === keepTurns) return i
+  }
+
+  return 0
+}
+
 /** For each message, how many prompts come after it. */
 export function turnsAgoOf(messages: readonly SessionMessage[]): number[] {
   const turnsAgoAt: number[] = []
