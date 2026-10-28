@@ -30,7 +30,7 @@ conjev는 Claude Code의 mod API(function hooks)로 작성한 Claude Code 플러
 Claude Code 2.1.306 이상이 필요하다. 이 플러그인이 쓰는 mod API는 early access로 표시되어 있어 릴리스 사이에 바뀔 수 있다. Claude Code 터미널 세션의 프롬프트에서 다음을 실행한다.
 
 ```text
-/plugin install conjev --marketplace ysys143/context-harness
+/plugin install conjev --marketplace ysys143/conjev
 ```
 
 marketplace를 추가할지 물으면 `y`로 답하고 scope를 고른다. 설치 화면에 설정이 지정되지 않았다고 나올 수 있는데, `/config`에서 바꾸기 전까지는 [아래](#접기의-동작-방식)의 기본값이 적용된다.
@@ -38,8 +38,8 @@ marketplace를 추가할지 물으면 `y`로 답하고 scope를 고른다. 설�
 <details>
 <summary>셸이나 데스크톱 앱에서 설치하기</summary>
 
-- 셸: `claude plugin install conjev --marketplace ysys143/context-harness`
-- `/plugin`이 동작하지 않는 데스크톱 앱: 프롬프트 입력창 옆의 + → Plugins → Add marketplace에 `ysys143/context-harness`를 입력한 뒤 Add plugin을 누른다.
+- 셸: `claude plugin install conjev --marketplace ysys143/conjev`
+- `/plugin`이 동작하지 않는 데스크톱 앱: 프롬프트 입력창 옆의 + → Plugins → Add marketplace에 `ysys143/conjev`를 입력한 뒤 Add plugin을 누른다.
 
 </details>
 
@@ -463,9 +463,9 @@ conjev는 각 아이디어를 시험하려고 따로 만든 두 플러그인, [c
 ## 개발
 
 ```sh
-claude --plugin-dir /path/to/context-harness   # 플러그인을 로드한 세션
-claude plugin test /path/to/context-harness    # tests/*.test.ts
-claude plugin validate /path/to/context-harness
+claude --plugin-dir /path/to/conjev   # 플러그인을 로드한 세션
+claude plugin test /path/to/conjev    # tests/*.test.ts
+claude plugin validate /path/to/conjev
 ```
 
 테스트는 318개이며, 접기와 Jev를 기본으로 바꾸기 전의 254개보다 64개 많다. 이 작업에서는 결함 39개를 잡아야 할 테스트와 함께 하나씩 심어 보았고, 매번 테스트가 하나 이상 실패했다: `auto`가 동의 없이 켜지거나 끝내 켜지지 않음; `jev: off`를 무시함; `/jev-consent`가 기록하지 않음; 첫 실행 안내가 시작되지 않거나, 마치거나 거절한 뒤에도 다시 시작함; 세션 중에 놓은 키가 `auto`를 켜지 않음; `/config`가 공유 파일보다 우선하거나 접기가 프로필의 정책을 계속 씀; 바뀐 공유 파일이 반영되지 않거나 감시되지 않음; 옛 상태 폴더를 옮기지 않거나, 새 폴더 위로 옮기거나, 옛 폴더의 아카이브나 기록을 더는 읽지 않거나, 보호하지 않음; 자동 압축을 판단하지 않음; 접기 전 정리 턴을 Stop 게이트가 붙잡음(양쪽 경로 모두); 접기 판단의 발췌를 보내지 않거나, 가리지 않거나, 자르지 않음; 도구 입력을 접지 않음; 요약된 대화를 보관하지 않음; `/compact` 지시를 넘기지 않거나 플러그인의 요청 뒤에 둠; 재압축 카운터를 초기화하지 않거나 보고 줄이 빠짐; Stop 게이트 강등이 적용되지 않거나, precision 기준이나 라벨 수를 무시하거나, `/jev-mark`가 점검하지 않음; 보고에서 지연 시간이 빠지거나 2초 timeout이 바뀜; Jev의 지시 판독을 `active`에서 적용하지 않거나, `shadow`에서 적용하거나, 규칙의 결정에까지 적용함; `read_coordinate`가 마지막 요청이나 줄 범위를 무시함. 처음 심었을 때 살아남은 결함이 둘 있었다. 규칙의 결정에까지 적용하는 결함은 테스트가 제목 대신(빠진 줄이 제목을 다시 적는다) Orca 규칙의 본문을 확인하도록 고친 뒤 실패했고, `shadow`에서 적용하는 결함은 두 번째 조건이 가리고 있어 두 조건을 함께 없애도록 다시 심은 뒤 실패했다. 그 전에는 테스트가 254개였고, 브라우저 라우팅과 블록 판단 작업이 남긴 것보다 79개 많았다. 그 작업에 대해서는 아래 결함을 하나씩 심어 보았고, 매번 테스트가 하나 이상 실패했다: PII 이식본을 바꿈(입력 2,614건을 비교하는 parity 테스트 하나); 접힌 메시지의 이미지를 버림, 문서를 이미지와 다르게 처리함; dry-run이나 접기 판단이 api 보기를 읽지 않음; 가리기 전에 자름(도구 게이트, 브라우저 라우팅, 접기 판단의 요청과 호출 줄, 블록 유지 요청, Stop 게이트의 문단); 조직 파일을 자르거나 대체함; 접기가 접지 않을 결과까지 판정함; 요약이 대체하는 구간에 사용자 프롬프트를 남김; 상황판이 오래됐는데 요약을 실행함; 요약 뒤에 접힌 포인터를 되돌리지 않음; 자동 접기가 기다리기 시작한 시각을 기록하지 않음; 압축을 기록하지 않거나 트리거를 잘못 기록함; 요약 중 표시를 하지 않음; 노트에서 Handoff 안내를 빼거나 상황판에 Handoff 절이 있다고 봄; 3시간 제안이 동의로 넘어가지 않음; 제안의 답을 무조건 동의로 읽음; 압축 보고를 빈 것으로 보여 줌; 작은 이미지도 축소함; 빠뜨린 줄 범위를 알리지 않음; 공유 설정을 무시함; `/conjev:onboard`가 키 출처를 숨기거나, 다시 실행해도 키를 새로 찾지 않거나, 세션 중에 놓은 키를 게이트에 넘기지 않거나, 플러그인 접두어가 붙은 자기 이름을 알아보지 못하거나, 특정 사용자의 키 파일 경로를 적음; 그리고 `active`인 접기 관련성이 하한선을 무시하거나, 접기를 정하지 않거나, 자동 압축에서도 물어봄. 배선 하나만 실패하는 테스트가 없다. 접기 타이머가 하는 유휴 판정을 지워도 통과한다([한계](#한계) 참고). 지시 필터에 대해 심은 결함은 다음과 같다: 결함 19개를 하나씩 다시 심어 보았고, 매번 테스트가 하나 이상 실패했다. 지시 필터에 대해 심은 결함은 다음과 같다: 항상 유지 목록을 무시함, 미룬 chunk를 다른 chunk의 내용을 이미 말하는 것으로 셈, 사용자 규칙 때문에 프로젝트 규칙을 뺌, 늦게 온 Jev 답을 버림, 첨부 fragment 개수 계산이 읽을 수 없는 chunk 이름, 메모리나 조직 파일을 자름, 코드 펜스 안의 제목을 절로 인식함, 설정이 꺼져 있는데 기록을 씀. 0.0.1부터 있던 결함은 다음과 같다: 폴더 전체를 대상으로 한 정리, 판단에 고정된 크기 하한을 씀, 예전 방식의 턴 계산, 읽을 수 있는 상태로 남은 폴더, 실패한 `chmod`를 무시함, 아카이브를 직접 읽을 수 있음, `HOME` 없이 실행한 `/compact`, 대화를 보지 않고 센 fragment 개수, 기억하지 못한 대기 중 프롬프트, 접기 뒤의 실패가 접기를 되돌림, 인용된 여는 태그를 블록으로 인식함.
