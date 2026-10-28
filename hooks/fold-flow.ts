@@ -110,3 +110,63 @@ export async function judgeFold($: EngineInterface, messages: readonly SessionMe
   }
   showStatus($)
 }
+
+/**
+ * Fold relevance, active: asks Jev, before the fold, which results the current
+ * request still needs, and returns its probability for each by call id. The
+ * caller builds the fold policy from it (`judgedPolicy`).
+ *
+ * Asked about are the results the rule would fold if recency did not count:
+ * those the rule folds already (Jev may keep one), and those it keeps only for
+ * being recent (Jev may fold one). Each judgment is recorded with what it
+ * decided. A missing key, a missing request or a failed call leaves the map
+ * without that result, and the rule then decides it alone.
+ */
+export async function askNeeded($: EngineInterface, messages: readonly SessionMessage[], view?: MessageView): Promise<Map<string, number>> {
+  const settings = settingsOf()
+  const policy = runtime.policy
+  const needed = new Map<string, number>()
+  const key = await keyFor($)
+  const request = currentRequest(messages)
+  const home = await homeOf($)
+  if (key === undefined || request === undefined || policy === undefined || home === undefined) return needed
+  const cwd = await $.session.cwd()
+  const sessionId = await $.session.id()
+  const candidates = foldCandidates(messages, { ...policy, keepRecentTurns: 0 }, home, cwd, 48, view)
+  const sent = { current_request: clip(scrub(request, home), 400) }
+  for (let start = 0; start < candidates.length; start += 24) {
+    const batch = candidates.slice(start, start + 24)
+    const t0 = await $.clock.now()
+    const questions = Object.fromEntries(batch.map((candidate, i) => [`r${i}`, foldQuestion(clip(scrub(candidate.call, home), CALL_CHARS))]))
+    const result = await judge($, { sessionId, point: FOLD_POINT, cap: settings.foldCap }, key.key, sent, questions, settings.timeoutMs * 2)
+    for (const [i, candidate] of batch.entries()) {
+      const answer = result.ok ? result.answers[`r${i}`] : undefined
+      const p = answer === undefined ? undefined : probabilityOf(answer, 'needed')
+      if (p !== undefined) {
+        needed.set(candidate.id, p)
+        runtime.counts.foldJudged++
+      }
+      const ruleFolds = candidate.turnsAgo >= policy.keepRecentTurns
+      await writeRecord($, {
+        id: newId(t0),
+        ts: new Date(t0).toISOString(),
+        sessionId,
+        joinKey: candidate.id,
+        point: FOLD_POINT,
+        mode: 'active',
+        heuristic: ruleFolds,
+        sent: { ...sent, call: clip(scrub(candidate.call, home), CALL_CHARS) },
+        jev: p === undefined ? undefined : 1 - p,
+        usage: result.ok && i === 0 ? result.usage : undefined,
+        error: errorOf(result),
+        jevMs: result.ms,
+        hookMs: 0,
+        decision: p === undefined ? (ruleFolds ? 'fold' : 'keep') : p < settings.foldThreshold ? 'fold' : 'keep',
+        facts: { tool: candidate.tool, chars: String(candidate.chars), turnsAgo: String(candidate.turnsAgo), policyFolds: String(ruleFolds) },
+      })
+    }
+  }
+  showStatus($)
+
+  return needed
+}

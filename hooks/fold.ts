@@ -16,6 +16,8 @@ export type FoldCandidate = {
   isError: boolean
   /** How many prompts came after this result; 0 is the turn still in view. */
   turnsAgo: number
+  /** The call id, for a policy that decides result by result (the Jev-backed one). */
+  id?: string
 }
 
 export type FoldPolicy = (candidate: FoldCandidate) => boolean
@@ -391,6 +393,7 @@ export function foldableResults(messages: readonly SessionMessage[], policy: Fol
         text: result.text,
         isError: result.isError,
         turnsAgo: turnsAgoAt[i] ?? 0,
+        id: result.tool_use_id,
       }
       const pointer = pointerFor(result.tool_use_id, candidate)
       // A pointer longer than what it replaces saves nothing.

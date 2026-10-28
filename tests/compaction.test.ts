@@ -680,3 +680,50 @@ test('read_coordinate with full returns the whole original even with a query', {
   expect(String(result.result)).toContain('line 1 of the server log')
   expect(io.fetches.length).toBe(0)
 })
+
+const neededAt = (p: number) => (body: Record<string, unknown>): HttpResponse => ({
+  status: 200,
+  ok: true,
+  headers: {},
+  text: JSON.stringify({
+    model: 'jev-1.14.0',
+    answers: Object.fromEntries(Object.keys(body.questions as object).map(name => [name, { type: 'choice', choice: p >= 0.5 ? 'needed' : 'done', confidence: 0.9, probabilities: { needed: p, done: 1 - p } }])),
+    usage: { input_tokens: 400, output_tokens: 40 },
+  }),
+})
+const folded = (out: { messages?: readonly SessionMessage[] }): boolean => (out.messages ?? []).some(m => m.toolResults?.some(r => r.text.startsWith('[folded ')))
+
+test('fold relevance active: a result Jev says is still needed stays whole', { options: { foldJev: 'active' } }, async ($, on) => {
+  const io = setup(on, { transcript: OLD, env: KEY_ENV, fetch: neededAt(0.9) })
+  const out = await $.session.compact({ trigger: 'manual', messages: OLD } as never)
+
+  expect(io.fetches.length).toBeGreaterThan(0)
+  expect(folded(out)).toBe(false)
+  expect(records(io.writes, 'fold')[0]?.decision).toBe('keep')
+})
+
+test('fold relevance active: a result Jev says is done with is folded', { options: { foldJev: 'active' } }, async ($, on) => {
+  const io = setup(on, { transcript: OLD, env: KEY_ENV, fetch: neededAt(0.05) })
+  const out = await $.session.compact({ trigger: 'manual', messages: OLD } as never)
+
+  expect(folded(out)).toBe(true)
+  expect(records(io.writes, 'fold')[0]?.decision).toBe('fold')
+})
+
+test('fold relevance active: a finished result still inside the recent window is folded', { options: { foldJev: 'active', keepRecentTurns: 5 } }, async ($, on) => {
+  // keepRecentTurns 5 keeps everything for the rule; Jev says the read is done with.
+  const io = setup(on, { transcript: OLD, env: KEY_ENV, fetch: neededAt(0.05) })
+  const out = await $.session.compact({ trigger: 'manual', messages: OLD } as never)
+
+  expect(folded(out)).toBe(true)
+  expect(io.fetches.length).toBeGreaterThan(0)
+})
+
+test('fold relevance active: an automatic compaction asks Jev nothing, so nobody waits', { options: { foldJev: 'active' } }, async ($, on) => {
+  const io = setup(on, { transcript: OLD, env: KEY_ENV, fetch: neededAt(0.9) })
+  const out = await $.session.compact({ trigger: 'plugin', messages: OLD } as never)
+
+  expect(io.fetches.length).toBe(0)
+  // The rule alone decided, and it folds the old read.
+  expect(folded(out)).toBe(true)
+})

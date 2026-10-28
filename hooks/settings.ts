@@ -19,7 +19,8 @@ export type HarnessSettings = {
   fragmentsDir: string
   instructionThreshold: number
   instructionCap: number
-  foldJev: 'off' | 'shadow'
+  foldJev: Mode
+  foldThreshold: number
   foldCap: number
   instructionFilter: Mode
   webRead: Mode
@@ -64,7 +65,8 @@ export function harnessSettingsFrom(options: Readonly<Record<string, unknown>>):
     fragmentsDir: typeof options.fragmentsDir === 'string' && options.fragmentsDir.trim() !== '' ? options.fragmentsDir : '~/.agents/fragments',
     instructionThreshold: numberOf(options.instructionThreshold, 0.95, 0, 1),
     instructionCap: numberOf(options.instructionCap, 200, 0, 10_000),
-    foldJev: options.foldJev === 'shadow' ? 'shadow' : 'off',
+    foldJev: modeOf(options.foldJev),
+    foldThreshold: numberOf(options.foldThreshold, 0.3, 0, 1),
     foldCap: numberOf(options.foldCap, 20, 0, 1000),
     instructionFilter: modeOf(options.instructionFilter),
     webRead: modeOf(options.webRead),

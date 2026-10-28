@@ -1,6 +1,7 @@
 import type { SessionMessage } from 'claude-code'
 import { expect, test } from 'claude-code/testing'
-import { FOLD_MARK, foldTranscript, partialCut, pointerFor, shouldFold, sliceLines, stillIdle, type FoldCandidate, type FoldPolicy } from '../hooks/fold'
+import { DEFAULT_SETTINGS, FOLD_MARK, foldTranscript, partialCut, pointerFor, shouldFold, sliceLines, stillIdle, type FoldCandidate, type FoldPolicy } from '../hooks/fold'
+import { judgedPolicy } from '../hooks/fold-judge'
 
 const BIG = Array.from({ length: 300 }, (_, i) => `line ${i + 1}`).join('\n')
 
@@ -156,4 +157,24 @@ test('an automatic fold stands down when the person writes first', () => {
   expect(stillIdle(1000, 1000)).toBe(true)
   // They wrote while it waited: their turn goes first.
   expect(stillIdle(1001, 1000)).toBe(false)
+})
+
+test('with Jev judging, a needed result stays, a finished recent one folds, and the rule stays the floor', () => {
+  const settings = { ...DEFAULT_SETTINGS, keepRecentTurns: 2, minFoldChars: 100 }
+  const big = 'x'.repeat(500)
+  const at = (id: string, turnsAgo: number, extra: Partial<FoldCandidate> = {}): FoldCandidate => ({ id, tool: 'Read', input: {}, text: big, isError: false, turnsAgo, ...extra })
+  const policy = judgedPolicy(settings, new Map([['old-needed', 0.8], ['old-done', 0.1], ['recent-done', 0.05], ['recent-needed', 0.9], ['small-done', 0.0], ['err-done', 0.0]]), 0.3)
+
+  // Old enough for the rule to fold: Jev keeps the one still needed.
+  expect(policy(at('old-needed', 5))).toBe(false)
+  expect(policy(at('old-done', 5))).toBe(true)
+  // Recent, so the rule keeps it: Jev folds the one it says is done with.
+  expect(policy(at('recent-done', 0))).toBe(true)
+  expect(policy(at('recent-needed', 0))).toBe(false)
+  // The floor holds whatever Jev says: too small, or a short error.
+  expect(policy(at('small-done', 5, { text: 'tiny' }))).toBe(false)
+  expect(policy(at('err-done', 5, { isError: true, text: 'E'.repeat(150) }))).toBe(false)
+  // Not judged: the rule's own verdict, so a failed request never folds more.
+  expect(policy(at('unjudged-old', 5))).toBe(true)
+  expect(policy(at('unjudged-recent', 0))).toBe(false)
 })

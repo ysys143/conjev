@@ -3,7 +3,7 @@
 // fold policy itself did. Compaction rebuilds the prompt cache anyway, so this
 // is where such a judgment costs no cache. Nothing here changes the compaction.
 import type { SessionMessage, ToolUseSummary } from 'claude-code'
-import { NOTE_MARKS, foldableResults, makePolicy, type PolicySettings } from './fold'
+import { NOTE_MARKS, foldableResults, makePolicy, type FoldPolicy, type PolicySettings } from './fold'
 import type { JevQuestion } from './jev'
 import { normalizePath, targetOfCommand, targetOfPath } from './tool-gate'
 
@@ -83,6 +83,35 @@ export function foldCandidates(messages: readonly SessionMessage[], settings: Po
     }))
     .sort((a, b) => b.chars - a.chars)
     .slice(0, limit)
+}
+
+/**
+ * The fold policy once Jev has judged: `needed` holds, by call id, Jev's
+ * probability that the current request still needs a result.
+ *
+ * The rule stays the floor. A result the rule keeps for reasons that are not
+ * about relevance — a short error, a tool whose output is current state, a
+ * result too small to be worth a read_coordinate call — is never folded.
+ * Inside that floor Jev decides both ways:
+ *
+ * - a result the rule would fold, but Jev says is still needed, stays whole;
+ * - a result the rule keeps only because it is recent, but Jev says is done
+ *   with, is folded.
+ *
+ * A result Jev did not judge (a failed request, a cap reached) gets the rule's
+ * own verdict, so a judgment that goes wrong never folds more than the rule.
+ */
+export function judgedPolicy(settings: PolicySettings, needed: ReadonlyMap<string, number>, threshold: number): FoldPolicy {
+  const rule = makePolicy(settings)
+  const floor = makePolicy({ ...settings, keepRecentTurns: 0 })
+
+  return candidate => {
+    const p = candidate.id === undefined ? undefined : needed.get(candidate.id)
+    if (p === undefined) return rule(candidate)
+    if (!floor(candidate)) return false
+
+    return p < threshold
+  }
 }
 
 // Measured with jev-1.14.0 on 10 results of a bug-fix request: results the

@@ -4,8 +4,8 @@ import { routeBrowser } from './browser-flow'
 import { BROWSER_BLOCK, BROWSER_POINT } from './browser-route'
 import { FOLD_BLOCKS_POINT, judgeBlocks, withKeptBlocks } from './fold-blocks'
 import { parseText } from './blocks'
-import { FOLD_POINT } from './fold-judge'
-import { afterCompaction, anchorsOf, judgeFold, note, since, type Continuity } from './fold-flow'
+import { FOLD_POINT, judgedPolicy } from './fold-judge'
+import { afterCompaction, anchorsOf, askNeeded, judgeFold, note, since, type Continuity } from './fold-flow'
 import { askConditions, attachedNow, forgetAttached, fragmentsDirOf, loadFragments, pendingOf, recordFragments, rememberWouldAttach, wouldAttach } from './fragment-flow'
 import { INSTRUCTIONS_POINT, attachedNames, decideFragments, fragmentBlock, keywordHit, pinnedSection } from './instructions'
 import { probabilityOf, type JevResult } from './jev'
@@ -433,10 +433,22 @@ export const register: Register = (on, options) => {
       } catch (error) {
         $.ui.log(`${$.plugin.name}: after the compaction (${String(error)})`)
       }
-      if (settings.foldJev !== 'off') void judgeFold($, e.messages, new Set(archivedIds), view).catch(() => undefined)
+      if (settings.foldJev === 'shadow') void judgeFold($, e.messages, new Set(archivedIds), view).catch(() => undefined)
     }
 
-    const outcome = foldTranscript(e.messages, policy, view)
+    // Fold relevance, active: Jev decides which results are still needed before
+    // the fold, so the fold keeps those and takes the finished ones, recent or
+    // not. Only when a person asked for the compaction: on the automatic path
+    // the wait would land on them as they finish reading an answer.
+    let foldPolicy = policy
+    if (settings.foldJev === 'active' && e.trigger === 'manual') {
+      try {
+        foldPolicy = judgedPolicy(policySettings, await askNeeded($, e.messages, view), settings.foldThreshold)
+      } catch (error) {
+        $.ui.log(`${$.plugin.name}: fold relevance skipped (${String(error)})`)
+      }
+    }
+    const outcome = foldTranscript(e.messages, foldPolicy, view)
     if (outcome.archived.length === 0) {
       const summarized = await next(e)
       if (summarized.skip === undefined) {

@@ -182,13 +182,20 @@
     },
     "foldJev": {
       "type": "string",
-      "title": "Fold relevance (shadow only)",
-      "description": "off: nothing. shadow: at each compaction, Jev judges which large earlier tool results the current request still needs, beside what the fold policy itself folded, and records it; your last prompt (scrubbed) and each result's tool and target are sent, never the contents.",
+      "title": "Fold relevance",
+      "description": "off: nothing. shadow: at each compaction Jev judges which large earlier tool results the current request still needs, beside what the policy folded, and records it. active: a result Jev says is finished with is folded even inside the recent window, and one it says is still needed is left whole; the judgment is made only when a person asks for the compaction, never on the automatic path, so no one waits for it. Your last prompt (scrubbed) and each result's tool and target are sent, never the contents.",
       "options": [
         "off",
-        "shadow"
+        "shadow",
+        "active"
       ],
       "default": "off"
+    },
+    "foldThreshold": {
+      "type": "number",
+      "title": "Fold relevance: still needed from",
+      "description": "With fold relevance active, a result Jev gives at least this probability of still being needed stays whole. Measured with jev-1.14.0 on one bug-fix request: results the fix needed got 0.38-0.85, the others 0.00-0.26.",
+      "default": 0.3
     },
     "foldCap": {
       "type": "number",
