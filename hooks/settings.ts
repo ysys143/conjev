@@ -34,6 +34,7 @@ export type HarnessSettings = {
   browserCap: number
   browserBlocked: string
   browserCdp: string
+  imageMaxPx: number
 }
 
 const modeOf = (value: unknown): Mode => (value === 'shadow' || value === 'active' ? value : 'off')
@@ -76,6 +77,7 @@ export function harnessSettingsFrom(options: Readonly<Record<string, unknown>>):
     browserRoute: modeOf(options.browserRoute),
     browserThreshold: numberOf(options.browserThreshold, 0.9, 0, 1),
     browserCap: numberOf(options.browserCap, 200, 0, 10_000),
+    imageMaxPx: numberOf(options.imageMaxPx, 0, 0, 4096),
     browserBlocked: typeof options.browserBlocked === 'string' ? options.browserBlocked : '',
     browserCdp: typeof options.browserCdp === 'string' ? options.browserCdp : '',
   }

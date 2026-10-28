@@ -16,6 +16,7 @@ import { clip, scrub } from './scrub'
 import { harnessSettingsFrom, usesJev } from './settings'
 import { newId, runtime, startRuntime } from './state'
 import { OFFER_TIMEOUT_MS, boardHasHandoff, boardOfferStep, handoffGap, offerAccepted, repoStateOf, type BoardOffer } from './repostate'
+import { imageToRead } from './image-size'
 import { showStatus } from './status'
 import { PARAGRAPH_CHARS, STOP_MESSAGE, STOP_POINT, STOP_QUESTION, announcesByRule, lastParagraph, stopSkipReason } from './stop-gate'
 import { cleanupRecords, homeOf, legacyArchiveRoot, readArchived, readRecords, stateRoot, writeArchive, writeLabel, writeRecord } from './storage'
@@ -747,6 +748,23 @@ export const register: Register = (on, options) => {
     // The floor fails closed when active: a guard that broke refuses rather than lets through.
     next.called || settings.toolGate !== 'active' ? next(e) : { deny: 'context-harness: the tool guard failed, so this call was refused.' },
   )
+
+  // A Read of a large image reads a smaller copy instead. An image is not
+  // folded and not summarized away while it is recent, so its size is paid for
+  // on every request until the session ends; this is where it can be cut.
+  on('tool.call', { tool: 'Read' }, async ($, e, next) => {
+    if (settings.imageMaxPx <= 0) return next(e)
+    const input = e as unknown as { file_path?: unknown }
+    const filePath = typeof input.file_path === 'string' ? input.file_path : ''
+    if (filePath === '') return next(e)
+    const home = await homeOf($)
+    if (home === undefined) return next(e)
+    const smaller = await imageToRead($, filePath, settings.imageMaxPx, stateRoot(home))
+    if (smaller === undefined) return next(e)
+    $.ui.log(`${$.plugin.name}: read ${smaller} instead of ${filePath} (over ${settings.imageMaxPx}px)`)
+
+    return next({ ...e, file_path: smaller })
+  }).catch((_, e, next) => next(e))
 
   on('tool.call', { tool: 'mcp__context-harness__read_coordinate' }, async ($, e) => {
     const input = e as unknown as { id?: unknown; offset?: unknown; limit?: unknown }

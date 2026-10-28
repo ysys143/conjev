@@ -299,6 +299,12 @@
       "title": "CDP tool to suggest last",
       "description": "How to name a Chrome DevTools Protocol tool you use (for example an MCP server), suggested when none of the others is installed. Empty: none.",
       "default": ""
+    },
+    "imageMaxPx": {
+      "type": "number",
+      "title": "Downscale Read images over (pixels; 0 = off)",
+      "description": "A Read of a PNG or JPEG larger than this on its long side reads a smaller copy instead. An image costs about width*height/750 tokens and a fold cannot reach it, so a large screenshot is paid for on every request until the session ends.",
+      "default": 0
     }
   }
 }

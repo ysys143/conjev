@@ -38,6 +38,10 @@ export type Setup = {
   startedAt?: number
   /** What `git status --porcelain=v2 --branch` answers, as the repository would print it. */
   gitStatus?: string
+  /** What an image-size command answers (`sips -g pixelWidth -g pixelHeight`), as it would print it. */
+  imageSize?: string
+  /** Exit code for the resize command, when a test wants it to fail. */
+  resizeFails?: boolean
   /** What the engine's own compaction beneath answers: a summary, or a skip. */
   compactBelow?: 'summary' | 'skip'
   /** The plugin folder's .env, wherever the plugin root is. */
@@ -133,8 +137,13 @@ export const setup = (on: On, s: Setup = {}) => {
     runs.push([...e.argv])
     disk.push(`run ${e.argv[0]}`)
     const isGit = e.argv[0] === 'git'
-    const stdout = isGit ? (s.gitStatus ?? '') : ''
-    const exitCode = e.argv[0] === s.failRun || (isGit && s.gitStatus === undefined) ? 1 : 0
+    const isMeasure = e.argv.includes('-g') || e.argv[0] === 'identify'
+    const isResize = e.argv.includes('-Z') || e.argv.includes('-resize')
+    const stdout = isGit ? (s.gitStatus ?? '') : isMeasure ? (s.imageSize ?? '') : ''
+    const exitCode =
+      e.argv[0] === s.failRun || (isGit && s.gitStatus === undefined) || (isMeasure && s.imageSize === undefined) || (isResize && s.resizeFails === true)
+        ? 1
+        : 0
     return { value: { exitCode, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
   })
   on('clock.now', () => ({ value: (now += 5) }))
