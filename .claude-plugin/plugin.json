@@ -226,7 +226,7 @@
     "instructionFilter": {
       "type": "string",
       "title": "Instruction filter (CLAUDE.md, AGENTS.md)",
-      "description": "auto (default): active once a key is in place, jev is on, and you consented with /jev-consent; off until then. off: nothing. shadow: each time the instruction files load, records which chunks are loaded twice and, with a key, Jev's reading of which chunks every request needs and which repeat earlier ones; the scrubbed instruction text, and for chunks Jev would defer your prompts (first 600 characters), are sent to TypeSafe. active: chunks loaded twice byte for byte are left out; Jev's readings are still only recorded.",
+      "description": "auto (default): active once a key is in place, jev is on, and you consented with /jev-consent; off until then. off: nothing. shadow: each time the instruction files load, records which chunks are loaded twice and, with a key, Jev's reading of which chunks every request needs and which repeat earlier ones; the scrubbed instruction text, and for chunks Jev would defer your prompts (first 600 characters), are sent to TypeSafe. active: chunks loaded twice byte for byte are left out, and once Jev has read the files, so are the chunks it reads as repeating earlier ones or needed only for some work; the always-kept rules (identity, language, approval, shell, git, keys, browser) never are.",
       "options": [
         "auto",
         "off",
