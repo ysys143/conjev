@@ -237,6 +237,17 @@ export const register: Register = (on, options) => {
     try {
       await $.command.register({ name: 'jev-report', description: 'context-harness: what the gates recorded and how Jev agreed with the rules' })
       await $.command.register({ name: 'jev-mark', description: 'context-harness: label a record, /jev-mark <id> y|n', argumentHint: '<id> y|n' })
+      // Registered, not only answered: without this call the name never reaches
+      // the slash list. `/install` alone is a built-in name and stays the
+      // engine's, which is why this one carries the plugin's name.
+      await $.command.register({
+        name: 'install-context-harness',
+        description: "context-harness: what the plugin needs, what each gate sends, and where the shared settings and key go",
+      })
+      // Registered, not only answered: without this call the name never reaches
+      // the slash list. `/install` alone is a built-in name and stays the
+      // engine's, which is why this one carries the plugin's name.
+
       if (settings.instructions !== 'off') await loadFragments($)
       if (isOn) {
         await keyFor($)

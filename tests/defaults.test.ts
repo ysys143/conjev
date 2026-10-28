@@ -119,3 +119,15 @@ test('/install-context-harness says the key was found, and from where, without p
   expect(text).not.toContain('tk-config')
   expect(io.fetches.length).toBe(0)
 })
+
+test('every command it answers is also registered, so the name reaches the slash list', async ($, on) => {
+  const io = setup(on, { env: KEY_ENV })
+  await $.session.start(START)
+
+  // A hook alone answers a name that was already typed; only registering puts
+  // it in the list. `/install-context-harness` was missing from this for a
+  // while, and a user typing `/install-` saw nothing.
+  expect(io.registered).toContain('install-context-harness')
+  expect(io.registered).toContain('jev-report')
+  expect(io.registered).toContain('jev-mark')
+})

@@ -92,6 +92,8 @@ export const setup = (on: On, s: Setup = {}) => {
   const configured: [string, unknown][] = []
   const order: string[] = []
   const commands: string[] = []
+  /** Every name the plugin registered for the slash list, whether or not it was run. */
+  const registered: string[] = []
   // What the engine would load after the plugin answered prompt.context, and every timer the plugin waited on.
   const loaded: { path: string; kind: string; content: string }[][] = []
   const sleeps: number[] = []
@@ -193,7 +195,10 @@ export const setup = (on: On, s: Setup = {}) => {
     return { value: undefined }
   })
   on('tool.register', (_, e) => ({ value: { tool: e.name } }))
-  on('command.register', (_, e) => ({ value: { command: e.name } }))
+  on('command.register', (_, e) => {
+    registered.push(String(e.name))
+    return { value: { command: e.name } }
+  })
   on('command.run', (_, e) => {
     commands.push(e.command)
     return { value: undefined } as never
@@ -232,7 +237,7 @@ export const setup = (on: On, s: Setup = {}) => {
     return { result: 'ok' }
   })
 
-  return { env, files, fetches, pageFetches, writes, runs, disk, store, statuses, toasts, logs, appended, submitted, summarizedOver, configured, order, api, commands, loaded, sleeps }
+  return { env, files, fetches, pageFetches, writes, runs, disk, store, statuses, toasts, logs, appended, submitted, summarizedOver, configured, order, api, commands, loaded, sleeps, registered }
 }
 
 export const records = (writes: readonly { path: string; text: string }[], point: string) =>
