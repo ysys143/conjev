@@ -3,6 +3,7 @@ import { admit, afterCall, EMPTY_BUDGET } from '../hooks/budget'
 import { checkAnswer, parseResponse, probabilityOf, type JevQuestion } from '../hooks/jev'
 import { keyFromDotenv, pickKey } from '../hooks/key'
 import { compactReport, confusion, kappa, percentile, pointReport, sweep, type ShadowRecord } from '../hooks/report'
+import { omittedRanges } from '../hooks/relevance'
 import { COMMAND_CHARS, clip, scrub } from '../hooks/scrub'
 import { PARAGRAPH_CHARS, STOP_QUESTION, announcesByRule, lastParagraph, stopSkipReason } from '../hooks/stop-gate'
 import {
@@ -328,4 +329,18 @@ test('a compaction that reported no token counts still says how long it held the
 
   expect(report).toContain('compactions 1 (manual 1)')
   expect(report).toContain('no compaction reported token counts')
+})
+
+test('the omitted line ranges are what the kept text does not contain', () => {
+  const original = 'one\ntwo\nthree\nfour\nfive'
+  // Lines 2 and 4 were left out; the kept text is the rest, in order.
+  expect(omittedRanges(original, 'one\nthree\nfive')).toEqual([{ from: 2, to: 2 }, { from: 4, to: 4 }])
+  // A run of left-out lines comes back as one range.
+  expect(omittedRanges(original, 'one\nfive')).toEqual([{ from: 2, to: 4 }])
+  // Nothing left out.
+  expect(omittedRanges(original, original)).toEqual([])
+  // Nothing kept: the whole thing is left out.
+  expect(omittedRanges(original, '')).toEqual([{ from: 1, to: 5 }])
+  // A block is trimmed as it is parsed, so a line differing only in padding matches.
+  expect(omittedRanges('  one  \ntwo', 'one')).toEqual([{ from: 2, to: 2 }])
 })

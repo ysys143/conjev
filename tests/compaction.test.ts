@@ -606,3 +606,77 @@ test('an empty phaseFile setting turns the offer off', async ($, on) => {
 
   expect(io.store.get('board-offer')).toBe(undefined)
 })
+
+// Jev answers noul questions with a high score: every passage is relevant.
+const allRelevant = (body: Record<string, unknown>): HttpResponse => ({
+  status: 200,
+  ok: true,
+  headers: {},
+  text: JSON.stringify({
+    model: 'jev-1.14.0',
+    answers: Object.fromEntries(Object.keys(body.questions as object).map(name => [name, { type: 'noul', noul: 0.95 }])),
+    usage: { input_tokens: 400, output_tokens: 40 },
+  }),
+})
+
+// Jev keeps the passages that name a failure and drops the rest, so the answer
+// leaves lines out and has to say which.
+const onlyFailures = (body: Record<string, unknown>): HttpResponse => {
+  const state = body.state as Record<string, unknown> | undefined
+  // The first request lists the candidates and the second judges each one, so
+  // the first is answered high to keep them all and the second only for the
+  // passage that names a failure.
+  const isJudgingOne = typeof state?.passage === 'string'
+  const score = isJudgingOne ? (String(state?.passage).includes('FAIL') ? 0.95 : 0.05) : 0.95
+
+  return {
+    status: 200,
+    ok: true,
+    headers: {},
+    text: JSON.stringify({
+      model: 'jev-1.14.0',
+      answers: Object.fromEntries(Object.keys(body.questions as object).map(name => [name, { type: 'noul', noul: score }])),
+      usage: { input_tokens: 400, output_tokens: 40 },
+    }),
+  }
+}
+
+
+const LONG_KEPT = Array.from({ length: 200 }, (_, i) => `line ${i + 1} of the server log ${i === 99 ? 'FAIL here' : 'with some words in it'}`).join('\n')
+
+test('read_coordinate with a query keeps the passages and names the lines it left out', { options: { foldBlocks: 'active' } }, async ($, on) => {
+  const io = setup(on, { env: KEY_ENV, fetch: onlyFailures, files: { [`${ARCHIVE}/toolu_x.json`]: kept(LONG_KEPT, { file_path: '/proj/server.log' }) } })
+  const result = await $.tool.call({ tool: 'mcp__context-harness__read_coordinate', id: 'toolu_x', query: 'where does it fail' })
+  const text = String(result.result)
+
+  // Only the passage holding the failure came back, and the answer says which
+  // lines it did not: the model can read them next, or ask for the whole thing.
+  expect(text).toContain('FAIL here')
+  expect(text).toMatch(/Left out: lines \d+(-\d+)?/)
+  expect(text.split('\n').length).toBeLessThan(150)
+  expect(text).toContain('pass full for the whole original')
+  // What Jev saw carried the query, and the file path was not in what it read.
+  const sent = JSON.stringify(io.fetches.map(f => f.body))
+  expect(sent).toContain('where does it fail')
+  expect(sent).not.toContain('/proj/server.log\"}')
+  await settle(() => records(io.writes, 'tool').length >= 0)
+  expect(io.fetches.length).toBeGreaterThan(0)
+})
+
+test('read_coordinate with a query but no key returns the whole original', async ($, on) => {
+  const io = setup(on, { files: { [`${ARCHIVE}/toolu_x.json`]: kept(LONG_KEPT, { file_path: '/proj/server.log' }) } })
+  const result = await $.tool.call({ tool: 'mcp__context-harness__read_coordinate', id: 'toolu_x', query: 'where does it fail' })
+
+  // A fragment nothing could have chosen would only hide what is there.
+  expect(String(result.result)).toContain('line 1 of the server log')
+  expect(String(result.result)).not.toContain('passages')
+  expect(io.fetches.length).toBe(0)
+})
+
+test('read_coordinate with full returns the whole original even with a query', { options: { foldBlocks: 'active' } }, async ($, on) => {
+  const io = setup(on, { env: KEY_ENV, fetch: allRelevant, files: { [`${ARCHIVE}/toolu_x.json`]: kept(LONG_KEPT, { file_path: '/proj/server.log' }) } })
+  const result = await $.tool.call({ tool: 'mcp__context-harness__read_coordinate', id: 'toolu_x', query: 'where does it fail', full: true })
+
+  expect(String(result.result)).toContain('line 1 of the server log')
+  expect(io.fetches.length).toBe(0)
+})

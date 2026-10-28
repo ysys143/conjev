@@ -3,6 +3,7 @@ import { DEFAULT_SETTINGS, SETTING_KEYS, dueBeforeFold, dueNote, foldTranscript,
 import { routeBrowser } from './browser-flow'
 import { BROWSER_BLOCK, BROWSER_POINT } from './browser-route'
 import { FOLD_BLOCKS_POINT, judgeBlocks, withKeptBlocks } from './fold-blocks'
+import { parseText } from './blocks'
 import { FOLD_POINT } from './fold-judge'
 import { afterCompaction, anchorsOf, judgeFold, note, since, type Continuity } from './fold-flow'
 import { askConditions, attachedNow, forgetAttached, fragmentsDirOf, loadFragments, pendingOf, recordFragments, rememberWouldAttach, wouldAttach } from './fragment-flow'
@@ -17,11 +18,12 @@ import { harnessSettingsFrom, usesJev } from './settings'
 import { newId, runtime, startRuntime } from './state'
 import { OFFER_TIMEOUT_MS, boardHasHandoff, boardOfferStep, handoffGap, offerAccepted, repoStateOf, type BoardOffer } from './repostate'
 import { imageToRead } from './image-size'
+import { DEFAULT_RELEVANCE, omittedRanges, selectRelevant } from './relevance'
 import { showStatus } from './status'
 import { PARAGRAPH_CHARS, STOP_MESSAGE, STOP_POINT, STOP_QUESTION, announcesByRule, lastParagraph, stopSkipReason } from './stop-gate'
 import { cleanupRecords, homeOf, legacyArchiveRoot, readArchived, readRecords, stateRoot, writeArchive, writeLabel, writeRecord } from './storage'
 import { judgeTool } from './tool-flow'
-import { WEB_POINT, WEB_TOOL_DESCRIPTION, readWeb, shadowWebFetch } from './web-flow'
+import { WEB_POINT, WEB_TOOL_DESCRIPTION, jevAsker, readWeb, shadowWebFetch } from './web-flow'
 import {
   TOOL_POINT,
   archivedReason,
@@ -43,6 +45,9 @@ import {
 const SUMMARIZE_ABOVE_SHARE = 0.6
 const CHARS_PER_TOKEN = 4
 const READ_LIMIT = 400
+
+/** How much of a read_coordinate query goes to Jev; the rest is dropped, not summarized. */
+const QUERY_CHARS = 400
 // How many idle boundaries a fold waits for the status board and the episode
 // log to be brought up to date before it goes ahead anyway.
 const MAX_DEFERRALS = 2
@@ -163,13 +168,18 @@ export const register: Register = (on, options) => {
         description:
           'Return the original text of a tool result that was folded into a line like ' +
           '[folded Read · src/a.ts · 412 lines — read_coordinate("toolu_…")]. ' +
-          'Pass that id. offset (1-based line) and limit (lines, default 400) select a part.',
+          'Pass that id. offset (1-based line) and limit (lines, default 400) select a part. ' +
+          'Add query instead when you want only the parts that bear on one question: the answer keeps the ' +
+          'passages that matter and names the line ranges it left out, so you can read them next. ' +
+          'Set full to true for the whole original when query would leave out something you need.',
         inputSchema: {
           type: 'object',
           properties: {
             id: { type: 'string', description: 'The id inside read_coordinate("…") of the folded line' },
             offset: { type: 'number', description: 'First line to return, 1-based' },
             limit: { type: 'number', description: 'How many lines to return' },
+            query: { type: 'string', description: 'What you need from it; keeps only the passages that bear on this' },
+            full: { type: 'boolean', description: 'Return the whole original, ignoring query' },
           },
           required: ['id'],
         },
@@ -767,7 +777,7 @@ export const register: Register = (on, options) => {
   }).catch((_, e, next) => next(e))
 
   on('tool.call', { tool: 'mcp__context-harness__read_coordinate' }, async ($, e) => {
-    const input = e as unknown as { id?: unknown; offset?: unknown; limit?: unknown }
+    const input = e as unknown as { id?: unknown; offset?: unknown; limit?: unknown; query?: unknown; full?: unknown }
     const id = typeof input.id === 'string' ? input.id : ''
     const item = await readArchived($, await $.session.id(), id)
 
@@ -811,6 +821,26 @@ export const register: Register = (on, options) => {
         showStatus($)
         if (settings.toolGate === 'active') return { isError: true, result: denyMessage({ kind: 'restricted', reason }, trust.trust) }
       }
+    }
+
+    // A judgment needs a key. Without one the whole original comes back: a
+    // partial answer nothing could choose would only hide what is there.
+    const query = typeof input.query === 'string' ? input.query.trim() : ''
+    const key = input.full === true || query === '' ? undefined : await keyFor($)
+    if (key !== undefined && key !== null) {
+      const home = (await homeOf($)) ?? '/'
+      const sessionId = await $.session.id()
+      const ask = jevAsker($, { sessionId, point: FOLD_BLOCKS_POINT, cap: settings.foldBlocksCap }, key.key, settings.webTimeoutMs)
+      const rel = await selectRelevant(parseText(item.text), clip(query, QUERY_CHARS), ask, text => scrub(text, home), DEFAULT_RELEVANCE, () => settings.foldBlocks === 'off')
+      if (rel.status === 'filtered' && rel.text !== '') {
+        const left = omittedRanges(item.text, rel.text)
+        const ranges = left.map(r => (r.from === r.to ? `${r.from}` : `${r.from}-${r.to}`)).join(', ')
+        const head = `${item.tool} ${JSON.stringify(item.input)} — ${rel.blocksKept} of ${rel.blocksTotal} passages, of ${item.text.split('\n').length} lines`
+        const tail = left.length === 0 ? '' : `\n\nLeft out: lines ${ranges}. Read them with offset and limit, or pass full for the whole original.`
+
+        return { isReadOnly: true, result: `${head}\n${rel.text}${tail}` }
+      }
+      // passthrough, no_match, jev_error: the original is what helps, not a fragment.
     }
 
     const offset = typeof input.offset === 'number' ? input.offset : 1

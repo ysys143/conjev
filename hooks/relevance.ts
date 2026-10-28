@@ -214,3 +214,36 @@ export async function selectRelevant(
 
   return { ...done, status, text, outTokens: tokenCount(text), blocksKept: keep.size }
 }
+
+/**
+ * The line ranges of `original` that `kept` does not contain, as `from-to`
+ * pairs 1-based and inclusive, so the model can read them next.
+ *
+ * The kept text is blocks of the original joined in order, so its lines are a
+ * subsequence of the original's; this walks both and marks what it matched.
+ * Comparison trims each line, because a block is trimmed as it is parsed.
+ * Nothing is guessed: a line the walk could not match is reported as left out.
+ */
+export function omittedRanges(original: string, kept: string): { from: number; to: number }[] {
+  const source = original.split('\n')
+  const shown = kept.split('\n').map(line => line.trim())
+  const isKept = new Array<boolean>(source.length).fill(false)
+  let at = 0
+  for (let i = 0; i < source.length && at < shown.length; i++) {
+    if (source[i]!.trim() === shown[at]) {
+      isKept[i] = true
+      at++
+      // A block's blank neighbours were trimmed away with it.
+      while (shown[at] === '' && at < shown.length) at++
+    }
+  }
+  const ranges: { from: number; to: number }[] = []
+  for (let i = 0; i < source.length; i++) {
+    if (isKept[i]) continue
+    const last = ranges[ranges.length - 1]
+    if (last !== undefined && last.to === i) last.to = i + 1
+    else ranges.push({ from: i + 1, to: i + 1 })
+  }
+
+  return ranges
+}
