@@ -715,7 +715,28 @@ export const register: Register = (on, options) => {
       'already on.',
     )
 
-    return { text: lines.join('\n') }
+    // What the person sees is the summary; what the model reads is what to do
+    // about a missing key. The agent can ask, look and write the folder; the
+    // plugin can only say. The key itself never passes through either of them.
+    const context = key === undefined
+      ? [
+          'The person ran /install-context-harness and no Jev key was found. Help them place one, without ever showing the key.',
+          '',
+          'First ask whether they already have a key (ask once, plainly). Then:',
+          '',
+          '- If they do not: tell them to get one at https://console.typesafe.ai/home. Nothing else can be done until they have it; say so and stop.',
+          '- If they do: offer the two ways to place it and let them pick.',
+          `  1. Their own terminal, which keeps it out of the transcript and out of shell history if they use an editor: create ${dir} (mode 700) and let them write ${dir}/key (mode 600) themselves. You may run "mkdir -p ${dir} && chmod 700 ${dir}" for them. Do not read, cat, echo or paste the key back.`,
+          '  2. "claude plugin configure context-harness@context-harness" in their own terminal, for one profile only.',
+          '',
+          'Do not ask them to paste the key into the chat: it would land in the transcript and in any archive. If they paste it anyway, do not repeat it, and tell them it is now in the transcript and should be rotated.',
+          `When they are done, run /install-context-harness again: it should say the key was found and where it came from. If it still says none, the file is not where the plugin reads it (${dir}/key, the plugin's secure setting, or TYPESAFE_API_KEY).`,
+          '',
+          'The gates all start off, key or no key. Once the key is in place, set the ones they want to shadow with /config (context-harness), and read /jev-report after a while.',
+        ].join('\n')
+      : undefined
+
+    return { text: lines.join('\n'), ...(context === undefined ? {} : { context: [context] }) }
   })
 
 

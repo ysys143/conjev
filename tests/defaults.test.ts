@@ -139,3 +139,32 @@ test('every command it answers is also registered, so the name reaches the slash
   expect(io.registered).toContain('jev-report')
   expect(io.registered).toContain('jev-mark')
 })
+
+test('with no key, the model is told to help place one, and never to ask for it in chat', async ($, on) => {
+  const io = setup(on, {})
+  await $.session.start(START)
+  const result = (await $.command.run({ command: 'install-context-harness' })) as { text: string; context?: readonly string[] }
+
+  // The person sees the summary; the model gets the steps, and does not see
+  // them echoed back into the transcript.
+  const context = (result.context ?? []).join('\n')
+  expect(context).toContain('no Jev key was found')
+  expect(context).toContain('ask whether they already have a key')
+  expect(context).toContain('console.typesafe.ai/home')
+  // The one thing it must not do.
+  expect(context).toContain('Do not ask them to paste the key into the chat')
+  expect(context).toContain('should be rotated')
+  // And what to check after they place it.
+  expect(context).toContain('run /install-context-harness again')
+  // It never carries a key value, and the visible text says none was found.
+  expect(context).not.toContain('TYPESAFE_API_KEY=')
+  expect(result.text).toContain('No Jev key found')
+})
+
+test('with a key found, no help is offered: there is nothing to place', async ($, on) => {
+  const io = setup(on, { env: KEY_ENV })
+  await $.session.start(START)
+  const result = (await $.command.run({ command: 'install-context-harness' })) as { context?: readonly string[] }
+
+  expect(result.context ?? []).toEqual([])
+})
