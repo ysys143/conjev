@@ -23,7 +23,7 @@ import { SHARED_CONFIG, SHARED_CONSENT, SHARED_KEY, SHARED_ONBOARDING, readShare
 import { DEFAULT_RELEVANCE, omittedRanges, selectRelevant } from './relevance'
 import { showStatus } from './status'
 import { PARAGRAPH_CHARS, STOP_MESSAGE, STOP_POINT, STOP_QUESTION, announcesByRule, lastParagraph, stopSkipReason } from './stop-gate'
-import { cleanupRecords, homeOf, legacyArchiveRoot, readArchived, readRecords, stateRoot, writeArchive, writeLabel, writeRecord } from './storage'
+import { cleanupRecords, homeOf, legacyArchiveRoot, migrateState, oldStateRoot, readArchived, readRecords, stateRoot, writeArchive, writeLabel, writeRecord } from './storage'
 import { judgeTool } from './tool-flow'
 import { WEB_POINT, WEB_TOOL_DESCRIPTION, jevAsker, readWeb, shadowWebFetch } from './web-flow'
 import {
@@ -272,6 +272,12 @@ export const register: Register = (on, options) => {
       }
     } catch (error) {
       $.ui.log(`${$.plugin.name}: the judgment layer did not start (${String(error)})`)
+    }
+    // B2: the state moves under ~/.context-harness once; the old root stays readable.
+    try {
+      if (await migrateState($)) $.ui.log(`${$.plugin.name}: moved its records and folded originals to ~/.context-harness/state`)
+    } catch (error) {
+      $.ui.log(`${$.plugin.name}: could not move its state, reading it where it is (${String(error)})`)
     }
     try {
       await cleanupRecords($)
@@ -828,11 +834,12 @@ export const register: Register = (on, options) => {
     const protectedRoots = [
       $.plugin.root,
       stateRoot(home),
+      oldStateRoot(home),
       legacyArchiveRoot(home),
       ...(settings.instructions === 'off' ? [] : [await fragmentsDirOf($)]),
     ].filter(root => root !== '')
     // Folded originals hold whatever the tools returned, secrets included.
-    const archiveRoots = [`${stateRoot(home)}/archive`, legacyArchiveRoot(home)]
+    const archiveRoots = [`${stateRoot(home)}/archive`, `${oldStateRoot(home)}/archive`, legacyArchiveRoot(home)]
     const isWriting = canWrite(tool, command)
 
     let verdict: FloorVerdict | undefined

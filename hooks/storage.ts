@@ -1,18 +1,26 @@
-// Everything the plugin keeps on disk, under one root only the user can enter:
-//   ~/.local/state/context-harness/archive/<session>/<id>.json  folded originals, never deleted
-//   ~/.local/state/context-harness/records/<session>/<point>/   judgment records, 14 days
-//   ~/.local/state/context-harness/records/labels/labels/       labels, kept
+// Everything the plugin keeps on disk, under one root only the user can enter,
+// beside the shared settings and key so one folder holds all of it:
+//   ~/.context-harness/state/archive/<session>/<id>.json  folded originals, never deleted
+//   ~/.context-harness/state/records/<session>/<point>/   judgment records, 14 days
+//   ~/.context-harness/state/records/labels/labels/       labels, kept
+// The root was ~/.local/state/context-harness before: a session start moves it
+// here when only the old one exists, and the old one is still read when both do.
 // Folds made before the rename stay readable at ~/.claude-context-fold/<session>/.
 import type { EngineInterface } from 'claude-code'
 import type { Archived } from './fold'
 import type { ShadowRecord } from './report'
 import { madeDirs } from './state'
 
-export const STATE_DIR = '.local/state/context-harness'
+export const STATE_DIR = '.context-harness/state'
+export const OLD_STATE_DIR = '.local/state/context-harness'
 const LEGACY_ARCHIVE_DIR = '.claude-context-fold'
 
 export function stateRoot(home: string): string {
   return `${home.replace(/\/+$/, '')}/${STATE_DIR}`
+}
+
+export function oldStateRoot(home: string): string {
+  return `${home.replace(/\/+$/, '')}/${OLD_STATE_DIR}`
 }
 
 export function legacyArchiveRoot(home: string): string {
@@ -27,7 +35,7 @@ export const fileId = (id: string): string => id.replace(/[^A-Za-z0-9_-]/g, '_')
  * folder gets no command at all.
  */
 export function cleanupArgs(recordsRoot: string): string[][] {
-  if (!recordsRoot.endsWith(`/${STATE_DIR}/records`)) return []
+  if (!recordsRoot.endsWith(`/${STATE_DIR}/records`) && !recordsRoot.endsWith(`/${OLD_STATE_DIR}/records`)) return []
 
   return [
     ['find', recordsRoot, '-type', 'f', '-name', '*.json', '-mtime', '+14', '-not', '-path', `${recordsRoot}/labels/*`, '-delete'],
@@ -81,7 +89,7 @@ export async function writeArchive($: EngineInterface, sessionId: string, archiv
 export async function readArchived($: EngineInterface, sessionId: string, id: string): Promise<Archived | undefined> {
   const home = await homeOf($)
   if (home === undefined || id === '') return undefined
-  for (const dir of [`${stateRoot(home)}/archive/${sessionId}`, `${legacyArchiveRoot(home)}/${sessionId}`]) {
+  for (const dir of [`${stateRoot(home)}/archive/${sessionId}`, `${oldStateRoot(home)}/archive/${sessionId}`, `${legacyArchiveRoot(home)}/${sessionId}`]) {
     const path = `${dir}/${fileId(id)}.json`
     if (await $.fs.exists(path)) return JSON.parse(await $.fs.read(path)) as Archived
   }
@@ -102,12 +110,20 @@ export async function writeLabel($: EngineInterface, id: string, label: boolean,
   await $.fs.write(`${dir}/${id}.json`, JSON.stringify({ id, label, ts }))
 }
 
-/** Every record, at most `limit`, and the labels. */
+/** Every record, at most `limit`, and the labels: the root's, then any the old root still holds. */
 export async function readRecords($: EngineInterface, limit: number): Promise<{ records: ShadowRecord[]; labels: Map<string, boolean> }> {
-  const root = `${await rootOf($)}/records`
+  const home = await homeOf($)
+  if (home === undefined) throw new Error('HOME is not set')
   const records: ShadowRecord[] = []
   const labels = new Map<string, boolean>()
-  if (!(await $.fs.exists(root))) return { records, labels }
+  for (const root of [`${stateRoot(home)}/records`, `${oldStateRoot(home)}/records`]) {
+    if (await $.fs.exists(root)) await readRecordsUnder($, root, limit, records, labels)
+  }
+
+  return { records, labels }
+}
+
+async function readRecordsUnder($: EngineInterface, root: string, limit: number, records: ShadowRecord[], labels: Map<string, boolean>): Promise<void> {
   for (const session of await $.fs.list(root)) {
     if (session.kind !== 'dir') continue
     const sessionDir = `${root}/${session.name}`
@@ -125,15 +141,34 @@ export async function readRecords($: EngineInterface, limit: number): Promise<{ 
       }
     }
   }
-
-  return { records, labels }
 }
 
-/** Drops judgment records older than 14 days. */
+/** Drops judgment records older than 14 days, under the root and the old one. */
 export async function cleanupRecords($: EngineInterface): Promise<void> {
   const home = await homeOf($)
   if (home === undefined) return
-  const root = `${stateRoot(home)}/records`
-  if (!(await $.fs.exists(root))) return
-  for (const args of cleanupArgs(root)) await $.process.run(args)
+  for (const root of [`${stateRoot(home)}/records`, `${oldStateRoot(home)}/records`]) {
+    if (!(await $.fs.exists(root))) continue
+    for (const args of cleanupArgs(root)) await $.process.run(args)
+  }
+}
+
+/**
+ * Moves the old state root to the new one, once: only when the old one exists
+ * and the new one does not, so a second session, or one that finds both, moves
+ * nothing and reads both. Returns whether it moved.
+ */
+export async function migrateState($: EngineInterface): Promise<boolean> {
+  const home = await homeOf($)
+  if (home === undefined) return false
+  const [from, to] = [oldStateRoot(home), stateRoot(home)]
+  if (!(await $.fs.exists(from)) || (await $.fs.exists(to))) return false
+  const parent = to.slice(0, to.lastIndexOf('/'))
+  for (const argv of [['mkdir', '-p', parent], ['chmod', '700', parent], ['mv', from, to], ['chmod', '700', to]]) {
+    const { exitCode } = await $.process.run(argv)
+    if (exitCode !== 0) throw new Error(`${argv[0]} exited ${exitCode}`)
+  }
+  madeDirs.clear()
+
+  return true
 }

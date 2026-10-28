@@ -10,7 +10,7 @@ import { FOLD_ARMED_KEY } from '../hooks/register'
 const call = (id: string, tool: string, input: Record<string, unknown>): SessionMessage => ({ role: 'assistant', text: '', toolUses: [{ tool_use_id: id, tool, input }] })
 const answer = (id: string, text: string, isError = false): SessionMessage => ({ role: 'user', text: '', toolUses: [], toolResults: [{ tool_use_id: id, text, isError }] })
 
-const ROOT = `${HOME}/.local/state/context-harness`
+const ROOT = `${HOME}/.context-harness/state`
 const ARCHIVE = `${ROOT}/archive/sess-1`
 
 // Jev answers every question it is asked, the same way.

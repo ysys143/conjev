@@ -186,7 +186,7 @@ test('a shadow tool guard that breaks lets the call through', { options: { toolG
 
 test('/jev-mark writes a label and /jev-report reads records and labels', { options: { stopGate: 'shadow' } }, async ($, on) => {
   const io = setup(on, { env: KEY_ENV })
-  const root = `${HOME}/.local/state/context-harness/records`
+  const root = `${HOME}/.context-harness/state/records`
   await $.session.start({ cwd: '/proj', surface: 'terminal', isInteractive: true } as never)
   await $.classic.Stop(STOP)
   await settle(() => records(io.writes, 'stop').length > 0)

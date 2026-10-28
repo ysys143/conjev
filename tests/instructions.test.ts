@@ -239,7 +239,7 @@ test('fold shadow: the judgment rides the fold, and its rule verdict is what the
     ['c', true, '0.1'],
     ['a', true, '0.8'],
   ])
-  const archived = io.writes.filter(w => w.path.startsWith(`${HOME}/.local/state/context-harness/archive/sess-1/`)).map(w => w.path.split('/').at(-1))
+  const archived = io.writes.filter(w => w.path.startsWith(`${HOME}/.context-harness/state/archive/sess-1/`)).map(w => w.path.split('/').at(-1))
   expect(archived).toEqual(['a.json', 'c.json'])
 })
 
