@@ -122,18 +122,18 @@ Never put this in `~/.claude/settings.json` itself: there the same file is the p
 **`instructionFilter`** (`off`, `shadow`, `active`; default `off`) handles what is left, through the engine's `prompt.context` hook, which hands a plugin the instruction files just before they are sent. It splits them into chunks by heading and by tag block, keeping code fences whole, and then:
 
 - **Loaded twice, byte for byte** (whitespace aside): `active` leaves the later copy out and puts a one-line note where it was (`[context-harness: left out "…", loaded from …]`), so the model knows. Of two OMC blocks at different versions, the older one leaves. Organization (`managed`) files and the auto-memory index are never changed.
-- **Jev's reading of the rest, recorded only, in either mode:** after the request has gone, Jev is asked of every chunk whether nearly every request needs it, and of every user-level chunk whether the chunks before it already say all of it. `/jev-report` lists what that would drop or defer, and why. These rules are never dropped or deferred: identity, language, autonomy and approval, answering questions first, shell, git, API keys, browser, anything headed as deliberate repetition, and the OMC block. The Orca section is decided by the environment, not by Jev.
+- **Jev's reading of the rest, recorded only, in either mode:** after the request has gone, Jev is asked of every chunk whether nearly every request needs it, and of every user-level chunk whether the chunks before it already say all of it. `/jev-report` lists what that would drop or defer, and why. These rules are never dropped or deferred: identity, language, autonomy and approval, answering questions first, shell, git, API keys, browser, any section whose heading contains 중복 or 강조 (how the author marks a deliberate repetition; a heading worded otherwise is judged by Jev), and the OMC block. The Orca section is decided by the environment, not by Jev.
 - **Would-miss:** for every prompt, slash commands included, Jev is asked whether the chunks it would defer apply. Tool uses of their kind (browser, web fetch, `orca`, `claude -p`) are recorded too, and `/jev-report` counts how often that work began with the chunk not yet attached.
 
 Jev's readings are applied only once the records support it: at least 20 chunks labeled covered and 60 labeled partly or new with precision of 0.95 or more at the threshold, and a would-miss rate under 5% over 30 or more real sessions. Until then they cost a few hundred milliseconds in the background and nothing on the request path: `prompt.context` itself takes about 30 ms.
 
-## Judgment layer (optional)
+## Judgment layer
 
 ![Four Claude Code events, each with the gate that judges it and what it sends to Jev: instructions at the prompt, the tool gate at each tool call, the Stop gate when the turn ends, and fold relevance at compaction.](docs/turn.svg)
 
 Each gate is set on its own to one of three modes:
 
-- **`off`**, the default: the gate does nothing and sends nothing.
+- **`off`**, the default for every gate, with or without a key: the gate does nothing and sends nothing.
 - **`shadow`**: the gate judges (Jev, or a rule for the tool gate floor) and records the judgment; nothing changes. Start here.
 - **`active`**: the judgment acts: the model is sent back to work, a call is refused, a fragment is attached. A Jev judgment that acts holds the turn, the call or the prompt while Jev answers: usually 0.2-0.35 s, at most 2 s (`timeoutMs`).
 
@@ -144,12 +144,12 @@ Each gate is set on its own to one of three modes:
 | Tool gate Jev | `toolJev` | When another provider serves the session, classes each call the floor let through as open, standard, restricted or custom from its path or command, and refuses restricted and custom | The tool name and the scrubbed target |
 | Conditional instructions | `instructions` | Attaches an instruction fragment to the prompt that first meets its condition | Your prompt, scrubbed, first 600 characters, and the fragments' conditions (never their bodies) |
 | Instruction filter | `instructionFilter` | Leaves instruction chunks loaded twice out (`active`), and records Jev's reading of the rest ([Instruction files](#instruction-files)) | With a key: the instruction files' text, scrubbed, when they change; for chunks Jev would defer, each prompt's first 600 characters, scrubbed |
-| Fold relevance | `foldJev` (shadow only) | Records which of the largest earlier results your request still needs, beside what the fold did | Your last prompt, scrubbed, first 400 characters, and for each result its tool and target: the path, the start of the command, or the search pattern, URL or description it was called with (never its output) |
+| Fold relevance | `foldJev` | `shadow` records which of the largest earlier results your request still needs, beside what the fold did. `active` lets that decide the fold, only on a compaction you asked for (`/compact`): a result Jev says is still needed (at least `foldThreshold`, 0.3) stays whole, and one it says is done with is folded even inside the recent window. The rule stays the floor: a short error, a tool in `keepTools` or a result under `minFoldChars` is never folded. An automatic compaction is decided by the rule alone, so nobody waits for Jev | Your last prompt, scrubbed, first 400 characters, and for each result its tool and target: the path, the start of the command, or the search pattern, URL or description it was called with (never its output) |
 | Web reading | `webRead` | `active` adds a `web_read` tool that returns only the blocks of a page that answer the question, verbatim, and keeps the whole page for `read_coordinate`; `shadow` measures the same beside each WebFetch call and changes nothing ([Blocks](#blocks-web-reading-and-kept-fold-blocks)) | The page's text and the question, scrubbed |
 | Browser routing | `browserRoute` | For each prompt you write, decides whether it needs a web browser operated (keywords, else Jev); `active` attaches one instruction naming the installed tool to use, in the order ego-browser, Aside, agent-browser, Playwright, then a CDP tool you name in `browserCdp`. With none installed, the model is told so and you are told once in 14 days | Your prompt, scrubbed, first 600 characters, when no keyword decides |
 | Kept fold blocks | `foldBlocks` | At a compaction, keeps the blocks of the largest folded results that your last prompt still needs, verbatim under the pointer (`active`), or records which it would keep (`shadow`) | Those results' text and your last prompt (first 400 characters), scrubbed |
 
-Scrubbing removes secret-shaped strings, `NAME=value` secrets, email addresses and your home folder.
+Scrubbing removes secret-shaped strings, `NAME=value` secrets, email addresses and your home folder, then replaces Korean personal information with a label such as `[전화번호]`. That second pass is a TypeScript port of [maskingtape](https://github.com/ChoHyeonChan/maskingtape) 0.4.0 (Apache-2.0, in `hooks/pii/`), checked against the original on 2,594 inputs; it finds names by rules alone, for which the original reports a recall of 0.966. A text bounded in length is scrubbed first and cut after, never inside a label.
 
 ### Blocks: web reading and kept fold blocks
 
@@ -180,8 +180,12 @@ Blocks are kept only when the judgment found an answer and they come to at most 
 ### Turning it on
 
 1. Get a key from the [TypeSafe console](https://console.typesafe.ai/home).
-2. Give it to the plugin with `/plugin configure context-harness@context-harness` (kept in secure storage). It is also read from a `TYPESAFE_API_KEY=` line in a `.env` in the plugin's folder, or from the `TYPESAFE_API_KEY` environment variable, in that order.
-3. Set the gates you want to `shadow`, in `/config` under context-harness or in `settings.json`:
+2. Give it to the plugin. It is read from the first of these that has one:
+   1. `~/.context-harness/key`, the key alone in the file, read by every Claude Code profile;
+   2. the plugin's secure setting, set from a shell with `claude plugin configure context-harness@context-harness` (kept separately for each profile);
+   3. a `TYPESAFE_API_KEY=` line in a `.env` in the plugin's folder;
+   4. the `TYPESAFE_API_KEY` environment variable.
+3. Set the gates you want to `shadow`, in `/config` under context-harness, in `settings.json`, or in `~/.context-harness/config.json` (the same keys as `options` below, read by every profile, and taking precedence over a profile's own values):
 
    ```json
    {
@@ -201,7 +205,7 @@ Blocks are kept only when the judgment found an answer and they come to at most 
 
 4. Read `/jev-report`, label records with `/jev-mark`, and switch a gate to `active` once it earns it (see [Records and labels](#records-and-labels)).
 
-Without a key, the status line says only `jev: no key` and nothing is sent. The tool gate floor needs no key. Otherwise the judgment layer's status line stays empty until a gate has recorded something: Claude Code draws every plugin status line with a warning mark, which a plugin cannot change, so a line that only said the gates were on would look like a fault. With `toolGate: active`, the agent cannot write the plugin's `.env` or Claude's settings files; set those yourself.
+Without a key, the status line says only `jev: no key` and nothing is sent. The tool gate floor needs no key. Otherwise the judgment layer's status line stays empty until a gate has recorded something: Claude Code draws every plugin status line with a warning mark, which a plugin cannot change, so a line that only said the gates were on would look like a fault. With `toolGate: active`, the agent cannot write the plugin's `.env` or Claude's settings files; set those yourself. The plugin only reads `~/.context-harness/`; the folder is yours to create and write.
 
 <details>
 <summary>Stop gate in detail</summary>
@@ -217,7 +221,7 @@ Without a key, the status line says only `jev: no key` and nothing is sent. The 
 <summary>Tool gate in detail</summary>
 
 - **Provider trust.** First-party only when every sign agrees: an Anthropic credential, no `HTTPS_PROXY`/`HTTP_PROXY`, no `NODE_EXTRA_CA_CERTS`, no Bedrock/Vertex/Foundry, and an `ANTHROPIC_BASE_URL` that is empty or `https://*.anthropic.com`. A local proxy counts as external unless listed in `trustedProxies`. `providerTrust: external` forces external; nothing forces first-party.
-- **Secret files.** `.env` and `.env.*` (not `.example`, `.sample`, `.template`), `*.env`, `~/.ssh` (not `*.pub`), `~/.aws`, `~/.gnupg`, gcloud, `~/.kube/config`, `~/.docker/config.json`, `~/.config/gh/hosts.yml`, Codex and Claude credential files, `.netrc`, `.npmrc`, `.pypirc`, `.pgpass`, `.git-credentials`, `*.pem`, `*.p12`, `*.pfx`, `*.kdbx`, `id_rsa` and kin, resolved through `~`, `$HOME`, `..` and symlinks.
+- **Secret files.** `.env` and `.env.*` (not `.example`, `.sample`, `.template`, `.tpl`, `.dist`), `*.env`, `~/.ssh` (not `*.pub` or `known_hosts`), `~/.aws`, `~/.gnupg`, gcloud, `~/.kube/config`, `~/.docker/config.json`, `~/.config/gh/hosts.yml`, Codex and Claude credential files, `.netrc`, `.npmrc`, `.pypirc`, `.pgpass`, `.git-credentials`, `*.pem`, `*.p12`, `*.pfx`, `*.kdbx`, `*.keystore`, `*.jks`, `id_rsa` and kin, the opencodex proxy's token files under `~/.opencodex`, and `/proc/<pid>/environ`, resolved through `~`, `$HOME`, `..` and symlinks.
 - **Shell.** Every argument of a Bash command is checked, including git pathspecs, `--opt=path` and redirects; `env`, `printenv`, `export -p`, `security … -w` and `gh auth token` count too.
 - **Folded originals.** With the gate on in an external session, `read_coordinate` judges the call that produced a folded result as that call would have been judged, following a path that still exists to what it leads to; reading the archive folders directly is refused the same way. A secret file folded earlier does not come back either way.
 - A guard that breaks in `active` refuses the call. `toolJev` asks once per target and session, never about a path the floor names.
@@ -247,7 +251,7 @@ Lead with the conclusion. One idea per paragraph. Cut filler.
 <details>
 <summary>Fold relevance in detail</summary>
 
-At a compaction the prompt cache is rebuilt anyway, so judging what to keep costs no cache there. Jev is asked, for up to 48 of the largest results the fold could act on (at least `minFoldChars`), whether your current request still needs it, shown only as its tool, target and size. Each record holds what the fold did with that result and Jev's probability that it is done with. Nothing changes the compaction yet.
+At a compaction the prompt cache is rebuilt anyway, so judging what to keep costs no cache there. Jev is asked, for up to 48 of the largest results the fold could act on (at least `minFoldChars`), whether your current request still needs it, shown only as its tool, target and size. Each record holds what the fold did with that result and Jev's probability that it is done with. In `shadow` that is all. In `active`, on a compaction you asked for, the question is asked before the fold, of every result the rule would fold if recency did not count, and the answers decide it. A result Jev gave no answer for is decided by the rule. Kept fold blocks then work only inside what was folded: a result kept whole is not asked about again, block by block.
 
 </details>
 
@@ -255,6 +259,7 @@ At a compaction the prompt cache is rebuilt anyway, so judging what to keep cost
 
 - `/jev-report`: per gate, records, skips by reason, coverage, failures by kind, latency, tokens, the rule-versus-Jev table with Cohen's kappa, unlabeled disagreements, and, once labeled, precision and recall at several thresholds.
 - `/jev-mark <id> y|n`: label a record yourself.
+- Every compaction is recorded as well, with or without a key: its trigger, how long it held the turn, whether a summary ran, and, when one did, the window before and after as the engine counted it (a fold alone reports no token counts). `/jev-report` shows them under `compact`. These are your own sessions' numbers, read off the engine, which is what any change to the fold settings should be judged by.
 
 Before switching the Stop gate to `active`, aim for at least 50 positive and 100 negative labels and a threshold with precision of 0.9 or more on them. Agreement with the rule alone is not evidence: the rule flags about 5% of turn ends, so a gate that always says "no" agrees about 95% of the time.
 
@@ -312,6 +317,10 @@ Everything the plugin keeps is under one folder only you can open; every folder 
   records/<session>/<gate>/<id>.json     judgment records, kept 14 days
   records/labels/labels/<id>.json        your labels, kept
   replay/                                replay output
+  shrunk-<path>                          downscaled image copies (imageMaxPx), reused
+~/.context-harness/                      yours to write; the plugin only reads it
+  config.json                            settings shared by every profile
+  key                                    the Jev key, shared by every profile
 ```
 
 An archive file holds exactly what the tool returned; `web_read` adds the page it read, as blocks, under `web-<id>`. A record holds what was sent (scrubbed), the verdicts and the timings; for web reading and kept fold blocks, which send text, it keeps the question and the size of the text, not the text.
@@ -323,7 +332,7 @@ rm -rf ~/.local/state/context-harness/archive/<session-id>   # one session's ori
 rm -rf ~/.local/state/context-harness ~/.claude-context-fold # everything
 ```
 
-The plugin uses, and only for this: the network (Jev, only with a Jev setting on and a key), processes (`mkdir`, `chmod` and `find` on its own folder), and the environment (`HOME`, `TYPESAFE_API_KEY`, and the proxy and provider variables the trust check reads). One module uses all of them, folding included, so a policy that judges a module by what it uses judges the folding with them.
+The plugin uses, and only for this: the network (Jev, only with a Jev setting on and a key), processes (`mkdir`, `chmod` and `find` on its own folder; `git status` in the working folder, read only, when a fold is due and there is a status board to check; `sips`, or `identify` and `convert`, on an image `Read` is about to open, with `imageMaxPx` set), and the environment (`HOME`, `TYPESAFE_API_KEY`, and the proxy and provider variables the trust check reads). One module uses all of them, folding included, so a policy that judges a module by what it uses judges the folding with them.
 
 ## Measured
 
@@ -417,14 +426,20 @@ Jev answers a question in one of three shapes: a choice among named options, a s
 - Token counts in web reading are estimates (about four ASCII characters or one other character per token); the plugin has no tokenizer.
 - Browser routing finds tools by rules only: a command on `PATH` (`which`) or in `~/.local/bin`, `/opt/homebrew/bin`, `/usr/local/bin`, `~/.bun/bin` or `~/.npm-global/bin`; Playwright in the project's `node_modules` or its browser cache. It launches nothing and probes no debugging port, so a CDP tool counts only when `browserCdp` names it. It cannot read your permission rules or other plugins' hooks: list a tool they block in `browserBlocked`, or it may be suggested.
 - Kept fold blocks group output lines by 40, so a kept code block can carry lines around the one that mattered.
-- Not yet: fold relevance as a decision rather than a record; applying Jev's instruction readings; whether attached fragments make answers better; the Stop gate's accuracy on real announcements.
+- A summary runs only over what is older than the recent window. When the transcript holds fewer prompts than `keepRecentTurns`, there is no older part, so a folded transcript that still fills more than 60% of the window is not summarized.
+- The 60% check estimates tokens from the transcript's characters. It counts no images, no reasoning blocks and nothing of the system prompt, so it reads lower than the window really is.
+- An automatic fold waits 30 seconds for you; a prompt in that time takes the moment. The check the timer makes when it fires is covered by a unit test, but no test fires the timer itself: the test runtime runs a timer's callback at once, so the order "timer set, you write, timer fires" cannot be staged there.
+- Fold relevance in `active` decides only compactions you ask for. An automatic one is decided by the rule.
+- `imageMaxPx` needs `sips` (macOS) or ImageMagick; without either, images are read as they are.
+- `read_coordinate` with a `query` needs a Jev key; without one it returns the whole original.
+- Not yet: every gate starting on by itself once a key is present (they all start `off`); applying Jev's instruction readings; whether attached fragments make answers better; the Stop gate's accuracy on real announcements.
 
 ## Upgrading
 
 context-harness joins two plugins that were built apart to test each idea, [context-fold](https://github.com/ysys143/context-fold) and [jev-harness](https://github.com/ysys143/jev-harness). Apart, they could not share what one compaction did, and their load order decided whether the second saw it at all. Uninstall both before installing this one: installed beside either, folding or sending to Jev happens twice.
 
 - **Folds made by context-fold** stay readable: `read_coordinate` looks in `~/.claude-context-fold/<session>/` after its own archive, for the same session.
-- **Settings and the key** do not carry over: set them again under context-harness (`/config`, and `/plugin configure context-harness@context-harness` for the key).
+- **Settings and the key** do not carry over: set them again under context-harness: `/config`, or `~/.context-harness/config.json` and `~/.context-harness/key` to set them once for every profile.
 - **jev-harness records** under `~/.local/state/jev-harness/` are not read; their fold verdicts came from a copy of the rule that this release replaces with the fold itself. Delete that folder when you no longer need it.
 - **Coming from jev-harness alone**, you now also get folding at compaction, an automatic `/compact` once the window is 60% full (`foldAtPercent`, 0 turns it off), originals kept on disk, and a note after each compaction.
 - **Coming from context-fold alone**, you now also get `/jev-report`, `/jev-mark`, a hook on every tool call that passes straight through while the gates are off, and a cleanup of judgment records older than 14 days at each session start.
@@ -438,15 +453,15 @@ claude plugin test /path/to/context-harness    # tests/*.test.ts
 claude plugin validate /path/to/context-harness
 ```
 
-The suite has 194 tests: the 175 the browser-routing and block-judgment release left, three for the Korean PII pass, one comparing the PII port with maskingtape on 2,594 inputs, and fifteen for what a fold does to a message holding an image or a document, for the dry run and the fold judgment reading the same api view as the fold, and for every cut for Jev happening after scrubbing. Nine defects planted in browser routing each made at least one fail: Aside put before ego, shadow attaching, the block attached again while the conversation carries it, keywords skipped for Jev, a blocked tool suggested, the install notice on every prompt, the prompt sent unscrubbed, the common install folders ignored, and the threshold ignored. Eighteen defects planted in web reading and kept fold blocks each made at least one fail: the first block dropped, stage 2 skipped, text sent unscrubbed, kept blocks judged while the setting is off, WebFetch measured while web reading is off, kept blocks that no longer start with the fold mark, a table row without its header, navigation left in, the compaction's time budget ignored, the call cap counted only after concurrent calls return, requests started after the judgment was stopped, a late judgment recorded as kept, local and private-network addresses fetched, a signed link fetched a second time, page nesting left unbounded, a long opening tag read as text, a loopback address written as 127.1 or 0x7f.0.0.1 taken as public, and an end tag past the nesting cap closing an ancestor. From 0.0.3 and before, 136 tests. Nineteen defects planted back one at a time each made at least one of them fail. For the instruction filter: the always-kept list ignored, a deferred chunk counted as already saying another, a project rule dropped for a user one, a late Jev answer dropped, chunk names the attached-fragment count cannot read, the memory or organization file cut, a heading inside a code fence taken for a section, and records written while the setting is off. From 0.0.1: the cleanup over the whole folder, a fixed size floor for the judgment, the earlier turn count, folders left readable, a failed `chmod` ignored, archives readable directly, a `/compact` without `HOME`, fragments counted without the conversation, queued prompts not remembered, a failure after the fold undoing it, and a quoted opening tag taken for a block.
+The suite has 250 tests, 75 more than the browser-routing and block-judgment work left. For the new work, these defects were planted one at a time, and each made at least one test fail: the PII port changed (one parity test over 2,594 inputs); media in a folded message dropped, a document treated unlike an image; the dry run or the fold judgment reading no api view; a cut made before scrubbing, at the tool gate, the browser route, the fold judgment's request and call line, the kept-blocks request and the Stop gate's paragraph; an organization file cut or superseded; the fold judgment asked about results the fold would not take; the person's prompts left in what a summary replaces; a summary run over a stale status board; the folded pointers not put back after a summary; the automatic fold's armed moment not recorded; a compaction not recorded, or recorded with the wrong trigger; the summarizing status not shown; the Handoff line missing from the note, or a board taken to have one; the three-hour offer never accepting; the offer's answer read as yes regardless; the compaction report shown empty; an image resized when small; the omitted line ranges not named; shared settings ignored; `/install` hiding where the key came from; and fold relevance in `active` ignoring its floor, not deciding the fold, or asking on an automatic compaction. One wiring has no failing test: removing the idle check the fold timer makes (see [Limits](#limits)). Nine defects planted in browser routing each made at least one fail: Aside put before ego, shadow attaching, the block attached again while the conversation carries it, keywords skipped for Jev, a blocked tool suggested, the install notice on every prompt, the prompt sent unscrubbed, the common install folders ignored, and the threshold ignored. Eighteen defects planted in web reading and kept fold blocks each made at least one fail: the first block dropped, stage 2 skipped, text sent unscrubbed, kept blocks judged while the setting is off, WebFetch measured while web reading is off, kept blocks that no longer start with the fold mark, a table row without its header, navigation left in, the compaction's time budget ignored, the call cap counted only after concurrent calls return, requests started after the judgment was stopped, a late judgment recorded as kept, local and private-network addresses fetched, a signed link fetched a second time, page nesting left unbounded, a long opening tag read as text, a loopback address written as 127.1 or 0x7f.0.0.1 taken as public, and an end tag past the nesting cap closing an ancestor. From 0.0.3 and before, 136 tests. Nineteen defects planted back one at a time each made at least one of them fail. For the instruction filter: the always-kept list ignored, a deferred chunk counted as already saying another, a project rule dropped for a user one, a late Jev answer dropped, chunk names the attached-fragment count cannot read, the memory or organization file cut, a heading inside a code fence taken for a section, and records written while the setting is off. From 0.0.1: the cleanup over the whole folder, a fixed size floor for the judgment, the earlier turn count, folders left readable, a failed `chmod` ignored, archives readable directly, a `/compact` without `HOME`, fragments counted without the conversation, queued prompts not remembered, a failure after the fold undoing it, and a quoted opening tag taken for a block.
 
 ## Credits
 
-The idea of folding completed tool output into addressed one-line pointers, instead of summarizing, comes from Hwang Dae Jin and Yeni, *The Context Coordinate System and the Principle of Unbroken Memory* (Philosophy That Works, 2026; DOI [10.5281/zenodo.23377916](https://doi.org/10.5281/zenodo.23377916); [repository](https://github.com/philosophythatworks/context-lattice)). This plugin is an independent implementation and contains no code from that project. Block splitting and the two-stage relevance judgment (`hooks/blocks.ts`, `hooks/relevance.ts`) are ported from [jevfetch](https://github.com/a2sys-ai/jevfetch) by Deukwoong Woo, a2sys (MIT), at commit 167fe8f. Related work: observation masking in [Lindenbauer et al., 2025](https://arxiv.org/abs/2508.21433), and Anthropic's [context editing](https://platform.claude.com/docs/en/build-with-claude/context-editing).
+The idea of folding completed tool output into addressed one-line pointers, instead of summarizing, comes from Hwang Dae Jin and Yeni, *The Context Coordinate System and the Principle of Unbroken Memory* (Philosophy That Works, 2026; DOI [10.5281/zenodo.23377916](https://doi.org/10.5281/zenodo.23377916); [repository](https://github.com/philosophythatworks/context-lattice)). This plugin is an independent implementation and contains no code from that project. Block splitting and the two-stage relevance judgment (`hooks/blocks.ts`, `hooks/relevance.ts`) are ported from [jevfetch](https://github.com/a2sys-ai/jevfetch) by Deukwoong Woo, a2sys (MIT), at commit 167fe8f. The Korean personal-information pass (`hooks/pii/`) is translated to TypeScript from [maskingtape](https://github.com/ChoHyeonChan/maskingtape) 0.4.0 (Apache-2.0); its license and notice are in `hooks/pii/LICENSE` and `hooks/pii/NOTICE`, and each translated file says so in its header. Related work: observation masking in [Lindenbauer et al., 2025](https://arxiv.org/abs/2508.21433), and Anthropic's [context editing](https://platform.claude.com/docs/en/build-with-claude/context-editing).
 
 ## Versions
 
-Versions stay at 0.0.x while the plugin is young. 0.0.1 is the first release, joining context-fold 0.0.2 and jev-harness 0.0.3. 0.0.2 adds the instruction filter. 0.0.3 keeps the status line empty until there is something to show.
+Versions stay at 0.0.x while the plugin is young. 0.0.1 is the first release, joining context-fold 0.0.2 and jev-harness 0.0.3. 0.0.2 adds the instruction filter. 0.0.3 keeps the status line empty until there is something to show. Not yet released: web reading, kept fold blocks and browser routing; Korean personal information in scrubbing; the summary limited to the older part, with your prompts and the folded pointers put back; the automatic fold yielding to you; the status board as a handoff, and the offer to create one; `imageMaxPx`; `read_coordinate` with a `query`; the shared settings folder and `/install`; fold relevance in `active`.
 
 ## License
 
