@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: 2026 The maskingtape Authors
 // SPDX-License-Identifier: Apache-2.0
-// Translated to TypeScript from maskingtape 0.4.0 (detectors/financial/account.py), with modifications.
+// Translated to TypeScript from maskingtape at commit 2802949 (detectors/financial/account.py), with modifications.
 
 // Bank account numbers: no checksum and a different shape per bank (2-4 groups, 10-14 digits),
 // so the shape alone would take order and serial numbers. A number counts only with context:

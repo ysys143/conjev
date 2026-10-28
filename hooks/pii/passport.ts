@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: 2026 The maskingtape Authors
 // SPDX-License-Identifier: Apache-2.0
-// Translated to TypeScript from maskingtape 0.4.0 (detectors/identity/passport.py), with modifications.
+// Translated to TypeScript from maskingtape at commit 2802949 (detectors/identity/passport.py), with modifications.
 
 // Korean passport numbers: a type letter (M/S/R/O/D) and eight digits (old), or a letter,
 // three digits, a letter and four digits (new). Issued in capitals but often copied in lower

@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: 2026 The maskingtape Authors
 // SPDX-License-Identifier: Apache-2.0
-// Translated to TypeScript from maskingtape 0.4.0 (detectors/identity/driver_license.py), with modifications.
+// Translated to TypeScript from maskingtape at commit 2802949 (detectors/identity/driver_license.py), with modifications.
 
 // Driver's licence numbers: twelve digits (region 2, year 2, serial 6, check and issue 2),
 // split by hyphens, spaces or nothing. The region code must be a real one (11-26, 28). The check

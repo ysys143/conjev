@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: 2026 The maskingtape Authors
 // SPDX-License-Identifier: Apache-2.0
-// Translated to TypeScript from maskingtape 0.4.0 (detectors/contact/email.py), with modifications.
+// Translated to TypeScript from maskingtape at commit 2802949 (detectors/contact/email.py), with modifications.
 
 // Email addresses. The local part takes Hangul (RFC 6531, #400); the domain stays Latin, or
 // "회의@3층" and "가격@10000원" would all be addresses. Known limit: Hangul written right before

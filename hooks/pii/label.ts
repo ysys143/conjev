@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: 2026 The maskingtape Authors
 // SPDX-License-Identifier: Apache-2.0
-// Translated to TypeScript from maskingtape 0.4.0 (anonymizers/label.py), with modifications.
+// Translated to TypeScript from maskingtape at commit 2802949 (anonymizers/label.py), with modifications.
 
 // The label strategy: each span becomes its kind's label, so what was there stays known, which
 // suits text going to a language model. "연락처 010-1234-5678" -> "연락처 [전화번호]".

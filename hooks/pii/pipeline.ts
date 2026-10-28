@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: 2026 The maskingtape Authors
 // SPDX-License-Identifier: Apache-2.0
-// Translated to TypeScript from maskingtape 0.4.0 (pipeline.py, detectors/__init__.py), with
+// Translated to TypeScript from maskingtape at commit 2802949 (pipeline.py, detectors/__init__.py), with
 // modifications: positions are reported in UTF-16 units, and only the rule detectors exist.
 
 // Detect, merge overlaps, then mask or label. Inputs whose spelling changes when tidied

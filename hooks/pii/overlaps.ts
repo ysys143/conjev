@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: 2026 The maskingtape Authors
 // SPDX-License-Identifier: Apache-2.0
-// Translated to TypeScript from maskingtape 0.4.0 (types.py, overlaps.py), with modifications.
+// Translated to TypeScript from maskingtape at commit 2802949 (types.py, overlaps.py), with modifications.
 
 /**
  * One piece of personal information found in the text.

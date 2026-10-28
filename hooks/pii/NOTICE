@@ -1,7 +1,9 @@
 The files in this folder are a TypeScript translation, with modifications, of
-maskingtape 0.4.0, a Korean personal information detector:
+maskingtape, a Korean personal information detector, at commit 2802949 of its
+main branch (2026-10-25; release 0.4.0 plus later fixes to name and birth date
+detection):
 
-  https://github.com/ChoHyeonChan/maskingtape (version 0.4.0)
+  https://github.com/ChoHyeonChan/maskingtape (commit 2802949)
   Copyright 2026 The maskingtape Authors
   Licensed under the Apache License, Version 2.0 (see LICENSE in this folder).
 

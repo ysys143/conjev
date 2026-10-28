@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: 2026 The maskingtape Authors
 // SPDX-License-Identifier: Apache-2.0
-// Translated to TypeScript from maskingtape 0.4.0 (detectors/business/business_registration.py), with modifications.
+// Translated to TypeScript from maskingtape at commit 2802949 (detectors/business/business_registration.py), with modifications.
 
 // Business registration numbers, XXX-XX-XXXXX. Every one carries the National Tax Service check
 // digit, so the checksum decides: right is 1.0, wrong is dropped unless "사업자등록번호" or

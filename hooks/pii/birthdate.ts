@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: 2026 The maskingtape Authors
 // SPDX-License-Identifier: Apache-2.0
-// Translated to TypeScript from maskingtape 0.4.0 (detectors/personal/birthdate.py), with modifications.
+// Translated to TypeScript from maskingtape at commit 2802949 (detectors/personal/birthdate.py), with modifications.
 
 // Birth dates: only a date next to a label ("생년월일", "생일", "출생일" before it, or "생",
 // "태어", "생일" after it); a bare date is an ordinary date. The date must exist. Only the date
@@ -43,7 +43,8 @@ const TRAILING_CUE =
   '(?:생(?:이에요|이었|이고|이야|이다|이네요|이죠|입니다|으로)?(?![가-힣])' +
   '|에\\s{0,2}태어' +
   '|(?:이|가)?\\s{0,2}(?:제\\s{0,2})?생일' +
-  '|\\s?출생(?:자|[은는이가을를의에도만])?(?![가-힣]))'
+  // After "출생" only these endings, then no Hangul: "출생률", "출생신고" are words (#658, #726).
+  '|\\s?출생(?:입니다|이었|이라|이며|이고|이다|으로|자|인|[은는이가을를의에도만])?(?![가-힣]))'
 
 const BIRTHDATE_TRAILING_RE = new Re('(?P<date>' + DATE + ')' + TRAILING_CUE, { indices: true })
 const NUMBERS = new Re('\\d+')

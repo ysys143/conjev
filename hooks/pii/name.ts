@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: 2026 The maskingtape Authors
 // SPDX-License-Identifier: Apache-2.0
-// Translated to TypeScript from maskingtape 0.4.0 (detectors/personal/name.py), with modifications:
+// Translated to TypeScript from maskingtape at commit 2802949 (detectors/personal/name.py), with modifications:
 // the min_confidence option is left out (the rule set runs with its default, 0), and so is
 // has_name_candidate, which only served the local LLM detector.
 
@@ -11,7 +11,7 @@
 // A known trade-off: a cue word near an ordinary word ("고객 이용 안내") can make a false name.
 
 import type { Detection } from './overlaps'
-import { end as endOf, Re, rstrip, span, splitLines, start as startOf, startsWithAny, strip, type Match } from './regex'
+import { end as endOf, isSpace, Re, rstrip, span, splitLines, start as startOf, startsWithAny, strip, type Match } from './regex'
 
 // Common surnames, two-syllable ones first so "선우예진" is 선우 + 예진.
 const SURNAMES = [
@@ -43,6 +43,7 @@ const PREFIX_CUES_603 = [
   '피고인', '채무자', '피해자', '신고인', '세대주', '배우자', '소유자', '운전자',
   '검토자', '승인자', '기안자',
   '받는 사람', // #663
+  '원고들', '피고들', '피고인들', '피해자들', // plural court roles (#685)
 ]
 const PREFIX_CUES = [
   '고객', '환자', '신청자', '작성자', '담당자', '수령인', '수신인', '성명', '이름', '저는',
@@ -80,18 +81,52 @@ const COMMON_WORDS = new Set([
 const CUES_603 = new Set([...TITLE_CUES_603, ...PREFIX_CUES_603])
 const CUE_603_COMMON_WORDS = new Set(['진술', '진술서', '공제', '안내문', '우대', '오늘자'])
 const COURT_PREFIX_TITLES = new Set(['판사', '검사', '증인'])
+// Plural court roles (#685) get the court titles' condition: another word after is no name.
+const PLURAL_ROLE_PREFIXES = new Set(['원고들', '피고들', '피고인들', '피해자들'])
 const COURT_CUE_COMMON_WORDS = new Set([
   '진술', '진술서', '진단서', '성적서', '신청서', '임명장', '정확도', '정밀도', '진행', '진행중',
   '신문', '전원', '정원', '신분', '방법', '조서', '심문', '결과',
 ])
 
 // Titles without the honorific 님. With only such a cue the name must be surname + two (#213, #239).
+// Two-syllable names are taken in the three places twoCharTitleNameOk allows (#601).
 const TITLE_ONLY_CUES = new Set(TITLE_CUES.filter(c => !SUFFIX_CUES.includes(c)))
+// Two-syllable words not taken as names there (#601): words qualifying a title ("신입 사원",
+// "우리 팀장님") and placeholders in a title field ("대표: 공석"). Exact match; not complete.
+const TITLE_CONTEXT_WORDS = new Set([
+  '우리', '신입', '신임', '신인', '전임', '전담', '전문', '전략', '전산', '전직', '전교', '전국', '전속',
+  '전공', '차기', '차석', '공동', '공인', '공익', '공석', '지도', '지역', '지점', '정규', '정식', '정치',
+  '정부', '우수', '주무', '주민', '주요', '주전', '고문', '하계', '현역', '현직', '심사', '심의', '민간',
+  '노조', '구조', '방송', '신문', '유망', '문화', '조직', '임원', '원로', '남자', '남녀',
+  '지금', '오늘', '현재', '당시', '전날', '주말', '방학', '정말', '진짜', '원래', '이미', '이제', '우선',
+  '한번', '하튼', '전부', '지난', '오신', '오실',
+  '이라', '이고', '이다',
+  '허위', '지휘', '주주', '노사', '유족', '정당', '현지', '원청', '조합', '진료', '원무', '한방', '심리', '진로',
+  '임상', '주방', '고교', '공립', '유명', '구청', '공장', '장기', '현업', '공대', '고대', '이대', '홍대', '성대',
+  '채택', '임용', '구인', '주기', '성적',
+  '방금', '주로', '이건', '이런', '나도', '한편', '정작', '오직', '남은',
+  '공란', '하단',
+])
+// A second syllable that is a particle or ending makes surname-syllable + particle ("전에 팀장에게", #601).
+const TWO_CHAR_PARTICLE_TAILS = new Set('에는를을과와의면며엔')
+// Titles not taken after a two-syllable name (#601): heads of places ("강남 지점장") and words
+// more often meant otherwise (의사 "intent", 이사 "moving", 전무 "none", 감독 "supervision").
+const TWO_CHAR_SKIP_TITLES = new Set([
+  '의사', '이사', '전무', '감독',
+  '지점장', '지사장', '본부장', '센터장', '소장', '원장', '부원장', '이사장', '위원장', '국장', '처장', '사무장',
+])
 // A three-syllable "name" ending in a two-syllable title is surname + title ("김부장", #677).
 const TITLE_TAIL_WORDS = new Set(TITLE_CUES.filter(c => c.length === 2))
 
 // Single-syllable particles after a name (#247, #484).
 const JOSA_CHARS = new Set('이가은는을를도만의에로과와엔랑께')
+// What may follow a title after a name (#601): a particle, honorific or ending's first syllable.
+// Other Hangul makes the title part of a longer word ("노동 위원회", "서울 대리점").
+const TITLE_FOLLOW_CHARS = new Set([...JOSA_CHARS, ...'님입으한하처부까보예였라조마밖'])
+// 이 after a title ends it only as a particle or copula ("팀장이다"); not "교수이론", "대표이사".
+const TITLE_I_ENDING_NEXT = new Set('다었며고라야에지나면랑여자시셨세신므니든래요란냐죠')
+// Punctuation that closes a two-syllable name after a court title (#601); digits and letters do not.
+const CLOSING_PUNCT = new Set('(),.;:!?/·[]「」『』"\'')
 
 const byLengthDesc = (words: Iterable<string>): string[] => [...words].sort((a, b) => b.length - a.length)
 const unique = (words: Iterable<string>): string[] => [...new Set(words)]
@@ -169,7 +204,8 @@ const NAME_LIKE_TITLES_603 = TITLE_CUES_603.filter(t => startsWithAny(t, SURNAME
 const NAME_LIKE_603_SET = new Set(NAME_LIKE_TITLES_603)
 
 // Form labels for names alone: with a colon or bar after, names outside the surname list count (#491, #537).
-const FORM_LABELS_603 = ['작성', '서명', '발신', '수신', '참조', '결재']
+// "담당" too (#685): without a colon "담당 부서" is an ordinary phrase.
+const FORM_LABELS_603 = ['작성', '서명', '발신', '수신', '참조', '결재', '담당']
 const FORM_LABELS = [
   '성명', '이름', '성함', '실명', '예금주', '명의자', '환자명', '고객명', '회원명',
   '수취인', '송금인', '입금자', '신청인', '신청자', '보호자', '대표자',
@@ -182,15 +218,23 @@ const FORM_LABEL_603_SET = new Set(FORM_LABELS_603)
 const MULTIWORD_FORM_LABELS = FORM_LABELS.filter(label => label.includes(' '))
 // Table headers: rows under a name label; the short #603 labels only when no such row exists (#674).
 const TABLE_NAME_HEADERS = new Set(FORM_LABELS.filter(l => !FORM_LABEL_603_SET.has(l)))
-const TABLE_WEAK_NAME_HEADERS = new Set(FORM_LABELS_603)
+// "담당" is neither a header nor a name column (#685): its column holds parts and departments.
+const TABLE_WEAK_NAME_HEADERS = new Set(FORM_LABELS_603.filter(l => l !== '담당'))
+const TABLE_NAME_COLUMN_LABELS = new Set(FORM_LABELS.filter(l => l !== '담당'))
 
 // "이름" is too general to waive the common-word filter (#484); the narrow form labels do.
 const STRONG_LABEL_PREFIXES = new Set(FORM_LABELS.filter(l => l !== '이름'))
 // A three-syllable name before a two-syllable #603 title ending in a particle is word + particle (#603).
 const TWO_CHAR_TITLE_JOSA_END_RE = new Re('^[가-힣]{2}[의가는를와과]$')
 // Sender, recipient and cc fields hold departments more often (#603).
-const ORG_VALUE_LABELS = new Set(['발신', '수신', '참조'])
+const ORG_VALUE_LABELS = new Set(['발신', '수신', '참조', '담당'])
 const ORG_VALUE_END_RE = new Re('(?:팀|실|부|과|국|처|청)$')
+// Departments and duties common in a "담당:" field (#685), filtered under that label only.
+const DUTY_LABEL_NOT_NAMES = new Set([
+  '영업', '인사', '기획', '개발', '마케팅', '재무', '회계', '법무', '생산', '품질', '물류', '연구', '디자인',
+  '운영', '관리', '전산', '보안', '총무', '홍보', '구매', '고객지원', '경영지원', '영업지원',
+  '정리', '공통', '공유', '조율',
+])
 // Approval states (#603); not names, but a list after them goes on (#674).
 const FORM_NOT_NAMES_603 = new Set(['완료', '요청', '대기', '전체', '관련', '본사', '접수', '진행', '반려', '보류'])
 // Values put in a form field instead of a name, and common column names; exact match only (#491).
@@ -345,6 +389,77 @@ const LIST_CLOSING_RE = new Re(
     '|[ \\t]+[|\\"\'…*#.)\\]」』>!?;]',
 )
 
+// A name's shape (surname + one or two syllables), as in NAME_RE and LIST_NAME_RE.
+const NAME_SHAPE = '(?:' + SURNAME_ALT + ')[가-힣]' + '(?:(?![' + NAME_TAIL_STOP + '])[가-힣]|' + EUL_AS_LAST_SYLLABLE + ')?'
+const NAME_SHAPE_RE = new Re(NAME_SHAPE)
+// The #685 head counts, reversed lists and "담당:" values take three syllables or more.
+const FOLLOWUP_MIN_NAME_LEN = 3
+// "외 N명", "등 N명" after a name (#685): "피고 ○○○ 외 2명", "김민수 등 3명".
+const COUNT_AFTER =
+  '[ \\t]*(?:외|등)[ \\t]*(?:\\d{1,4}|한|두|세|네|다섯|여섯|일곱|여덟|아홉|열|여러)[ \\t]*(?:명|인)' +
+  '(?:이|은|을|의|과|와|도|만|까지|께|에게|에게는|에게도|에|에는|으로|으로는|뿐|뿐이다|이다|이며|이고|입니다)?(?![가-힣])'
+const COUNT_AFTER_RE = new Re(COUNT_AFTER)
+const COUNT_TAIL_RE = new Re('(?<![가-힣])(?P<name>' + NAME_SHAPE + ')' + COUNT_AFTER, { indices: true })
+// Group nouns before "외 N명" shaped like names ("임직원 외 30명", #685). Exact match; not complete.
+const COUNT_TAIL_NOT_NAMES = new Set([
+  '우리', '이들', '정원', '인원', '전원', '본인', '일행', '주민', '신자',
+  '임직원', '조합원', '공무원', '장애인', '이용자', '고령자', '구직자', '노동자', '유권자', '유가족', '전문가',
+  '유학생', '지지자', '공직자', '정치인', '임원진', '이사진', '구성원', '정회원', '방문자', '신고자', '성직자',
+])
+// Last syllables common in group nouns, rare in names ("조문객", "대표단", "주민들").
+const COUNT_TAIL_NOT_LAST = new Set('객족단들생병')
+// A messenger export's "[박지훈] [오후 3:01]" at a line start (#685): the time bracket is the cue.
+// (?<![^\n]) is Python's MULTILINE ^, which a JavaScript m flag would widen to other line breaks.
+const BRACKET_NAME_RE = new Re('(?<![^\\n])[ \\t]*\\[(?P<name>' + NAME_SHAPE + ')\\][ \\t]*\\[(?:오전|오후|AM|PM|am|pm)?[ \\t]*\\d{1,2}:\\d{2}\\]', {
+  indices: true,
+})
+// Separators of names sharing the last one's cue ("김민수, 이서연 님께", #685).
+const REVERSE_LIST_SEPS = new Set(',，、·ㆍ・･•')
+
+// A name's shape, shortest first: "조정이고요" is 조정 + 이고요 (#663, #589).
+const NAME_SHAPE_LAZY = '(?:' + SURNAME_ALT + ')[가-힣]' + '(?:(?![' + NAME_TAIL_STOP + '])[가-힣]|' + EUL_AS_LAST_SYLLABLE + ')??'
+// A self-introduction after a greeting or "저는" (#663): "안녕하세요. 구매팀 백군원입니다". The greeting
+// keeps out "검사 결과 정상입니다"; up to four words before the department, one role word after it.
+const GREETING = '(?:안녕하세요|안녕하십니까|수고하십니다|수고[ \\t]?많으십니다|반갑습니다|인사드립니다|여보세요|감사합니다|고맙습니다)'
+const SELF_INTRO_RE = new Re(
+  '(?:' +
+    GREETING +
+    '[.!,~]*[ \\t]*(?:\\r?\\n[ \\t]*){0,2}|(?<![가-힣])저는[ \\t]+)' +
+    '(?:[가-힣A-Za-z0-9()]{1,12}[ \\t]+){0,4}' +
+    '(?P<org>[가-힣A-Za-z0-9]{1,10}(?:팀|센터|본부|부서|파트|그룹|지점|지사|사무소|연구소)|[가-힣]{2,10}(?:부|과|실))' +
+    '(?:의)?[ \\t]+(?:(?:담당|파트장|리더|총괄|간사)[ \\t]+)?(?P<name>' +
+    NAME_SHAPE_LAZY +
+    ')' +
+    '[ \\t]?(?:입니다만|입니다|이에요|예요|이고요|인데요|이라고|라고)(?![가-힣])',
+  { indices: true },
+)
+// Three-syllable candidates ending so are documents and events ("공지문입니다", "송년회입니다").
+const SELF_INTRO_NOT_NAME_LAST = new Set('문표회록집함')
+const COMPOUND_SURNAMES = new Set(SURNAMES.filter(s => s.length === 2))
+// Endings of words in the department's place that are no department ("검사결과", "회의실").
+const SELF_INTRO_NOT_ORG_ENDS = [
+  '결과', '효과', '성과', '사실', '현실', '진실', '확실', '전부', '일부', '내부', '외부', '세부',
+  '화장실', '회의실', '휴게실', '강의실', '탈의실', '응급실', '수술실', '대기실', '자료실', '전시실',
+]
+// Work words after a department that start with a surname ("개발팀 서버입니다"). Not complete.
+const SELF_INTRO_NOT_NAMES = new Set([
+  '서버', '서비스', '서식', '안내문', '안내서', '안건', '공문', '공유', '공용', '공개', '공간', '정리', '정식', '전담',
+  '전산', '주관', '주최', '지침', '지시', '신고', '신설', '원칙', '유의', '진단', '하청', '방안', '담당',
+  '공문서', '신청서', '정산서', '조직도', '구성도', '구조도',
+])
+// "제 이름은 황재고요" (#663): right after "제 이름은", 고요 and common-word names count.
+const MY_NAME_IS_RE = new Re(
+  '(?<![가-힣])(?:제|저의|내)[ \\t]*이름은[ \\t]+(?P<name>' + NAME_SHAPE_LAZY + ')(?:입니다|이에요|예요|이고요|고요|이라고요|라고요|이라고|라고|이야)(?![가-힣])',
+  { indices: true },
+)
+// The second name of "김민수에서 이서연으로 변경" (#589), matched only at a found name's end.
+const CHANGE_LOG_NEXT_RE = new Re(
+  '에서(?:[ \\t]+|[ \\t]*\\r?\\n[ \\t]*)(?P<name>' +
+    NAME_SHAPE_LAZY +
+    ')(?:으로|로)[ \\t]*(?:(?:최종|다시|새로|모두)[ \\t]*)?(?:변경|교체|바뀌|바뀐|바꾸|바꿨|바꿔|대체|교대|인계)',
+  { indices: true },
+)
+
 // All cues (role words, honorifics, titles). A candidate equal to one is no name (#450).
 const ALL_CUES = unique([...PREFIX_CUES, ...SUFFIX_CUES, ...TITLE_CUES])
 const CUE_WORDS = new Set(ALL_CUES)
@@ -352,6 +467,19 @@ const CUE_WORDS = new Set(ALL_CUES)
 // A list cell equal to one of these ends the list; the #603 ones do not (#674).
 const LIST_STOP_CUE_WORDS = new Set(ALL_CUES.filter(c => !CUES_603.has(c)))
 const LIST_STOP_FORM_VALUES = new Set([...FORM_NOT_NAMES].filter(v => !FORM_NOT_NAMES_603.has(v)))
+
+// Repeated names (#608): word starts only.
+const HANGUL_RUN_RE = new Re('[가-힣]+')
+// Never spread, so one false name does not spread through the text.
+const REPEAT_NOT_SEEDS = new Set([
+  ...COMMON_WORDS, ...TITLE_CONTEXT_WORDS, ...COUNT_TAIL_NOT_NAMES, ...COURT_CUE_COMMON_WORDS,
+  ...SELF_INTRO_NOT_NAMES, ...FORM_NOT_NAMES, ...CUE_WORDS,
+])
+// A one-cue name spreads when a role word precedes it and one of these follows ("담당자 김민수입니다").
+const REPEAT_SEED_ENDINGS = ['입니다', '이에요', '예요']
+const REPEAT_ROLE_CUES = byLengthDesc(new Set(PREFIX_CUES.filter(c => c !== '저는' && c !== '이름')))
+// Form labels for names alone whose values spread; not the short #603 labels nor "이름".
+const REPEAT_SEED_FORM_LABELS = new Set(FORM_LABELS.filter(l => !FORM_LABEL_603_SET.has(l) && l !== '이름'))
 
 // A role word or title with a particle ("원장이", "차장은") is the next name's cue (#491, #533);
 // the #603 titles that start like names are left out (#674).
@@ -395,6 +523,48 @@ function commonWordEndsAt(text: string, pos: number, n: number): boolean {
 function isLabelWordAt(text: string, pos: number, strong = false): boolean {
   if (startsWithAny(text, NON_NAME_WORDS, pos)) return true
   return !strong && isCommonWordAt(text, pos)
+}
+
+/** Whether a role word (REPEAT_ROLE_CUES) ends right before pos, spaces and colons skipped (#608). */
+function roleCueBefore(text: string, pos: number): boolean {
+  let k = pos
+  while (k > 0 && ' \t:'.includes(text[k - 1]!)) k--
+  const head = text.slice(0, k)
+  return REPEAT_ROLE_CUES.some(cue => head.endsWith(cue) && (k === cue.length || !isHangul(text[k - cue.length - 1]!)))
+}
+
+/** Whether a title after a name ends at pos: text end, not Hangul, or a particle's or ending's start (#601). */
+function titleEndsAt(text: string, pos: number): boolean {
+  const ch = text.slice(pos, pos + 1)
+  if (!ch || !isHangul(ch)) return true
+  if (ch === '이') {
+    const nxt = text.slice(pos + 1, pos + 2)
+    return !nxt || !isHangul(nxt) || TITLE_I_ENDING_NEXT.has(nxt)
+  }
+  return TITLE_FOLLOW_CHARS.has(ch)
+}
+
+/** Whether a word is closed at pos: after horizontal spaces, text end, a line break or closing punctuation (#601). */
+function closedAfter(text: string, pos: number): boolean {
+  while (pos < text.length && isSpace(text[pos]!) && text[pos] !== '\r' && text[pos] !== '\n') pos++
+  const ch = text.slice(pos, pos + 1)
+  return !ch || ch === '\r' || ch === '\n' || CLOSING_PUNCT.has(ch)
+}
+
+/**
+ * Whether a two-syllable candidate with a title as its only cue is a name (#601), in three places:
+ * spaced before a title ("남원 팀장이"), after a title with a colon or bar ("상담원: 이영"), and
+ * after 판사, 검사, 증인 when the name is closed ("판사 한하 (재판장)"). False keeps the old behaviour.
+ */
+function twoCharTitleNameOk(
+  name: string,
+  prefix: string | undefined,
+  suffix: string | undefined,
+  o: { explicitSep: boolean; glued: boolean; closed: boolean; common: boolean; titleEnds: boolean },
+): boolean {
+  if (o.common || TITLE_CONTEXT_WORDS.has(name) || LIST_NOT_NAMES.has(name) || TWO_CHAR_PARTICLE_TAILS.has(name[1]!)) return false
+  if (prefix === undefined) return suffix !== undefined && !CUES_603.has(suffix) && !TWO_CHAR_SKIP_TITLES.has(suffix) && !o.glued && o.titleEnds
+  return o.explicitSep || (COURT_PREFIX_TITLES.has(prefix) && o.closed)
 }
 
 type Seed = [number, boolean]
@@ -453,8 +623,9 @@ function scanCued(text: string, resumeLines: boolean): [Detection[], Seed[], boo
     if (CUE_WORDS.has(name) || isLabelWordAt(text, nameStart, strong)) {
       // A label word is no name. Resume at it when cued before, so it can cue the next name; at
       // the suffix when cued after, so a title is not consumed (#580).
-      if (prefix !== undefined && !CUES_603.has(prefix) && CUES_603.has(name)) {
-        // A #603 cue word after an older cue is dropped, but a list after it goes on (#674).
+      if (prefix !== undefined && ((!CUES_603.has(prefix) && CUES_603.has(name)) || PLURAL_ROLE_PREFIXES.has(name))) {
+        // A #603 cue word after an older cue is dropped, but a list after it goes on (#674); a
+        // plural court role after any cue too ("증인 원고들, 이서연", #685).
         listSeeds.push([endOf(m, 'name'), hasExplicitSep || STRONG_LABEL_PREFIXES.has(prefix)])
       }
       if (prefix !== undefined && nameStart > pos) pos = nameStart
@@ -491,7 +662,18 @@ function scanCued(text: string, resumeLines: boolean): [Detection[], Seed[], boo
     // pairs only with a title in parentheses ("부장 전결(인)").
     const after = suffix || parenTitle
     const titleOnly = (after !== undefined && TITLE_ONLY_CUES.has(after) && !hasPrefix) || (prefix !== undefined && TITLE_ONLY_CUES.has(prefix) && suffix === undefined && parenTitle === undefined)
-    if (titleOnly && name.length < 3) {
+    if (
+      titleOnly &&
+      name.length < 3 &&
+      !twoCharTitleNameOk(name, prefix, suffix, {
+        explicitSep: hasExplicitSep,
+        glued: suffix !== undefined && startOf(m, 'suffix') === endOf(m, 'name'),
+        // A court title counts only with the name right after, no particle ("검사가 유효")
+        closed: closedAfter(text, endOf(m, 'name')) && (prefix === undefined || endOf(m, 'prefix') === startOf(m, 'label_sep')),
+        common: isCommonWordAt(text, nameStart),
+        titleEnds: suffix !== undefined && titleEndsAt(text, endOf(m, 'suffix')),
+      })
+    ) {
       if (prefix !== undefined && (TITLE_CUES_603.includes(prefix) || m.index === resumeCue)) {
         // A two-syllable name behind a #603 title: resume at the name so another cue can take it (#674, #676).
         pos = nameStart
@@ -513,12 +695,17 @@ function scanCued(text: string, resumeLines: boolean): [Detection[], Seed[], boo
     }
     if (
       prefix !== undefined &&
-      COURT_PREFIX_TITLES.has(prefix) &&
+      (COURT_PREFIX_TITLES.has(prefix) || PLURAL_ROLE_PREFIXES.has(prefix)) &&
       suffix === undefined &&
       paren === undefined &&
       (WORD_CONTINUES_RE.match(text, endOf(m, 'name')) || isCommonWordAt(text, nameStart, COURT_CUE_COMMON_WORDS) || name.endsWith('으'))
     ) {
       // "검사 진단서 발급", "증인 신문이", "증인 신분으로" are no names; resume to let the word cue (#663)
+      pos = nameStart
+      continue
+    }
+    if (prefix !== undefined && PLURAL_ROLE_PREFIXES.has(prefix) && suffix === undefined && paren === undefined && name.length < 3) {
+      // Two syllables after a plural role are mostly words ("원고들 주장에", #685)
       pos = nameStart
       continue
     }
@@ -629,7 +816,18 @@ function formNames(text: string, found: readonly Detection[], listSeeds: Seed[])
     // #603 states are filtered only under #603 labels; older labels take them as names (#691).
     const notNames = FORM_LABEL_603_SET.has(label) ? FORM_NOT_NAMES : LIST_STOP_FORM_VALUES
     // A title + particle is no value either (#533)
-    if (notNames.has(value) || CUE_WITH_JOSA_OLD_RE.fullmatch(name)) continue
+    if (notNames.has(value) || CUE_WITH_JOSA_OLD_RE.fullmatch(name)) {
+      if (label === '담당') listSeeds.push([e, true]) // "담당: 미정, 김민수" (#685)
+      continue
+    }
+    if (
+      label === '담당' &&
+      (DUTY_LABEL_NOT_NAMES.has(value) || CUE_WORDS.has(value) || value.length < FOLLOWUP_MIN_NAME_LEN || !NAME_SHAPE_RE.fullmatch(value) || isCommonWordAt(text, s))
+    ) {
+      // "담당: 영업" is a duty: only a 3+ syllable name shape is a value, but a list after it goes on (#685)
+      listSeeds.push([e, true])
+      continue
+    }
     if (allCovered(covered, s, e)) {
       // Found by the cued scan: still a list seed ("작성:김민구님,이서연")
       listSeeds.push([e, true])
@@ -730,7 +928,7 @@ function tableHeader(line: string, require: ReadonlySet<string> = TABLE_NAME_HEA
     const cells = tableCells(line, sep)
     if (cells === undefined || cells.length < 2) continue
     if (cells.some(([value]) => require.has(value))) {
-      const cols = cells.flatMap(([value], idx) => (FORM_LABEL_SET.has(value) ? [idx] : []))
+      const cols = cells.flatMap(([value], idx) => (TABLE_NAME_COLUMN_LABELS.has(value) ? [idx] : []))
       return [sep, cols, cells.length]
     }
   }
@@ -826,6 +1024,208 @@ function looksLikeTableName(value: string): boolean {
 /** str.rstrip("\r\n"). */
 const rstripNewlines = (line: string): string => line.replace(/[\r\n]+$/, '')
 
+/** A one-cue (0.5) name; "김부장" covers the surname only unless keepTitleTail is false (#677). */
+function nameDetection(text: string, s: number, e: number, keepTitleTail = true): Detection {
+  if (keepTitleTail && e - s === 3 && TITLE_TAIL_WORDS.has(text.slice(s + 1, e))) e = s + 1
+  return make(text, s, e, 0.5)
+}
+
+/** Whether a cell taken without cues is no common, label or cue word (#685), listNames' test and two more. */
+function plainNameCell(text: string, s: number, name: string): boolean {
+  return !(
+    CUE_WORDS.has(name) ||
+    isLabelWordAt(text, s) ||
+    LIST_STOP_FORM_VALUES.has(FORM_VALUE_ENDING_RE.sub(name, '')) ||
+    CUE_WITH_JOSA_OLD_RE.fullmatch(name) ||
+    LIST_NOT_NAMES.has(name) ||
+    LIST_NOT_NAME_LAST.has(name.at(-1)!) ||
+    (name.length === 3 && CUE_WORDS.has(name.slice(0, 2)) && JOSA_CHARS.has(name[2]!)) ||
+    '에는를을과와면며'.includes(name[1]!)
+  )
+}
+
+/** Names before "외 N명", "등 N명" (#685). */
+function countTailNames(text: string, found: readonly Detection[]): Detection[] {
+  const covered = coverage(text.length, found)
+  const extra: Detection[] = []
+  for (const m of COUNT_TAIL_RE.finditer(text)) {
+    const [s, e] = span(m, 'name')
+    const name = group(m, 'name')!
+    if (name.length < FOLLOWUP_MIN_NAME_LEN || allCovered(covered, s, e) || COUNT_TAIL_NOT_NAMES.has(name) || COUNT_TAIL_NOT_LAST.has(name.at(-1)!) || !plainNameCell(text, s, name)) continue
+    covered.fill(1, s, e)
+    extra.push(nameDetection(text, s, e))
+  }
+  return extra
+}
+
+/** "[이름] [오후 3:01]" at a line start of a messenger export (#685). */
+function bracketNames(text: string, found: readonly Detection[]): Detection[] {
+  const covered = coverage(text.length, found)
+  const extra: Detection[] = []
+  for (const m of BRACKET_NAME_RE.finditer(text)) {
+    const [s, e] = span(m, 'name')
+    if (allCovered(covered, s, e) || !plainNameCell(text, s, group(m, 'name')!)) continue
+    covered.fill(1, s, e)
+    extra.push(nameDetection(text, s, e))
+  }
+  return extra
+}
+
+/**
+ * Names joined by commas or middle dots before a name with a cue after ("김민수, 이서연 님께",
+ * #685): one cell at a time backwards, each filtered like listNames. Linear.
+ */
+function reverseListNames(text: string, found: readonly Detection[]): Detection[] {
+  const covered = coverage(text.length, found)
+  const extra: Detection[] = []
+  const anchors = [...new Set(found.filter(d => LIST_TAIL_SUFFIX_RE.match(text, d.end) || COUNT_AFTER_RE.match(text, d.end)).map(d => d.start))].sort((a, b) => a - b)
+  for (const anchor of anchors) {
+    let pos = anchor
+    for (;;) {
+      let k = pos
+      while (k > 0 && ' \t'.includes(text[k - 1]!)) k--
+      if (k === 0 || !REVERSE_LIST_SEPS.has(text[k - 1]!)) break
+      k--
+      while (k > 0 && ' \t'.includes(text[k - 1]!)) k--
+      let cell: [number, string] | undefined
+      for (const n of [4, 3, 2]) {
+        const st = k - n
+        if (st < 0 || (st > 0 && isHangul(text[st - 1]!))) continue
+        const m = LIST_NAME_RE.match(text, st)
+        if (m !== null && endOf(m, 'name') === k) {
+          cell = [st, group(m, 'name')!]
+          break
+        }
+      }
+      if (cell === undefined) break
+      const [st, name] = cell
+      if (name.length < FOLLOWUP_MIN_NAME_LEN || !plainNameCell(text, st, name)) break
+      if (!allCovered(covered, st, k)) {
+        covered.fill(1, st, k)
+        extra.push(nameDetection(text, st, k))
+      }
+      pos = st
+    }
+  }
+  return extra
+}
+
+/** "인사팀 김민수입니다" after a greeting, and "제 이름은 황재고요" (#663). */
+function selfIntroNames(text: string, found: readonly Detection[]): Detection[] {
+  const covered = coverage(text.length, found)
+  const extra: Detection[] = []
+  for (const m of SELF_INTRO_RE.finditer(text)) {
+    const [s, e0] = span(m, 'name')
+    const name = group(m, 'name')!
+    const e = keepIRaAfterShortName(text, s, e0)
+    if (
+      allCovered(covered, s, e) ||
+      SELF_INTRO_NOT_ORG_ENDS.some(w => group(m, 'org')!.endsWith(w)) ||
+      (name.length === 3 && SELF_INTRO_NOT_NAME_LAST.has(name[2]!)) ||
+      SELF_INTRO_NOT_NAMES.has(name) ||
+      COMMON_WORDS.has(name) ||
+      TITLE_CONTEXT_WORDS.has(name) ||
+      COUNT_TAIL_NOT_NAMES.has(name) ||
+      COURT_CUE_COMMON_WORDS.has(name) ||
+      !plainNameCell(text, s, name)
+    ) {
+      continue
+    }
+    covered.fill(1, s, e)
+    extra.push(nameDetection(text, s, e, false))
+  }
+  for (const m of MY_NAME_IS_RE.finditer(text)) {
+    const [s, e0] = span(m, 'name')
+    const name = group(m, 'name')!
+    const e = keepIRaAfterShortName(text, s, e0)
+    // "제 이름은" is the cue, so common-word names count; labels and cue words do not.
+    if (allCovered(covered, s, e) || CUE_WORDS.has(name) || isLabelWordAt(text, s, true)) continue
+    covered.fill(1, s, e)
+    extra.push(nameDetection(text, s, e, false))
+  }
+  return extra
+}
+
+/** A short name read before "이" or "라" covers it too: "주한이고요" may be 주한이 + 고요 (#663). */
+function keepIRaAfterShortName(text: string, s: number, e: number): number {
+  const short = e - s === 2 || (e - s === 3 && COMPOUND_SURNAMES.has(text.slice(s, s + 2)))
+  const nxt = text.slice(e, e + 1)
+  return short && (nxt === '이' || nxt === '라') ? e + 1 : e
+}
+
+/** The second name of "에서 ○○○(으)로 변경" after a found name (#589). */
+function changeLogNames(text: string, found: readonly Detection[]): Detection[] {
+  const covered = coverage(text.length, found)
+  const extra: Detection[] = []
+  const anchors = [...new Set(found.filter(d => text.startsWith('에서', d.end)).map(d => d.end))].sort((a, b) => a - b)
+  for (const anchor of anchors) {
+    const m = CHANGE_LOG_NEXT_RE.match(text, anchor)
+    if (m === null) continue
+    const [s, e] = span(m, 'name')
+    const name = group(m, 'name')!
+    if (allCovered(covered, s, e) || TITLE_CONTEXT_WORDS.has(name) || COUNT_TAIL_NOT_NAMES.has(name) || SELF_INTRO_NOT_NAMES.has(name) || !plainNameCell(text, s, name)) continue
+    covered.fill(1, s, e)
+    extra.push(nameDetection(text, s, e, false))
+  }
+  return extra
+}
+
+/**
+ * A found name of three or four syllables appearing again without a cue (#608). Only names with
+ * strong evidence spread: both cues (0.75) in the cued scan, a name-only form label, or a role
+ * word or self-introduction before and "입니다" after. One linear pass over word starts.
+ */
+function repeatNames(text: string, found: readonly Detection[], cued: readonly Detection[], form: readonly Detection[]): Detection[] {
+  const nameFormStarts = new Set<number>()
+  for (const m of FORM_NAME_RE.finditer(text)) if (REPEAT_SEED_FORM_LABELS.has(group(m, 'label')!)) nameFormStarts.add(startOf(m, 'name'))
+  const introStarts = new Set<number>()
+  for (const m of SELF_INTRO_RE.finditer(text)) introStarts.add(startOf(m, 'name'))
+  for (const m of MY_NAME_IS_RE.finditer(text)) introStarts.add(startOf(m, 'name'))
+  const sources = [
+    ...cued.filter(d => d.confidence >= 0.75),
+    ...[...cued, ...form].filter(d => nameFormStarts.has(d.start)),
+    ...found.filter(d => startsWithAny(text, REPEAT_SEED_ENDINGS, d.end) && (introStarts.has(d.start) || roleCueBefore(text, d.start))),
+  ]
+  const seeds = new Set<string>()
+  for (const d of sources) {
+    const name = text.slice(d.start, d.end)
+    if (name.length >= FOLLOWUP_MIN_NAME_LEN && name.length <= 4 && [...name].every(isHangul) && !REPEAT_NOT_SEEDS.has(name)) seeds.add(name)
+  }
+  if (seeds.size === 0) return []
+  const covered = coverage(text.length, found)
+  const extra: Detection[] = []
+  for (const m of HANGUL_RUN_RE.finditer(text)) {
+    const s = m.index
+    let name: string | undefined
+    for (const n of [4, 3]) {
+      const cand = text.slice(s, s + n)
+      if (cand.length === n && seeds.has(cand) && s + n <= endOf(m) && nameCouldEndAt(text, s + n)) {
+        name = cand
+        break
+      }
+    }
+    if (name === undefined) continue
+    const e = repeatNameEnd(text, s, s + name.length, name)
+    if (allCovered(covered, s, e) || !plainNameCell(text, s, name)) continue
+    covered.fill(1, s, e)
+    extra.push(nameDetection(text, s, e, false))
+  }
+  return extra
+}
+
+/**
+ * A repeated three-syllable name covers the next syllable when it may be the name's last
+ * ("선우하" in "선우하은"): a particle that does not fit the final consonant, 라 or 란, or any
+ * syllable after a compound surname + one (#608).
+ */
+function repeatNameEnd(text: string, s: number, e: number, name: string): number {
+  if (e - s !== 3 || !isHangul(text.slice(e, e + 1) || ' ') || !nameCouldEndAt(text, e + 1)) return keepIRaAfterShortName(text, s, e)
+  const nxt = text[e]!
+  const hasFinal = (name.charCodeAt(name.length - 1) - 0xac00) % 28 !== 0
+  if (COMPOUND_SURNAMES.has(name.slice(0, 2)) || '라란'.includes(nxt) || (!hasFinal && '은을과이'.includes(nxt)) || (hasFinal && '는가를와'.includes(nxt))) return e + 1
+  return e
+}
+
 /**
  * Names found by a cued scan, then by form labels, table columns, slash records and lists.
  * A suffix read across a line break (#662) triggers a second scan that resumes there; the two
@@ -841,6 +1241,7 @@ export function detectName(text: string): Detection[] {
     const seeds = new Set(listSeeds.map(([p, a]) => `${p}:${a}`))
     listSeeds.push(...againSeeds.filter(([p, a]) => !seeds.has(`${p}:${a}`)))
   }
+  const cued = [...found]
   const formExtra = formNames(text, found, listSeeds)
   const tableExtra = tableNames(text, [...found, ...formExtra])
   const slashExtra = slashRecordNames(text, [...found, ...formExtra, ...tableExtra])
@@ -848,5 +1249,12 @@ export function detectName(text: string): Detection[] {
   // A name after a form label is a list start too, spaces allowed.
   listSeeds.push(...formExtra.map((d): Seed => [d.end, true]))
   found.push(...listNames(text, listSeeds, found))
+  // #685, #663, #589, #608: each only adds.
+  found.push(...countTailNames(text, found))
+  found.push(...bracketNames(text, found))
+  found.push(...reverseListNames(text, found))
+  found.push(...selfIntroNames(text, found))
+  found.push(...changeLogNames(text, found))
+  found.push(...repeatNames(text, found, cued, formExtra))
   return found
 }

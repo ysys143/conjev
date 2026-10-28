@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: 2026 The maskingtape Authors
 // SPDX-License-Identifier: Apache-2.0
-// Translated to TypeScript from maskingtape 0.4.0 (detectors/identity/rrn.py), with modifications.
+// Translated to TypeScript from maskingtape at commit 2802949 (detectors/identity/rrn.py), with modifications.
 
 // Resident registration numbers (foreigner numbers too): a regex for "6 digits - 7 digits",
 // then the front must be a real date, then the checksum sets the confidence.

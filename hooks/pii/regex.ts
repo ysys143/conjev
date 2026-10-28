@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: 2026 The maskingtape Authors
 // SPDX-License-Identifier: Apache-2.0
-// Support code for the TypeScript translation of maskingtape 0.4.0 (with modifications):
+// Support code for the TypeScript translation of maskingtape at commit 2802949 (with modifications):
 // Python's re and str behaviour, rebuilt on JavaScript so the detectors read as their originals.
 
 // Python's \s and str.isspace (the same set): JavaScript's \s lacks U+001C..001F and U+0085,

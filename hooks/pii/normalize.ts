@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: 2026 The maskingtape Authors
 // SPDX-License-Identifier: Apache-2.0
-// Translated to TypeScript from maskingtape 0.4.0 (normalize.py), with modifications.
+// Translated to TypeScript from maskingtape at commit 2802949 (normalize.py), with modifications.
 
 // Before detection the input's spelling is tidied, and tidied positions map back to the
 // original (#490). Full-width digits, zero-width spaces inside numbers, minus signs or

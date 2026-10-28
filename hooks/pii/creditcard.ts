@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: 2026 The maskingtape Authors
 // SPDX-License-Identifier: Apache-2.0
-// Translated to TypeScript from maskingtape 0.4.0 (detectors/financial/creditcard.py), with modifications.
+// Translated to TypeScript from maskingtape at commit 2802949 (detectors/financial/creditcard.py), with modifications.
 
 // Card numbers: the group shapes real cards are written in (4-4-4-4, Amex 4-6-5, or 13-19
 // digits run together), then the Luhn check. Passing gives 0.95: a checksum can pass by chance.

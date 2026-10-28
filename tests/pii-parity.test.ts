@@ -4,7 +4,7 @@ import { expect, test } from 'claude-code/testing'
 import { anonymize } from '../hooks/pii/pipeline'
 import { GOLDEN } from './pii-golden'
 
-test('the port matches maskingtape 0.4.0 on all 2,594 golden rows', () => {
+test('the port matches maskingtape 2802949 on all 2,614 golden rows', () => {
   const mismatched: string[] = []
   for (const [id, text, detections, masked] of GOLDEN) {
     const got = anonymize(text, 'mask')
@@ -12,6 +12,6 @@ test('the port matches maskingtape 0.4.0 on all 2,594 golden rows', () => {
     const want = detections.map(([kind, start, end]) => `${kind}@${start}-${end}`).sort()
     if (got.text !== masked || spans.join() !== want.join()) mismatched.push(id)
   }
-  expect(GOLDEN.length).toBe(2594)
+  expect(GOLDEN.length).toBe(2614)
   expect(mismatched).toEqual([])
 })

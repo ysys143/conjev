@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: 2026 The maskingtape Authors
 // SPDX-License-Identifier: Apache-2.0
-// Translated to TypeScript from maskingtape 0.4.0 (anonymizers/mask.py), with modifications.
+// Translated to TypeScript from maskingtape at commit 2802949 (anonymizers/mask.py), with modifications.
 
 // The mask strategy: each span becomes as many mask characters as it has characters.
 

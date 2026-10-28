@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: 2026 The maskingtape Authors
 // SPDX-License-Identifier: Apache-2.0
-// Translated to TypeScript from maskingtape 0.4.0 (detectors/personal/address.py), with modifications.
+// Translated to TypeScript from maskingtape at commit 2802949 (detectors/personal/address.py), with modifications.
 
 // Addresses, anchored on a province or city name and widened as far as the parts continue:
 // city/county/district (two levels), town/neighbourhood or road name, lot or building number,
