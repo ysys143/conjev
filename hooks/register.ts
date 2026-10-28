@@ -674,9 +674,10 @@ export const register: Register = (on, options) => {
       `  ${dir}/key           the key, alone in the file`,
       'Nothing is written there by the plugin: the folder is yours to make.',
       '',
-      'With a key present each gate starts in shadow: it judges and records, and',
-      'changes nothing. Read what it would have done with /jev-report, then set the',
-      'gate to active with /config. Folding needs no key and is already on.',
+      'Every gate is off until you turn it on, key or no key. Set one to shadow',
+      'first: it judges and records, and changes nothing. Read what it would have',
+      'done with /jev-report, then set it to active. Folding needs no key and is',
+      'already on.',
     ]
 
     return { text: lines.join('\n') }
