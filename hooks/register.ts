@@ -18,7 +18,7 @@ import { harnessSettingsFrom, usesJev } from './settings'
 import { newId, retuneRuntime, runtime, startRuntime } from './state'
 import { OFFER_TIMEOUT_MS, boardHasHandoff, boardOfferStep, handoffGap, offerAccepted, repoStateOf, type BoardOffer } from './repostate'
 import { imageToRead } from './image-size'
-import { readShared } from './shared'
+import { readShared, sharedDirOf } from './shared'
 import { DEFAULT_RELEVANCE, omittedRanges, selectRelevant } from './relevance'
 import { showStatus } from './status'
 import { PARAGRAPH_CHARS, STOP_MESSAGE, STOP_POINT, STOP_QUESTION, announcesByRule, lastParagraph, stopSkipReason } from './stop-gate'
@@ -629,6 +629,47 @@ export const register: Register = (on, options) => {
 
     return { text: `Labeled ${id} as ${value === 'y' ? 'positive' : 'negative'}.` }
   })
+  // /install: what the plugin needs, what leaves the machine when each gate is
+  // on, and where to change it. It prints no key and sends nothing anywhere.
+  on('command.run', { command: 'install' }, async $ => {
+    const key = await keyFor($)
+    const home = await homeOf($)
+    const dir = home === undefined ? '~/.context-harness' : sharedDirOf(home)
+    const gates: [string, string, string][] = [
+      ['stop', settings.stopGate, "the turn's last paragraph, scrubbed"],
+      ['tool gate', settings.toolGate, 'nothing leaves the machine'],
+      ['tool jev', settings.toolJev, "the call's target, scrubbed"],
+      ['instructions', settings.instructions, "the prompt's first 600 characters, scrubbed"],
+      ['instruction filter', settings.instructionFilter, 'the instruction files, scrubbed'],
+      ['web', settings.webRead, 'the page text and the question, scrubbed'],
+      ['fold blocks', settings.foldBlocks, 'the folded results and the last prompt'],
+      ['browser', settings.browserRoute, "the prompt's first 600 characters, scrubbed"],
+    ]
+    const lines = [
+      'context-harness: install',
+      '',
+      key === undefined
+        ? `Key: none found. Get one at https://console.typesafe.ai/home, then put it in ${dir}/key to share it across profiles (or set TYPESAFE_API_KEY, or use /plugin configure).`
+        : `Key: found, from ${key.source}. To share it across profiles, put it in ${dir}/key.`,
+      'The plugin never prints the key and sends it nowhere but Jev.',
+      '',
+      'What each gate sends when it is on. Every text is scrubbed first: secrets,',
+      'Korean personal information, email addresses and home paths come out.',
+      ...gates.map(([name, mode, what]) => `  ${name.padEnd(19)} ${mode.padEnd(7)} ${what}`),
+      '',
+      'Settings and the key can live in one folder, shared by every profile:',
+      `  ${dir}/config.json   the same values as /config writes`,
+      `  ${dir}/key           the key, alone in the file`,
+      'Nothing is written there by the plugin: the folder is yours to make.',
+      '',
+      'With a key present each gate starts in shadow: it judges and records, and',
+      'changes nothing. Read what it would have done with /jev-report, then set the',
+      'gate to active with /config. Folding needs no key and is already on.',
+    ]
+
+    return { text: lines.join('\n') }
+  })
+
 
   // E5: a turn that ends by announcing work. Settings Stop hooks run first.
   on('classic.Stop', async ($, e, next) => {
