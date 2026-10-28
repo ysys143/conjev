@@ -560,6 +560,18 @@ export const register: Register = (on, options) => {
     }
     // Nothing in the types promises the api view here; without it no message
     // can be shown free of media, so nothing folds and the engine summarizes.
+    // Folding off: the engine's own compaction, as if the plugin were not here.
+    // Only the record is kept, so a compaction still shows in /jev-report.
+    if (settings.fold === 'off') {
+      const below = await next(e)
+      if (below.skip === undefined) {
+        await recordCompaction(true, below.tokensBefore, below.tokensAfter)
+        state.lastCompactAt = await $.clock.now()
+        await forgetAttached($, sessionId).catch(() => undefined)
+      }
+
+      return below
+    }
     const view = await $.session.messages({ as: 'api' }).then(messageViewOf, () => new Map() as MessageView)
     // What follows a compaction that stands. A failure here leaves the
     // compaction as it is: the hook's .catch would otherwise summarize the
@@ -706,7 +718,7 @@ export const register: Register = (on, options) => {
   on('turn.complete', async ($, e, next) => {
     const done = await next(e)
     if (e.agentId === undefined) state.turnsSince = (state.turnsSince ?? 0) + 1
-    if (e.agentId !== undefined || isFoldScheduled || policySettings.foldAtPercent === 0) return done
+    if (e.agentId !== undefined || isFoldScheduled || policySettings.foldAtPercent === 0 || settings.fold === 'off') return done
     if (state.isJustCompacted) {
       state.isJustCompacted = false
 
@@ -776,7 +788,7 @@ export const register: Register = (on, options) => {
     const trust = await trustFor($)
     const fragments = settings.instructions === 'off' ? undefined : await loadFragments($)
     const header = [
-      `conjev: stop ${stopMode()}, tool ${settings.toolGate}, tool jev ${settings.toolJev}, instructions ${settings.instructions}, fold ${settings.foldJev}, instruction filter ${settings.instructionFilter}, web ${settings.webRead}, fold blocks ${settings.foldBlocks}, browser ${settings.browserRoute}`,
+      `conjev: stop ${stopMode()}, tool ${settings.toolGate}, tool jev ${settings.toolJev}, instructions ${settings.instructions}, fold ${settings.foldJev}, instruction filter ${settings.instructionFilter}, web ${settings.webRead}, fold blocks ${settings.foldBlocks}, browser ${settings.browserRoute}${settings.fold === 'off' ? '; folding off, the engine summarizes' : ''}`,
       `key ${key ? `from ${key.source}` : 'none'}, provider ${trust.trust} (${trust.why})`,
       ...(fragments
         ? [`fragments: ${fragments.list.length} in ${fragments.dir} (#${fragments.hash.slice(0, 6)})${fragments.problems.length ? `; skipped: ${fragments.problems.join('; ')}` : ''}`]

@@ -49,6 +49,12 @@ export type HarnessSettings = {
   imageMaxPx: number
   /** The switch over every Jev gate: off sends nothing to Jev, whatever a gate says. */
   jev: 'on' | 'off'
+  /**
+   * The switch over the fold: off leaves every compaction to the engine's own
+   * summary, untouched, and starts none early. The Jev gates outside the fold
+   * run as their modes say; fold relevance and kept blocks have nothing to judge.
+   */
+  fold: 'on' | 'off'
   /** The gates set to `auto`, before they were resolved: what /jev-report shows as auto. */
   auto: JevGate[]
 }
@@ -74,6 +80,7 @@ export function harnessSettingsFrom(options: Readonly<Record<string, unknown>>, 
 
   return {
     jev,
+    fold: options.fold === 'off' ? 'off' : 'on',
     auto: JEV_GATES.filter(name => options[name] === 'auto'),
     stopGate: gate(options.stopGate),
     toolGate: modeOf(options.toolGate),

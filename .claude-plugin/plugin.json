@@ -72,6 +72,16 @@
       "description": "Dated logs of what happened. Must have a new entry before a fold. Used only while it exists; empty turns it off.",
       "default": "sessions"
     },
+    "fold": {
+      "type": "string",
+      "title": "Folding",
+      "description": "on (default): a compaction folds finished tool results into pointers instead of summarizing them, and starts early at foldAtPercent. off: every compaction is the engine's own summary, untouched, and none starts early; the Jev gates outside the fold still run.",
+      "options": [
+        "on",
+        "off"
+      ],
+      "default": "on"
+    },
     "jev": {
       "type": "string",
       "title": "Jev (every judgment gate)",

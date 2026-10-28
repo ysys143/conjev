@@ -776,3 +776,38 @@ test('one question in two steps: a result kept whole is not asked about again, b
   expect(records(io.writes, 'fold').length).toBeGreaterThan(0)
   expect(records(io.writes, 'fold-blocks')).toEqual([])
 })
+
+// The fold switch: off leaves the compaction to the engine, as if the plugin were not here.
+test('folding off: the engine summarizes the whole transcript, with its own instructions only', { options: { fold: 'off', foldJev: 'active', foldBlocks: 'active' } }, async ($, on) => {
+  const io = setup(on, { transcript: OLD, env: KEY_ENV, fetch: everyQuestion, window: 10 })
+  const out = await $.session.compact({ trigger: 'manual', messages: OLD, instructions: 'keep the plan' } as never)
+  await drain()
+
+  expect(io.summarizedOver).toEqual([OLD.map(m => m.text || (m.toolResults ?? []).length > 0)])
+  expect(io.summarizedWith).toEqual(['keep the plan'])
+  expect((out.messages ?? []).map(m => m.text)).toEqual(['summary'])
+  // Nothing folded, kept, judged or noted.
+  expect(io.writes.filter(w => w.path.includes('/archive/'))).toEqual([])
+  expect(records(io.writes, 'fold')).toEqual([])
+  expect(io.fetches.length).toBe(0)
+  expect(io.appended.length).toBe(0)
+  // The compaction is still recorded, as a summary.
+  expect(records(io.writes, 'compact').map(row => row.decision)).toEqual(['summarized'])
+  const header = String((await $.command.run({ command: 'jev-report', args: '' } as never)).text).split('\n')[0]
+  expect(header).toContain('folding off')
+})
+
+test('folding off: no compaction starts early, however full the window', { options: { fold: 'off' } }, async ($, on) => {
+  const io = setup(on, { messages: OLD, percent: 90 })
+  await $.turn.complete({ answer: '', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+  await drain()
+
+  expect(io.commands).toEqual([])
+  expect(io.store.has(FOLD_ARMED_KEY)).toBe(false)
+})
+
+test('folding on: the header says nothing about it', async ($, on) => {
+  setup(on, { transcript: OLD })
+  const header = String((await $.command.run({ command: 'jev-report', args: '' } as never)).text).split('\n')[0]
+  expect(header).not.toContain('folding')
+})
