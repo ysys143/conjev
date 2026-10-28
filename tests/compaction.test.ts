@@ -565,3 +565,45 @@ test('a clean, pushed tree draws no remark at all', { options: { phaseFile: '/pr
   expect(note).not.toContain('not pushed')
   expect(note).not.toContain('Handoff')
 })
+
+test('a project with no status board: the offer is made once, and a refusal is remembered', async ($, on) => {
+  // No PHASE.md and a phaseFile setting, so the offer applies. The dialog is
+  // refused here, which is what a run with nobody to ask looks like.
+  const io = setup(on, { messages: OLD, percent: 90, phaseFile: '/proj/PHASE.md' })
+  await $.prompt.submit({ text: 'hello', wait: false, turnId: 't1', origin: { kind: 'composer' as const } } as never)
+  await drain()
+
+  // A question nobody could answer is not consent: nothing was accepted.
+  expect(io.store.get('board-offer')).toBe(undefined)
+  expect(io.appended.some(text => text.includes('status board'))).toBe(false)
+})
+
+test('three hours of silence about the status board counts as a yes', async ($, on) => {
+  const io = setup(on, { messages: OLD, percent: 90, phaseFile: '/proj/PHASE.md' })
+  // The offer went up just over three hours ago and was never answered; the
+  // session that asked it has ended, which is why this is read from the store.
+  io.store.set('board-offer-asked-at', 1_700_000_000_000 - 3 * 60 * 60 * 1000)
+  await $.prompt.submit({ text: 'hello', wait: false, turnId: 't1', origin: { kind: 'composer' as const } } as never)
+  await drain()
+
+  // The model is told to create the board, and the answer is not asked again.
+  expect(io.appended.some(text => text.includes('Create PHASE.md now'))).toBe(true)
+  expect(io.store.get('board-offer')).toBe('accepted')
+})
+
+test('the offer stands down once the board exists', async ($, on) => {
+  const io = setup(on, { messages: OLD, percent: 90, phaseFile: '/proj/PHASE.md', files: { '/proj/PHASE.md': '# PHASE\n' } })
+  await $.prompt.submit({ text: 'hello', wait: false, turnId: 't1', origin: { kind: 'composer' as const } } as never)
+  await drain()
+
+  expect(io.store.get('board-offer')).toBe(undefined)
+  expect(io.appended.some(text => text.includes('status board'))).toBe(false)
+})
+
+test('an empty phaseFile setting turns the offer off', async ($, on) => {
+  const io = setup(on, { messages: OLD, percent: 90, phaseFile: '' })
+  await $.prompt.submit({ text: 'hello', wait: false, turnId: 't1', origin: { kind: 'composer' as const } } as never)
+  await drain()
+
+  expect(io.store.get('board-offer')).toBe(undefined)
+})

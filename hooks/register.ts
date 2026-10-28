@@ -15,7 +15,7 @@ import { judgeDeferred, omcVersionsOf, recordFilter, recordToolUse, stateKeyOf }
 import { clip, scrub } from './scrub'
 import { harnessSettingsFrom, usesJev } from './settings'
 import { newId, runtime, startRuntime } from './state'
-import { boardHasHandoff, handoffGap, repoStateOf } from './repostate'
+import { OFFER_TIMEOUT_MS, boardHasHandoff, boardOfferStep, handoffGap, repoStateOf, type BoardOffer } from './repostate'
 import { showStatus } from './status'
 import { PARAGRAPH_CHARS, STOP_MESSAGE, STOP_POINT, STOP_QUESTION, announcesByRule, lastParagraph, stopSkipReason } from './stop-gate'
 import { cleanupRecords, homeOf, legacyArchiveRoot, readArchived, readRecords, stateRoot, writeArchive, writeLabel, writeRecord } from './storage'
@@ -52,6 +52,10 @@ const FOLD_IDLE_MS = 30_000
 
 /** One record per compaction: its trigger, its wait, and what it did or did not save. */
 export const COMPACT_POINT = 'compact'
+
+/** Where the offer to create the status board stands, across sessions. */
+const OFFER_KEY = 'board-offer'
+const OFFER_ASKED_KEY = 'board-offer-asked-at'
 
 /** Where the armed automatic fold records the moment it began waiting. */
 export const FOLD_ARMED_KEY = 'fold-armed-at'
@@ -90,6 +94,54 @@ async function handoffLine($: EngineInterface, phaseFile: string): Promise<strin
   }
 
   return handoffGap(state, boardHasHandoff(board))
+}
+
+/**
+ * Offers to create the status board when a project has none, and counts three
+ * hours of silence as a yes (the person's own instruction). Returns what to
+ * tell the model, or undefined when there is nothing to say.
+ *
+ * The offer is remembered in `$.store`, which outlives a session: a question
+ * left open when the process ends is still open when the next one starts, so
+ * the three hours keep counting rather than starting over.
+ */
+async function boardOffer($: EngineInterface, phaseFile: string): Promise<string | undefined> {
+  // A board that exists settles the question; so does an empty setting, which
+  // says the project does not keep one.
+  if (phaseFile === '' || (await $.fs.exists(phaseFile))) return undefined
+  const [state, askedRaw] = await Promise.all([$.store.get(OFFER_KEY), $.store.get(OFFER_ASKED_KEY)])
+  const askedAt = typeof askedRaw === 'number' ? askedRaw : undefined
+  const step = boardOfferStep(state as BoardOffer | undefined, askedAt, await $.clock.now())
+  if (step === 'leave' || step === 'wait') return undefined
+
+  if (step === 'accept') {
+    await $.store.set(OFFER_KEY, 'accepted')
+    await $.store.delete(OFFER_ASKED_KEY)
+
+    return 'The status board was never created, and the offer to make one went unanswered for three hours; that silence counts as a yes. Create PHASE.md now, in the form the context-harness:project-state skill gives, and fill its Handoff section from the repository.'
+  }
+
+  // The moment the question went up is written before it is asked, so a
+  // session that ends with the dialog still open does not restart the count.
+  await $.store.set(OFFER_ASKED_KEY, await $.clock.now())
+  // Nobody to ask is not a yes: a `-p` run refuses the dialog, and the offer
+  // stays open rather than becoming consent.
+  let answer: string
+  try {
+    answer = await $.ui.ask('This project has no PHASE.md. Create it?', {
+      options: ['Create it', 'Not now'],
+      header: 'Status board',
+    })
+  } catch {
+    return undefined
+  }
+  const wanted = answer.toLowerCase().includes('create')
+  await $.store.set(OFFER_KEY, wanted ? 'accepted' : 'declined')
+  await $.store.delete(OFFER_ASKED_KEY)
+
+  return wanted
+    ? 'The person agreed to a status board. Create PHASE.md now, in the form the context-harness:project-state skill gives, and fill its Handoff section from the repository.'
+    : undefined
 }
 
 export const register: Register = (on, options) => {
@@ -213,6 +265,16 @@ export const register: Register = (on, options) => {
     // The person is here: an automatic fold waiting for a quiet moment will see
     // this and stand down, so their request is never queued behind a summary.
     if (!e.isMeta && e.command === undefined) state.promptedAt = await $.clock.now()
+    // A project with no status board is offered one, once, and silence for
+    // three hours is taken as a yes. The model is told what to do about it.
+    if (!e.isMeta && e.command === undefined) {
+      try {
+        const offer = await boardOffer($, policySettings.phaseFile)
+        if (offer !== undefined) await note($, `[context-harness] ${offer}`)
+      } catch (error) {
+        $.ui.log(`${$.plugin.name}: the status board offer was skipped (${String(error)})`)
+      }
+    }
     // Browser routing first: a prompt that needs a browser operated gets the tool to use, once
     // while the conversation carries it. Whatever the fragments below decide, the block rides along.
     const origin0 = e.origin

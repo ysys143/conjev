@@ -70,3 +70,34 @@ export function handoffGap(state: RepoState | undefined, boardHasSection: boolea
 
   return `The repository${where} holds ${facts.join(' and ')}. ${board}`
 }
+
+/** How long an unanswered offer to create the status board counts as a yes. */
+export const OFFER_TIMEOUT_MS = 3 * 60 * 60 * 1000
+
+/** What was decided about offering to create the status board. */
+export type BoardOffer = 'asked' | 'declined' | 'accepted' | 'timeout'
+
+/**
+ * What to do about a project with no status board, given what happened before.
+ *
+ * `askedAt` is when the question went up, in ms, or undefined when it never
+ * did. The answer is one of:
+ *
+ * - `ask`: nobody has been asked yet. The person is here, so ask.
+ * - `wait`: the question is up. Their answer, or the timeout, settles it.
+ * - `accept`: three hours passed with no answer. Silence is taken as a yes, by
+ *   the person's own instruction, so the board is made and the resuming session
+ *   is told why.
+ * - `leave`: already decided; do not ask again this session or the next.
+ *
+ * A session that could not ask at all (a `-p` run has nobody to answer) passes
+ * no `askedAt` and is never treated as a yes: a question nobody heard is not
+ * consent.
+ */
+export function boardOfferStep(state: BoardOffer | undefined, askedAt: number | undefined, now: number): 'ask' | 'wait' | 'accept' | 'leave' {
+  if (state === 'declined' || state === 'accepted') return 'leave'
+  if (askedAt === undefined) return 'ask'
+  if (now - askedAt >= OFFER_TIMEOUT_MS) return 'accept'
+
+  return 'wait'
+}

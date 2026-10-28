@@ -38,6 +38,8 @@ export type Setup = {
   startedAt?: number
   /** What `git status --porcelain=v2 --branch` answers, as the repository would print it. */
   gitStatus?: string
+  /** What the person picks in `$.ui.ask`, as the label reads; an Error means it was refused, as in `-p`. */
+  askAnswer?: string | Error
   /** What the engine's own compaction beneath answers: a summary, or a skip. */
   compactBelow?: 'summary' | 'skip'
   /** The plugin folder's .env, wherever the plugin root is. */
@@ -154,6 +156,10 @@ export const setup = (on: On, s: Setup = {}) => {
     return { value: await (s.fetch ?? (() => ({ status: 500, ok: false, headers: {}, text: '' })))(body) }
   })
   on('store.get', (_, e) => ({ value: store.get(e.key) }))
+  on('store.delete', (_, e) => {
+    store.delete(e.key)
+    return { value: undefined }
+  })
   on('store.set', (_, e) => {
     store.set(e.key, e.value)
     return { value: undefined }
