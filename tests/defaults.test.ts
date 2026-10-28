@@ -82,10 +82,10 @@ test('without a shared folder nothing changes: each profile keeps its own settin
   expect(report.current.settings.foldAtPercent).toBe(60)
 })
 
-test('with no key, /install says where to get one and where to put it', async ($, on) => {
+test('with no key, /install-context-harness says where to get one and where to put it', async ($, on) => {
   const io = setup(on, {})
   await $.session.start(START)
-  const { text } = (await $.command.run({ command: 'install' })) as { text: string }
+  const { text } = (await $.command.run({ command: 'install-context-harness' })) as { text: string }
 
   // Where a key comes from, and where to put one to share it.
   expect(text).toContain('Key: none found')
@@ -94,10 +94,10 @@ test('with no key, /install says where to get one and where to put it', async ($
   expect(io.fetches.length).toBe(0)
 })
 
-test('/install names what each gate sends, and what is scrubbed first', async ($, on) => {
+test('/install-context-harness names what each gate sends, and what is scrubbed first', async ($, on) => {
   const io = setup(on, { env: KEY_ENV })
   await $.session.start(START)
-  const { text } = (await $.command.run({ command: 'install' })) as { text: string }
+  const { text } = (await $.command.run({ command: 'install-context-harness' })) as { text: string }
 
   expect(text).toContain('/.context-harness/key')
   // Each gate is listed with its mode and what it sends.
@@ -110,10 +110,10 @@ test('/install names what each gate sends, and what is scrubbed first', async ($
   expect(io.fetches.length).toBe(0)
 })
 
-test('/install says the key was found, and from where, without printing it', { options: { apiKey: 'tk-config' } }, async ($, on) => {
+test('/install-context-harness says the key was found, and from where, without printing it', { options: { apiKey: 'tk-config' } }, async ($, on) => {
   const io = setup(on, { env: KEY_ENV })
   await $.session.start(START)
-  const { text } = (await $.command.run({ command: 'install' })) as { text: string }
+  const { text } = (await $.command.run({ command: 'install-context-harness' })) as { text: string }
 
   expect(text).toContain('Key: found, from config')
   expect(text).not.toContain('tk-config')

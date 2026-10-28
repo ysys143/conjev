@@ -643,7 +643,7 @@ export const register: Register = (on, options) => {
   })
   // /install: what the plugin needs, what leaves the machine when each gate is
   // on, and where to change it. It prints no key and sends nothing anywhere.
-  on('command.run', { command: 'install' }, async $ => {
+  on('command.run', { command: 'install-context-harness' }, async $ => {
     const key = await keyFor($)
     const home = await homeOf($)
     const dir = home === undefined ? '~/.context-harness' : sharedDirOf(home)
