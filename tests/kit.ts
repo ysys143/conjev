@@ -166,6 +166,12 @@ export const setup = (on: On, s: Setup = {}) => {
         delete files[path]
       }
     }
+    // `find <dir> -type f` lists the files under <dir>; `rm <path>` removes one.
+    if (e.argv[0] === 'rm' && e.argv.length === 2) delete files[e.argv[1]!]
+    if (e.argv[0] === 'find' && e.argv[2] === '-type' && e.argv[3] === 'f' && e.argv.length === 4) {
+      const listed = Object.keys(files).filter(path => path.startsWith(`${e.argv[1]!}/`)).join('\n')
+      return { value: { exitCode: 0, stdout: listed, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+    }
     const isGit = e.argv[0] === 'git'
     const isMeasure = e.argv.includes('-g') || e.argv[0] === 'identify'
     const isResize = e.argv.includes('-Z') || e.argv.includes('-resize')

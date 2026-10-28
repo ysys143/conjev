@@ -145,3 +145,26 @@ test('a key already in ~/.conjev is kept; the old one is left where it is', asyn
   expect(io.files[`${SHARED}/key`]).toBe('ts_new\n')
   expect(io.files[`${PREVIOUS}/key`]).toBe('ts_old\n')
 })
+
+// What happened: copies left in the old folder because the new one held the
+// same file kept the old folder alive, and "moved" was logged at every start
+// although nothing moved.
+test('a copy with the same contents is removed from the old folder; nothing moved, nothing logged', async ($, on) => {
+  const io = setup(on, {
+    files: {
+      [`${PREVIOUS}/state/records/a/stop/1.json`]: '{"same":1}',
+      [`${SHARED}/state/records/a/stop/1.json`]: '{"same":1}',
+      [`${PREVIOUS}/state/records/a/stop/2.json`]: '{"old":2}',
+      [`${SHARED}/state/records/a/stop/2.json`]: '{"new":2}',
+      [`${SHARED}/key`]: 'k\n',
+    },
+  })
+  await $.session.start(START)
+
+  // The duplicate is gone; the one that differs stays for the person to look at.
+  expect(`${PREVIOUS}/state/records/a/stop/1.json` in io.files).toBe(false)
+  expect(io.files[`${PREVIOUS}/state/records/a/stop/2.json`]).toBe('{"old":2}')
+  expect(io.files[`${SHARED}/state/records/a/stop/2.json`]).toBe('{"new":2}')
+  // Nothing moved, so nothing is said.
+  expect(io.logs.filter(line => line.startsWith('moved'))).toEqual([])
+})
