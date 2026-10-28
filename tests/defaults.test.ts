@@ -107,13 +107,24 @@ test('the install command is a prompt the model runs, not a string it prints', (
   expect(COMMAND).toContain('$HOME/.context-harness/key')
   // Placed without the value ever reaching the agent's context, from wherever
   // the person says they keep it.
-  expect(COMMAND).toContain('Ask where they keep it')
+  expect(COMMAND).toContain('Ask one question: where do they keep it?')
   expect(COMMAND).toContain('chmod 600')
   expect(COMMAND).toContain('test -s')
 
   // And what to check afterwards.
   expect(COMMAND).toContain('/context-harness:onboard')
   expect(COMMAND).toContain(KEY_CHECK)
+})
+
+test('the setup asks one thing at a time and waits', () => {
+  // A first reply that held the key question, every way to place a key and the
+  // consent text at once read as a form, not a conversation.
+  expect(COMMAND).toContain('## Pace: one step, one question, then wait')
+  expect(COMMAND).toContain('ends with at most one question; then stop and wait')
+  expect(COMMAND).toContain("Never put a later step's material into an earlier reply")
+  expect(COMMAND).toContain('offer only the way below that\n  fits, not the list')
+  expect(COMMAND).toContain('Only after they have answered, in the closing\nreply')
+  expect(COMMAND).not.toContain('Offer these ways and let them pick')
 })
 
 test('the command speaks to someone who has never heard of the key', () => {

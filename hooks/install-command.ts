@@ -123,6 +123,31 @@ and only as much as the moment needs.
   uses it.
 - Do not look for the key in files or settings the person has not named. Ask.
 
+## Pace: one step, one question, then wait
+
+This is a conversation, not a page of instructions. Each reply covers one step
+and ends with at most one question; then stop and wait for the answer before
+the next step. Never put a later step's material into an earlier reply: the
+ways to place a key, the consent disclosure and the consent commands each
+come only when their step is reached, and only the part that fits what the
+person just said.
+
+The turns, in order:
+
+1. **Opening.** The two or three sentences on what it is for, the current
+   state in one sentence (from 1), and one question: if no key was found,
+   whether they already have a TypeSafe key; if one was found, go straight to
+   the consent step instead.
+2. **Where the key is** (only if they have one). One question: where they
+   keep it. Then offer the one way from 3 that fits the answer, and do it.
+3. **Check** (4), in the same reply as the placing when you can check it
+   yourself.
+4. **Consent** (5). The disclosure, then one question: do they allow it.
+5. **Close.** After they answer: one or two sentences on what happens now.
+
+If the person answers more than was asked, or asks something else, follow
+them; the order is a default, not a script.
+
 ## 1. Find out what is already there
 
 The plugin has already looked. Its answer is attached to this command as a note
@@ -153,18 +178,20 @@ Then go to 5: the gates wait for the person's consent.
 
 ## 3. If no key was found
 
-Ask one plain question: **do you already have a TypeSafe key?**
+Ask one plain question: **do you already have a TypeSafe key?** Then stop.
 
 - **No.** Give the address, https://console.typesafe.ai/home, and say that
-  getting one is the next step. Until then the plugin runs folding by rule
-  only, without Jev. Then go to 5: consent can be given before the key.
-- **Yes.** Offer these ways and let them pick. Do not pick for them.
+  getting one is the next step. Until then the plugin runs in its reduced
+  mode. Then go on to 5 in the next reply: consent can be given before the key.
+- **Yes.** Ask one question: where do they keep it? (On this machine, in a
+  file or an environment variable; or somewhere you cannot reach, such as a
+  password manager.) Then stop. When they answer, offer only the way below that
+  fits, not the list; offer 2 only if they say they use a single profile or ask.
 
   1. **If the key is already on this machine**, you can place it without ever
-     seeing it. Ask where they keep it: a file of keys, a project's \`.env\`, or an
-     environment variable, and the name it is stored under. If they know the file
-     but not the name, list the names in that file only, never a value:
-     \`grep -o '^[A-Za-z_][A-Za-z0-9_]*=' <the file>\`.
+     seeing it. You need the file or the variable, and the name it is stored
+     under. If they know the file but not the name, list the names in that file
+     only, never a value: \`grep -o '^[A-Za-z_][A-Za-z0-9_]*=' <the file>\`.
 
      Then copy it inside one command, so the value never reaches your context,
      the transcript or the process list. Put in the file they named, as an
@@ -200,9 +227,11 @@ archive.
 
 ## 4. Check the result
 
-Whatever they did, ask them to run \`/context-harness:onboard\` again. The plugin
-looks afresh each time, so its note should now say found. If it still says none,
-the value is not where the plugin reads it; check, in this order:
+If the key went into \`~/.context-harness/key\`, check it yourself with
+\`test -s\` as above; the plugin watches that file and picks the key up without
+a new command. Otherwise ask them to run \`/context-harness:onboard\` again: the
+plugin looks afresh each time, so its note should now say found. If it still
+says none, the value is not where the plugin reads it; check, in this order:
 
 1. \`~/.context-harness/key\` exists, is a plain file, is readable, and holds the
    key alone: no \`NAME=\`, no quotes, no blank line before it;
@@ -227,17 +256,20 @@ short, and how to stop it.
 
 > ${CONSENT_TEXT}
 
-Then ask them to answer by typing it themselves; you cannot answer for them:
+Then ask one question: do they allow it? Say that they answer by typing it
+themselves, since you cannot answer for them, and give the three answers in
+one short line each, then stop:
 
-- \`/jev-consent yes\`: allow it. The \`auto\` gates turn on now, or as soon as a
-  key is in place.
-- \`/jev-consent no\`: refuse it. The gates stay off; folding still works.
+- \`/jev-consent yes\`: allow it. Jev takes over now, or as soon as a key is in
+  place.
+- \`/jev-consent no\`: refuse it. The plugin stays in its reduced mode.
 - \`/jev-consent later\`: decide later. This setup will not start by itself
   again; \`/context-harness:onboard\` brings it back.
 
-Any of the three ends the setup. Say that \`/jev-consent no\` takes a yes back
-at any time, that \`jev: off\` in \`~/.context-harness/config.json\` switches every
-Jev gate off at once, and that \`/jev-report\` shows what each gate did.
+Any of the three ends the setup. Only after they have answered, in the closing
+reply, say that \`/jev-consent no\` takes a yes back at any time, that \`jev: off\`
+in \`~/.context-harness/config.json\` switches Jev off everywhere at once, and
+that \`/jev-report\` shows what Jev did.
 
 $ARGUMENTS
 `
