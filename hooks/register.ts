@@ -1,5 +1,5 @@
 import type { Register } from 'claude-code'
-import { DEFAULT_SETTINGS, SETTING_KEYS, dueBeforeFold, dueNote, foldTranscript, makePolicy, messageViewOf, reportFor, settingsFrom, sliceLines, transcriptChars, type MessageView, type PolicySettings } from './fold'
+import { DEFAULT_SETTINGS, SETTING_KEYS, dueBeforeFold, dueNote, foldTranscript, makePolicy, messageViewOf, partialCut, pointerMessage, reportFor, settingsFrom, sliceLines, transcriptChars, type MessageView, type PolicySettings } from './fold'
 import { routeBrowser } from './browser-flow'
 import { BROWSER_BLOCK, BROWSER_POINT } from './browser-route'
 import { FOLD_BLOCKS_POINT, judgeBlocks, withKeptBlocks } from './fold-blocks'
@@ -322,22 +322,35 @@ export const register: Register = (on, options) => {
       void judgeBlocks($, e.messages, outcome.archived, 'shadow').catch(() => undefined)
     }
 
+    // A partial summary: the engine summarizes what is older than the recent
+    // window, and the recent messages — folded where the policy says so — are
+    // carried over as they stand. This is what clears the old assistant turns,
+    // tool inputs and reasoning blocks a fold alone leaves behind. It runs only
+    // when the fold left enough behind that the window is still crowded.
     const { context } = await $.session.usage()
-    const tokensAfter = transcriptChars(outcome.messages) / CHARS_PER_TOKEN
-    const isSummarized = tokensAfter > context.window * SUMMARIZE_ABOVE_SHARE
-    const compacted = isSummarized ? await next({ ...e, messages: outcome.messages }) : { messages: outcome.messages }
-    if (compacted.skip === undefined) {
-      runtime.folded.results += outcome.archived.length
-      runtime.folded.savedChars += outcome.savedChars
-      showStatus($)
-      await after(
-        outcome.archived.length,
-        outcome.archived.map(item => item.id),
-        isSummarized,
-      )
-    }
+    const kept = partialCut(outcome.messages, policySettings.keepRecentTurns)
+    const isCrowded = transcriptChars(outcome.messages) > context.window * SUMMARIZE_ABOVE_SHARE * CHARS_PER_TOKEN
+    const cut = kept > 0 && isCrowded ? kept : 0
+    const below = cut > 0 ? await next({ ...e, messages: outcome.messages.slice(0, cut) }) : undefined
+    // A summary the engine refused leaves the conversation as it is: the
+    // compaction does not stand, so nothing is recorded or counted.
+    if (below !== undefined && below.skip !== undefined) return below
+    const isSummarized = below !== undefined
+    // A summary carries none of the folded ids it replaced, so the plugin puts
+    // them back itself: the model keeps a way to reach every original.
+    const messages = isSummarized
+      ? [...below.messages, pointerMessage(outcome.archived), ...outcome.messages.slice(cut)]
+      : outcome.messages
+    runtime.folded.results += outcome.archived.length
+    runtime.folded.savedChars += outcome.savedChars
+    showStatus($)
+    await after(
+      outcome.archived.length,
+      outcome.archived.map(item => item.id),
+      isSummarized,
+    )
 
-    return compacted
+    return { messages }
   }).catch((_, e, next) => next(e))
 
   // The idle boundary: the turn has ended and the person has not written yet.

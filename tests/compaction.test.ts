@@ -377,3 +377,28 @@ test('status: a gate that recorded something shows the line', { options: { toolG
   await $.tool.call({ tool: 'Read', file_path: '/proj/.env' })
   expect(io.statuses.at(-1)).toBe('jev · tool active 1 hits')
 })
+
+test('a crowded window is partly summarized: the engine gets the old part, the recent stays whole', { options: { foldJev: 'shadow' } }, async ($, on) => {
+  // A tiny window makes the folded transcript look crowded.
+  const io = setup(on, { transcript: OLD, env: KEY_ENV, fetch: everyQuestion, window: 10 })
+  const out = await $.session.compact({ trigger: 'manual', messages: OLD } as never)
+
+  // The engine was handed everything before OLD's last prompt, not the whole.
+  expect(io.summarizedOver.length).toBe(1)
+  const handed = io.summarizedOver[0]!
+  expect(handed.length).toBeLessThan(OLD.length)
+  // What came back: the summary, then the plugin's list of the folded originals,
+  // then the recent messages as they stood.
+  const messages = out.messages ?? []
+  expect(messages[0]?.text).toBe('summary')
+  expect(messages[1]?.text).toContain('[context-harness]')
+  expect(messages[1]?.text).toContain(String.raw`read_coordinate("a")`)
+  expect(messages.at(-1)?.text).toBe('and next')
+})
+
+test('an uncrowded fold leaves the transcript whole; no summary runs', { options: { foldJev: 'shadow' } }, async ($, on) => {
+  const io = setup(on, { transcript: OLD, env: KEY_ENV, fetch: everyQuestion })
+  await $.session.compact({ trigger: 'manual', messages: OLD } as never)
+
+  expect(io.summarizedOver.length).toBe(0)
+})

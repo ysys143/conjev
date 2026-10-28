@@ -199,6 +199,22 @@ export function pointerFor(id: string, candidate: FoldCandidate): string {
   return `${FOLD_MARK}${parts.filter(Boolean).join(' · ')} — read_coordinate("${id}")]`
 }
 
+/**
+ * One message listing every original the summary replaced, so the model keeps a
+ * way back to them: an engine summary carries none of the folded lines it was
+ * handed. It is this plugin's own note, marked as one, and the ids are the ones
+ * `read_coordinate` takes.
+ */
+export function pointerMessage(archived: readonly Archived[]): SessionMessage {
+  const lines = archived.map(item => pointerFor(item.id, { tool: item.tool, input: item.input, text: item.text, isError: item.isError, turnsAgo: 0 }))
+  const text = [
+    `${NOTE_MARKS[0]} The summary above replaced these tool results. Each line is one of them; read_coordinate returns an original.`,
+    ...lines,
+  ].join('\n')
+
+  return { role: 'user', text, toolUses: [] }
+}
+
 // A turn boundary: a user message with text and no tool results. Reminders
 // the engine injects as user text count too, so the recent window can span
 // fewer of the person's own prompts than keepRecentTurns says.
