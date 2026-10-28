@@ -88,7 +88,14 @@ test('with no key, /install-context-harness says where to get one and where to p
   const { text } = (await $.command.run({ command: 'install-context-harness' })) as { text: string }
 
   // Where a key comes from, and where to put one to share it.
-  expect(text).toContain('Key: none found')
+  expect(text).toContain('No Jev key found')
+  // The steps to take, not just where to get one: each one runnable as printed.
+  expect(text).toContain('claude plugin configure context-harness@context-harness')
+  expect(text).toContain(`mkdir -p ${HOME}/.context-harness`)
+  expect(text).toContain(`chmod 600 ${HOME}/.context-harness/key`)
+  expect(text).toContain('export TYPESAFE_API_KEY=')
+  // The placeholder is not a key: a paste of it would be an obvious mistake.
+  expect(text).toContain('<paste-the-key>')
   expect(text).toContain('console.typesafe.ai/home')
   expect(text).toContain('/.context-harness/key')
   expect(io.fetches.length).toBe(0)
@@ -116,6 +123,7 @@ test('/install-context-harness says the key was found, and from where, without p
   const { text } = (await $.command.run({ command: 'install-context-harness' })) as { text: string }
 
   expect(text).toContain('Key: found, from config')
+  expect(text).toContain('To share it with every profile')
   expect(text).not.toContain('tk-config')
   expect(io.fetches.length).toBe(0)
 })

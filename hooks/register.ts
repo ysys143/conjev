@@ -668,13 +668,37 @@ export const register: Register = (on, options) => {
       ['fold blocks', settings.foldBlocks, 'the folded results and the last prompt'],
       ['browser', settings.browserRoute, "the prompt's first 600 characters, scrubbed"],
     ]
-    const lines = [
-      'context-harness: install',
-      '',
-      key === undefined
-        ? `Key: none found. Get one at https://console.typesafe.ai/home, then put it in ${dir}/key to share it across profiles (or set TYPESAFE_API_KEY, or use /plugin configure).`
-        : `Key: found, from ${key.source}. To share it across profiles, put it in ${dir}/key.`,
-      'The plugin never prints the key and sends it nowhere but Jev.',
+    const lines = key === undefined
+      ? [
+          'context-harness: install',
+          '',
+          'No Jev key found. Everything below the fold works without one; the gates',
+          'that ask Jev need it. Get a key from https://console.typesafe.ai/home,',
+          'then do one of these, and run this command again to check:',
+          '',
+          '  1. For one profile, keep it in secure storage (it is never printed):',
+          '       claude plugin configure context-harness@context-harness',
+          '',
+          '  2. For every profile at once, write the key alone into a file:',
+          `       mkdir -p ${dir} && chmod 700 ${dir}`,
+          `       printf '%s\\n' '<paste-the-key>' > ${dir}/key && chmod 600 ${dir}/key`,
+          '',
+          '  3. For one shell session only:',
+          '       export TYPESAFE_API_KEY=<paste the key here>',
+          '',
+          'The plugin reads them in that order, prints the key nowhere, and sends it',
+          `only to Jev. To keep the key out of your shell history, write ${dir}/key`,
+          'in an editor instead of by hand at the prompt.',
+        ]
+      : [
+          'context-harness: install',
+          '',
+          `Key: found, from ${key.source}.`,
+          `To share it with every profile, put the same key in ${dir}/key`,
+          'and remove the per-profile copies.',
+          'The plugin never prints it and sends it nowhere but Jev.',
+        ]
+    lines.push(
       '',
       'What each gate sends when it is on. Every text is scrubbed first: secrets,',
       'Korean personal information, email addresses and home paths come out.',
@@ -689,7 +713,7 @@ export const register: Register = (on, options) => {
       'first: it judges and records, and changes nothing. Read what it would have',
       'done with /jev-report, then set it to active. Folding needs no key and is',
       'already on.',
-    ]
+    )
 
     return { text: lines.join('\n') }
   })
