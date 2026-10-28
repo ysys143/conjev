@@ -15,9 +15,10 @@ import { chunksOf, exactDuplicates, normalized, supersededOmc, withoutChunks, ty
 import { judgeDeferred, omcVersionsOf, recordFilter, recordToolUse, stateKeyOf } from './filter-flow'
 import { clip, scrub } from './scrub'
 import { harnessSettingsFrom, usesJev } from './settings'
-import { newId, runtime, startRuntime } from './state'
+import { newId, retuneRuntime, runtime, startRuntime } from './state'
 import { OFFER_TIMEOUT_MS, boardHasHandoff, boardOfferStep, handoffGap, offerAccepted, repoStateOf, type BoardOffer } from './repostate'
 import { imageToRead } from './image-size'
+import { readShared } from './shared'
 import { DEFAULT_RELEVANCE, omittedRanges, selectRelevant } from './relevance'
 import { showStatus } from './status'
 import { PARAGRAPH_CHARS, STOP_MESSAGE, STOP_POINT, STOP_QUESTION, announcesByRule, lastParagraph, stopSkipReason } from './stop-gate'
@@ -151,7 +152,7 @@ async function boardOffer($: EngineInterface, phaseFile: string): Promise<string
 }
 
 export const register: Register = (on, options) => {
-  const policySettings = settingsFrom(options)
+  let policySettings = settingsFrom(options)
   const policy = makePolicy(policySettings)
   const settings = harnessSettingsFrom(options)
   startRuntime(settings, policySettings)
@@ -161,6 +162,21 @@ export const register: Register = (on, options) => {
   const state: Continuity = { deferrals: 0, isJustCompacted: false }
 
   on('session.start', async ($, e, next) => {
+    // The shared folder comes first, then whatever this profile's settings say:
+    // a person with several profiles tunes one file rather than each of them.
+    // Read here rather than at register time, where there is no `$` to read with.
+    try {
+      const home = await homeOf($)
+      const shared = await readShared($, home)
+      const merged = { ...options, ...shared.settings }
+      const policyShared = settingsFrom(merged)
+      const gatesShared = harnessSettingsFrom(merged)
+      retuneRuntime(gatesShared, policyShared)
+      runtime.key = shared.key === undefined ? undefined : { key: shared.key, source: 'shared' }
+      policySettings = policyShared
+    } catch (error) {
+      $.ui.log(`${$.plugin.name}: the shared settings could not be read (${String(error)})`)
+    }
     // Each half starts on its own, so one that fails leaves the other working.
     try {
       await $.tool.register({

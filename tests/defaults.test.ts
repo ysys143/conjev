@@ -2,7 +2,7 @@
 // source must still send nothing and record no judgment, whichever hook runs.
 import type { SessionMessage } from 'claude-code'
 import { expect, test } from 'claude-code/testing'
-import { KEY_ENV, drain, prompt, setup } from './kit'
+import { HOME, KEY_ENV, drain, prompt, setup } from './kit'
 
 const call = (id: string, tool: string, input: Record<string, unknown>): SessionMessage => ({ role: 'assistant', text: '', toolUses: [{ tool_use_id: id, tool, input }] })
 const answer = (id: string, text: string): SessionMessage => ({ role: 'user', text: '', toolUses: [], toolResults: [{ tool_use_id: id, text, isError: false }] })
@@ -57,4 +57,27 @@ test('defaults: a key in every source, every hook run, nothing sent and no judgm
   expect(io.submitted[0]?.context).toBe(undefined)
   // Folding needs no key and is on by default.
   expect(io.writes.some(w => w.path.includes('/archive/'))).toBe(true)
+})
+
+test('a shared folder under the home directory overrides this profile, and its key is used', async ($, on) => {
+  const io = setup(on, {
+    env: KEY_ENV,
+    files: {
+      [`${HOME}/.context-harness/config.json`]: '{"foldAtPercent": 5}',
+      [`${HOME}/.context-harness/key`]: 'ts_shared_key\n',
+    },
+  })
+  await $.session.start(START)
+  const report = JSON.parse(String((await $.tool.call({ tool: 'mcp__context-harness__policy_report' })).result)) as { current: { settings: { foldAtPercent: number } } }
+
+  // The fold policy came from the shared file, not this profile's defaults.
+  expect(report.current.settings.foldAtPercent).toBe(5)
+})
+
+test('without a shared folder nothing changes: each profile keeps its own settings', async ($, on) => {
+  const io = setup(on, { env: KEY_ENV })
+  await $.session.start(START)
+  const report = JSON.parse(String((await $.tool.call({ tool: 'mcp__context-harness__policy_report' })).result)) as { current: { settings: { foldAtPercent: number } } }
+
+  expect(report.current.settings.foldAtPercent).toBe(60)
 })

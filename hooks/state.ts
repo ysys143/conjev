@@ -56,6 +56,17 @@ export function startRuntime(settings: HarnessSettings, policy: PolicySettings):
   runtime.filter = undefined
 }
 
+/**
+ * Replaces the settings and policy, leaving the counters, the fold's tally and
+ * the key alone. Used where settings arrive after the runtime is up: the shared
+ * folder is read at session start, and starting the runtime over there would
+ * wipe what the session has already done.
+ */
+export function retuneRuntime(settings: HarnessSettings, policy: PolicySettings): void {
+  runtime.settings = settings
+  runtime.policy = policy
+}
+
 export function settingsOf(): HarnessSettings {
   if (runtime.settings === undefined) throw new Error('context-harness: settings read before register')
 

@@ -1,5 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 import { OFFER_TIMEOUT_MS, boardHasHandoff, boardOfferStep, handoffGap, offerAccepted } from '../hooks/repostate'
+import { keyFromShared, settingsFromShared, sharedDirOf } from '../hooks/shared'
 test('probe', async () => {
   expect(boardHasHandoff('## Handoff\n- x')).toBe(true)
   expect(boardHasHandoff('## Now\nx')).toBe(false)
@@ -44,4 +45,19 @@ test('a settled offer is never asked again, in this session or the next', () => 
   expect(boardOfferStep('declined', undefined, now)).toBe('leave')
   // And a settled answer outranks the timeout that would otherwise accept.
   expect(boardOfferStep('declined', now - OFFER_TIMEOUT_MS * 2, now)).toBe('leave')
+})
+
+test('the shared folder reads as settings and as a key, and a broken file is nothing', () => {
+  // The config file holds the same values the plugin's own settings do.
+  expect(settingsFromShared('{"foldAtPercent": 40}')).toEqual({ foldAtPercent: 40 })
+  // A file that is not an object, or not JSON at all, is nothing rather than a throw.
+  expect(settingsFromShared('[]')).toEqual({})
+  expect(settingsFromShared('not json')).toEqual({})
+  expect(settingsFromShared(undefined)).toEqual({})
+  // The whole key file is the key: an editor's trailing newline is the only thing dropped.
+  expect(keyFromShared('ts_live_abc\n')).toBe('ts_live_abc')
+  expect(keyFromShared('  spaced  ')).toBe('spaced')
+  expect(keyFromShared('\n')).toBe(undefined)
+  expect(keyFromShared(undefined)).toBe(undefined)
+  expect(sharedDirOf('/home/me')).toBe('/home/me/.context-harness')
 })
