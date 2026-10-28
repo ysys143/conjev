@@ -4,16 +4,16 @@ import { routeBrowser } from './browser-flow'
 import { BROWSER_BLOCK, BROWSER_POINT } from './browser-route'
 import { FOLD_BLOCKS_POINT, judgeBlocks, withKeptBlocks } from './fold-blocks'
 import { parseText } from './blocks'
-import { FOLD_POINT, judgedPolicy } from './fold-judge'
+import { FOLD_POINT, currentRequest, judgedPolicy } from './fold-judge'
 import { afterCompaction, anchorsOf, askNeeded, judgeFold, note, since, type Continuity } from './fold-flow'
 import { askConditions, attachedNow, forgetAttached, fragmentsDirOf, loadFragments, pendingOf, recordFragments, rememberWouldAttach, wouldAttach } from './fragment-flow'
 import { INSTRUCTIONS_POINT, attachedNames, decideFragments, fragmentBlock, keywordHit, pinnedSection } from './instructions'
 import { probabilityOf, type JevResult } from './jev'
 import { errorOf, judge, keyFor, resolveKey, trustFor } from './jev-call'
 import { CONSENT_TEXT, INSTALL_COMMAND_NAME, keyNote, onboardingMessage } from './install-command'
-import { blockReport, compactReport, filterReport, pointReport, type ShadowRecord } from './report'
+import { DEMOTE_LABELS, DEMOTE_PRECISION, blockReport, compactReport, filterReport, latencyReport, pointReport, shouldDemoteStop, stopPrecision, type ShadowRecord } from './report'
 import { chunksOf, exactDuplicates, normalized, supersededOmc, withoutChunks, type DocFile } from './instruction-docs'
-import { judgeDeferred, omcVersionsOf, recordFilter, recordToolUse, stateKeyOf } from './filter-flow'
+import { jevDropsOf, judgeDeferred, omcVersionsOf, recordFilter, recordToolUse, stateKeyOf } from './filter-flow'
 import { clip, scrub } from './scrub'
 import { harnessSettingsFrom, usesJev, type HarnessSettings } from './settings'
 import { newId, retuneRuntime, runtime, startRuntime } from './state'
@@ -72,6 +72,31 @@ export const COMPACT_POINT = 'compact'
 /** Where the offer to create the status board stands, across sessions. */
 const OFFER_KEY = 'board-offer'
 const OFFER_ASKED_KEY = 'board-offer-asked-at'
+
+/** A3: where the Stop gate's demotion to shadow is kept, across sessions. */
+export const STOP_DEMOTED_KEY = 'stop-demoted'
+
+type StopDemotion = { precision: number; labeled: number; at: string }
+
+/**
+ * A3: once enough stop judgments are labeled, the gate's precision decides
+ * whether it may hold turns. Below the bar it is demoted to shadow, and the
+ * demotion is kept in `$.store` so later sessions keep it. Returns the new
+ * demotion, or undefined when nothing changed.
+ */
+async function demoteStop($: EngineInterface, threshold: number): Promise<StopDemotion | undefined> {
+  if ((await $.store.get(STOP_DEMOTED_KEY)) !== undefined) return undefined
+  const { records, labels } = await readRecords($, 20_000)
+  const p = stopPrecision(records, labels, threshold)
+  if (!shouldDemoteStop(p)) return undefined
+  const demotion = { precision: p.precision!, labeled: p.labeled, at: new Date(await $.clock.now()).toISOString() }
+  await $.store.set(STOP_DEMOTED_KEY, demotion)
+  const text = `context-harness: the Stop gate was right ${Math.round(demotion.precision * 100)}% of the time over ${demotion.labeled} labels, under ${DEMOTE_PRECISION * 100}%, so it now only records (shadow).`
+  $.ui.toast(text)
+  $.ui.log(text)
+
+  return demotion
+}
 
 /** Where the armed automatic fold records the moment it began waiting. */
 export const FOLD_ARMED_KEY = 'fold-armed-at'
@@ -185,6 +210,9 @@ export const register: Register = (on, options) => {
   let settings = harnessSettingsFrom(options)
   startRuntime(settings, policySettings)
   let isOn = usesJev(settings) || settings.toolGate !== 'off'
+  // A3: set once the labels demoted the Stop gate; active then runs as shadow.
+  let stopDemoted: StopDemotion | undefined
+  const stopMode = () => (settings.stopGate === 'active' && stopDemoted !== undefined ? 'shadow' : settings.stopGate)
   // Every hook below reads `settings` and `policy` when it runs, so replacing
   // them here is what a changed shared file or a new consent takes effect by.
   const apply = (next: Awaited<ReturnType<typeof sharedState>>): void => {
@@ -218,6 +246,7 @@ export const register: Register = (on, options) => {
           'Pass that id. offset (1-based line) and limit (lines, default 400) select a part. ' +
           'Add query instead when you want only the parts that bear on one question: the answer keeps the ' +
           'passages that matter and names the line ranges it left out, so you can read them next. ' +
+          'Without query, offset or limit, the parts that bear on the person\'s latest request are kept the same way. ' +
           'Set full to true for the whole original when query would leave out something you need.',
         inputSchema: {
           type: 'object',
@@ -288,6 +317,11 @@ export const register: Register = (on, options) => {
       $.ui.log(`${$.plugin.name}: could not move its state, reading it where it is (${String(error)})`)
     }
     try {
+      stopDemoted = ((await $.store.get(STOP_DEMOTED_KEY)) as StopDemotion | undefined) ?? (settings.stopGate === 'active' ? await demoteStop($, settings.stopThreshold) : undefined)
+    } catch (error) {
+      $.ui.log(`${$.plugin.name}: could not check the Stop gate's labels (${String(error)})`)
+    }
+    try {
       await cleanupRecords($)
     } catch (error) {
       $.ui.log(`${$.plugin.name}: could not drop old records (${String(error)})`)
@@ -297,7 +331,8 @@ export const register: Register = (on, options) => {
   })
 
   // The instruction files the engine is about to load: chunks loaded twice
-  // leave in active; Jev's reading of the rest is recorded, never applied.
+  // leave in active, and so do those Jev's stored reading leaves out (never
+  // one of the always-kept rules); shadow only records what it would do.
   on('prompt.context', async ($, e, next) => {
     const mode = settings.instructionFilter
     const files = e.instructionFiles
@@ -308,11 +343,15 @@ export const register: Register = (on, options) => {
     const drops = new Map([...exactDuplicates(chunks), ...supersededOmc(chunks, await omcVersionsOf($, docs))])
     const droppedChars = chunks.filter(c => drops.has(c.id)).reduce((sum, c) => sum + normalized(c.text).length, 0)
     runtime.filter = { stateKey: stateKeyOf(chunks), chunks, drops, droppedChars, deferred: runtime.filter?.deferred ?? [] }
-    const passed = mode === 'active' && drops.size > 0 ? withoutChunks(files as unknown as DocFile[], chunks, drops, await homeOf($)) : undefined
+    // Jev's reading of this set of files, once it has answered, is applied in active too.
+    const jevDrops = mode === 'active' ? await jevDropsOf($, chunks, drops) : new Map()
+    const applied = new Map([...drops, ...jevDrops])
+    const passed = mode === 'active' && applied.size > 0 ? withoutChunks(files as unknown as DocFile[], chunks, applied, await homeOf($)) : undefined
     const hookMs = (await $.clock.now()) - t0
     // Judged and recorded after the request has gone.
     void recordFilter($, chunks, drops, mode, t0, hookMs).catch(() => undefined)
-    if (passed !== undefined) $.ui.toast(`context-harness: left out ${drops.size} instruction chunks loaded twice (${droppedChars} chars)`)
+    if (passed !== undefined && drops.size > 0) $.ui.toast(`context-harness: left out ${drops.size} instruction chunks loaded twice (${droppedChars} chars)`)
+    if (passed !== undefined && jevDrops.size > 0) $.ui.toast(`context-harness: left out ${jevDrops.size} instruction chunks Jev read as repeated or needed only for some work`)
     showStatus($)
 
     return passed === undefined ? next(e) : next({ ...e, instructionFiles: passed as unknown as typeof files })
@@ -719,12 +758,15 @@ export const register: Register = (on, options) => {
     const trust = await trustFor($)
     const fragments = settings.instructions === 'off' ? undefined : await loadFragments($)
     const header = [
-      `context-harness: stop ${settings.stopGate}, tool ${settings.toolGate}, tool jev ${settings.toolJev}, instructions ${settings.instructions}, fold ${settings.foldJev}, instruction filter ${settings.instructionFilter}, web ${settings.webRead}, fold blocks ${settings.foldBlocks}, browser ${settings.browserRoute}`,
+      `context-harness: stop ${stopMode()}, tool ${settings.toolGate}, tool jev ${settings.toolJev}, instructions ${settings.instructions}, fold ${settings.foldJev}, instruction filter ${settings.instructionFilter}, web ${settings.webRead}, fold blocks ${settings.foldBlocks}, browser ${settings.browserRoute}`,
       `key ${key ? `from ${key.source}` : 'none'}, provider ${trust.trust} (${trust.why})`,
       ...(fragments
         ? [`fragments: ${fragments.list.length} in ${fragments.dir} (#${fragments.hash.slice(0, 6)})${fragments.problems.length ? `; skipped: ${fragments.problems.join('; ')}` : ''}`]
         : []),
       `${records.length} records, ${labels.size} labels`,
+      ...(stopDemoted === undefined
+        ? []
+        : [`stop demoted to shadow on ${stopDemoted.at}: precision ${stopDemoted.precision.toFixed(2)} over ${stopDemoted.labeled} labels, under ${DEMOTE_PRECISION} (/jev-mark ${DEMOTE_LABELS}+ labels)`]),
     ]
     const reports = [
       pointReport(STOP_POINT, records, labels, settings.stopThreshold),
@@ -735,6 +777,7 @@ export const register: Register = (on, options) => {
       ...(settings.instructionFilter === 'off' && !records.some(r => r.point === 'instr-filter') ? [] : [filterReport(records)]),
       ...[WEB_POINT, FOLD_BLOCKS_POINT].filter(point => records.some(r => r.point === point)).map(point => blockReport(point, records)),
       compactReport(records),
+      latencyReport(records, settings.timeoutMs),
     ].filter((part): part is string => part !== undefined)
 
     return { text: [...header, ...reports].join('\n\n') }
@@ -770,8 +813,14 @@ export const register: Register = (on, options) => {
     const [id, value] = e.args.trim().split(/\s+/)
     if (id === undefined || !/^[a-z0-9]{4,20}$/.test(id) || (value !== 'y' && value !== 'n')) return { text: 'Usage: /jev-mark <id> y|n' }
     await writeLabel($, id, value === 'y', new Date(await $.clock.now()).toISOString())
+    const demoted = settings.stopGate === 'active' && stopDemoted === undefined ? await demoteStop($, settings.stopThreshold) : undefined
+    if (demoted !== undefined) stopDemoted = demoted
 
-    return { text: `Labeled ${id} as ${value === 'y' ? 'positive' : 'negative'}.` }
+    return {
+      text:
+        `Labeled ${id} as ${value === 'y' ? 'positive' : 'negative'}.` +
+        (demoted === undefined ? '' : ` The Stop gate's precision is ${demoted.precision.toFixed(2)} over ${demoted.labeled} labels, under ${DEMOTE_PRECISION}: it now only records (shadow).`),
+    }
   })
 
   // /install-context-harness is a Markdown command, so the model writes the
@@ -791,7 +840,7 @@ export const register: Register = (on, options) => {
   // E5: a turn that ends by announcing work. Settings Stop hooks run first.
   on('classic.Stop', async ($, e, next) => {
     const below = await next(e)
-    const mode = settings.stopGate
+    const mode = stopMode()
     if (mode === 'off' || below.block !== undefined) return below
 
     const t0 = await $.clock.now()
@@ -1005,7 +1054,10 @@ export const register: Register = (on, options) => {
 
     // A judgment needs a key. Without one the whole original comes back: a
     // partial answer nothing could choose would only hide what is there.
-    const query = typeof input.query === 'string' ? input.query.trim() : ''
+    // F5: no question and no range asked for means the person's latest request is the question.
+    const asked = typeof input.query === 'string' ? input.query.trim() : ''
+    const isRange = typeof input.offset === 'number' || typeof input.limit === 'number'
+    const query = asked !== '' || input.full === true || isRange ? asked : (currentRequest(await $.session.messages()) ?? '')
     const key = input.full === true || query === '' ? undefined : await keyFor($)
     if (key !== undefined && key !== null) {
       const home = (await homeOf($)) ?? '/'

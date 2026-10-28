@@ -273,3 +273,46 @@ export function compactReport(records: readonly ShadowRecord[]): string | undefi
 
   return lines.join('\n')
 }
+
+/** A3: how many labeled stop judgments it takes before precision can demote the gate, and the bar. */
+export const DEMOTE_LABELS = 150
+export const DEMOTE_PRECISION = 0.9
+
+/**
+ * The Stop gate's precision over the labeled judgments: of those Jev flagged
+ * at the threshold, the share the person labeled as real announcements.
+ */
+export function stopPrecision(records: readonly ShadowRecord[], labels: ReadonlyMap<string, boolean>, threshold: number): { labeled: number; flagged: number; precision?: number } {
+  const judged = records.filter(r => r.point === 'stop' && typeof r.jev === 'number' && labels.has(r.id))
+  const flagged = judged.filter(r => r.jev! >= threshold)
+
+  return {
+    labeled: judged.length,
+    flagged: flagged.length,
+    ...(flagged.length === 0 ? {} : { precision: flagged.filter(r => labels.get(r.id) === true).length / flagged.length }),
+  }
+}
+
+/** Whether the labels say the Stop gate is wrong too often to hold turns. */
+export function shouldDemoteStop(p: { labeled: number; precision?: number }): boolean {
+  return p.labeled >= DEMOTE_LABELS && p.precision !== undefined && p.precision < DEMOTE_PRECISION
+}
+
+/**
+ * A7: how long each gate waited on Jev and held its event, p50 and p95, from
+ * the records of calls that went out.
+ */
+export function latencyReport(records: readonly ShadowRecord[], timeoutMs: number): string | undefined {
+  const byPoint = new Map<string, ShadowRecord[]>()
+  for (const r of records) if (typeof r.jevMs === 'number' && r.jevMs > 0) byPoint.set(r.point, [...(byPoint.get(r.point) ?? []), r])
+  if (byPoint.size === 0) return undefined
+  const lines = [`## latency (timeout ${timeoutMs} ms)`]
+  for (const [point, rs] of [...byPoint].sort(([a], [b]) => a.localeCompare(b))) {
+    const jev = rs.map(r => r.jevMs!)
+    const hook = rs.map(r => r.hookMs)
+    const late = rs.filter(r => r.error === 'timeout').length
+    lines.push(`${point}: jev p50 ${ms(percentile(jev, 0.5))}, p95 ${ms(percentile(jev, 0.95))}; hook p50 ${ms(percentile(hook, 0.5))}, p95 ${ms(percentile(hook, 0.95))}; ${rs.length} calls, ${late} timed out`)
+  }
+
+  return lines.join('\n')
+}
