@@ -9,13 +9,14 @@ import { afterCompaction, anchorsOf, askNeeded, judgeFold, note, since, type Con
 import { askConditions, attachedNow, forgetAttached, fragmentsDirOf, loadFragments, pendingOf, recordFragments, rememberWouldAttach, wouldAttach } from './fragment-flow'
 import { INSTRUCTIONS_POINT, attachedNames, decideFragments, fragmentBlock, keywordHit, pinnedSection } from './instructions'
 import { probabilityOf, type JevResult } from './jev'
-import { errorOf, judge, keyFor, trustFor } from './jev-call'
+import { errorOf, judge, keyFor, resolveKey, trustFor } from './jev-call'
+import { INSTALL_COMMAND_NAME, keyNote } from './install-command'
 import { blockReport, compactReport, filterReport, pointReport, type ShadowRecord } from './report'
 import { chunksOf, exactDuplicates, normalized, supersededOmc, withoutChunks, type DocFile } from './instruction-docs'
 import { judgeDeferred, omcVersionsOf, recordFilter, recordToolUse, stateKeyOf } from './filter-flow'
 import { clip, scrub } from './scrub'
 import { harnessSettingsFrom, usesJev } from './settings'
-import { newId, retuneRuntime, runtime, startRuntime } from './state'
+import { newId, retuneRuntime, runtime, settingsOf, startRuntime } from './state'
 import { OFFER_TIMEOUT_MS, boardHasHandoff, boardOfferStep, handoffGap, offerAccepted, repoStateOf, type BoardOffer } from './repostate'
 import { imageToRead } from './image-size'
 import { readShared, sharedDirOf } from './shared'
@@ -645,6 +646,20 @@ export const register: Register = (on, options) => {
 
     return { text: `Labeled ${id} as ${value === 'y' ? 'positive' : 'negative'}.` }
   })
+
+  // /install-context-harness is a Markdown command, so the model writes the
+  // answer. What only the plugin knows is where it finds a key; that rides along
+  // as a note when the command expands. It looks afresh each time, so running the
+  // command again after placing a key sees it, and the gates use it from then on.
+  on('classic.UserPromptExpansion', async ($, e, next) => {
+    const below = await next(e)
+    if (e.expansion_type !== 'slash_command' || e.command_name.replace(/^.*:/, '') !== INSTALL_COMMAND_NAME) return below
+    const shared = await readShared($, await homeOf($))
+    const found = shared.key === undefined ? await resolveKey($, settingsOf().apiKey) : { key: shared.key, source: 'shared' as const }
+    runtime.key = found ?? null
+
+    return { ...below, additionalContext: [...(below.additionalContext ?? []), keyNote(found?.source)] }
+  }).catch((_, e, next) => next(e))
   // E5: a turn that ends by announcing work. Settings Stop hooks run first.
   on('classic.Stop', async ($, e, next) => {
     const below = await next(e)

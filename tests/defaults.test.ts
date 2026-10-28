@@ -1,7 +1,7 @@
 // As installed: every Jev setting at its manifest default. A key in every
 // source must still send nothing and record no judgment, whichever hook runs.
 import type { SessionMessage } from 'claude-code'
-import { expect, test } from 'claude-code/testing'
+import { expect, test, type TestBody } from 'claude-code/testing'
 import { HOME, KEY_ENV, drain, prompt, setup } from './kit'
 
 const call = (id: string, tool: string, input: Record<string, unknown>): SessionMessage => ({ role: 'assistant', text: '', toolUses: [{ tool_use_id: id, tool, input }] })
@@ -85,7 +85,7 @@ test('without a shared folder nothing changes: each profile keeps its own settin
 // The command is a Markdown file now, not a `command.run` hook: its body is the
 // prompt the model runs, which is what lets the agent ask and act instead of
 // printing a string. The hook could only answer; it could not start a turn.
-import { INSTALL_COMMAND_BODY, INSTALL_COMMAND_DESCRIPTION } from '../hooks/install-command'
+import { INSTALL_COMMAND_BODY, INSTALL_COMMAND_DESCRIPTION, KEY_CHECK } from '../hooks/install-command'
 
 const COMMAND = INSTALL_COMMAND_BODY
 
@@ -105,19 +105,81 @@ test('the install command is a prompt the model runs, not a string it prints', (
   expect(COMMAND).toContain('https://console.typesafe.ai/home')
   expect(COMMAND).toContain('claude plugin configure context-harness@context-harness')
   expect(COMMAND).toContain('$HOME/.context-harness/key')
-  // Placed without the value ever reaching the agent's context.
-  expect(COMMAND).toContain('source ~/.oh-my-zsh/custom/apikey.env')
+  // Placed without the value ever reaching the agent's context, from wherever
+  // the person says they keep it.
+  expect(COMMAND).toContain('Ask where they keep it')
   expect(COMMAND).toContain('chmod 600')
   expect(COMMAND).toContain('test -s')
 
   // And what to check afterwards.
   expect(COMMAND).toContain('/install-context-harness')
-  expect(COMMAND).toContain('Key: found, from')
+  expect(COMMAND).toContain(KEY_CHECK)
 })
 
-test('the command never tells the agent to read or print a key', () => {
+test('the command speaks to someone who has never heard of the key', () => {
+  // The person meets Jev, TypeSafe and ~/.context-harness/key here first: the
+  // reply says what they are for before it reports anything missing.
+  expect(COMMAND).toContain('Before any result, say in a sentence or two what this is about')
+  expect(COMMAND).toContain('Do not open with a file path, a missing file')
+  expect(COMMAND).toContain('do not list the places the\n  plugin looked')
+  expect(COMMAND).toContain('The first time you name a file or a setting, say what it is')
+  expect(COMMAND).toContain("Answer in the person's language")
+})
+
+test('the command never tells the agent to read or print a key, or where one person keeps theirs', () => {
   const forbidden = [/cat\s+\S*apikey\.env/, /echo\s+\$TYPESAFE/, /printenv/]
   for (const pattern of forbidden) expect(COMMAND).not.toMatch(pattern)
-  // The one grep it does run prints a count, never a value.
-  expect(COMMAND).toContain("grep -c '^TYPESAFE_API_KEY='")
+  // No one machine's layout: the agent asks, and looks nowhere it was not told.
+  for (const local of ['oh-my-zsh', 'apikey.env', '/Users/', 'zsh -c']) expect(COMMAND).not.toContain(local)
+  expect(COMMAND).toContain('Do not look for the key in files or settings the person has not named')
+})
+
+// Where the key is, only the plugin knows; it says so when the command expands,
+// so the model reads it beside the body instead of guessing or probing files.
+const EXPAND = { expansion_type: 'slash_command', command_name: 'context-harness:install-context-harness', command_args: '', prompt: '/context-harness:install-context-harness' } as const
+const expand = async ($: Parameters<TestBody>[0], command = EXPAND): Promise<string> =>
+  ((await $.classic.UserPromptExpansion(command as never)).additionalContext ?? []).join('\n')
+
+test('the command arrives with where the plugin found the key, never the key', async ($, on) => {
+  setup(on, { env: KEY_ENV })
+  await $.session.start(START)
+  const note = await expand($)
+
+  expect(note).toContain(`${KEY_CHECK} found, in TYPESAFE_API_KEY in the environment`)
+  expect(note).not.toContain(KEY_ENV.TYPESAFE_API_KEY)
+})
+
+test("the profile's secure setting is named as such", { options: { apiKey: 'tk-config' } }, async ($, on) => {
+  setup(on)
+  await $.session.start(START)
+  const note = await expand($)
+
+  expect(note).toContain(`${KEY_CHECK} found, in this Claude Code profile's secure plugin setting`)
+  expect(note).not.toContain('tk-config')
+})
+
+test('no key: the note names every place looked; a key placed later is seen on the next run, and used', { options: { stopGate: 'shadow' } }, async ($, on) => {
+  const io = setup(on, { isTimerStopped: true })
+  await $.session.start(START)
+  const before = await expand($)
+  expect(before).toContain(`${KEY_CHECK} none found`)
+  for (const place of ['~/.context-harness/key', 'secure plugin setting', '.env', 'TYPESAFE_API_KEY']) expect(before).toContain(place)
+
+  // The person places the key in the shared file; the session goes on.
+  io.files[`${HOME}/.context-harness/key`] = 'ts_placed\n'
+  const after = await expand($)
+  expect(after).toContain(`${KEY_CHECK} found, in ~/.context-harness/key`)
+  expect(after).not.toContain('ts_placed')
+
+  // The gate that had no key now sends with this one, without a new session.
+  await $.classic.Stop({ stop_hook_active: false, last_assistant_message: 'Next, I will refactor the cache.' } as never)
+  await drain()
+  expect(io.fetches[0]?.headers.authorization).toBe('Bearer ts_placed')
+})
+
+test('other commands expand untouched', async ($, on) => {
+  setup(on, { env: KEY_ENV })
+  await $.session.start(START)
+
+  expect(await expand($, { ...EXPAND, command_name: 'jev-report', prompt: '/jev-report' } as never)).toBe('')
 })

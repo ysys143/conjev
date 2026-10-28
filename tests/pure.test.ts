@@ -183,7 +183,7 @@ test('the floor names real secret stores and leaves look-alikes alone', () => {
   const r = (p: string) => restrictedReason(p, HOME)
   expect(r('/p/.env')).toBe('env file')
   expect(r('/p/.ENV.production')).toBe('env file')
-  expect(r(`${HOME}/.oh-my-zsh/custom/apikey.env`)).toBe('env file')
+  expect(r(`${HOME}/.config/secrets/keys.env`)).toBe('env file')
   expect(r('/p/.env.example')).toBe(undefined)
   expect(r('/p/.env.tpl')).toBe(undefined)
   expect(r(`${HOME}/.ssh/id_ed25519`)).toBe('ssh')

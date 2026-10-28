@@ -139,7 +139,7 @@ test('three failed calls open the circuit', { options: { stopGate: 'active' } },
 test('tool gate, external provider: secret files and secret-printing commands are refused', { options: { toolGate: 'active', providerTrust: 'external' } }, async ($, on) => {
   const io = setup(on)
   expect((await $.tool.call({ tool: 'Read', file_path: '/proj/.env' })).deny).toContain('env file')
-  expect((await $.tool.call({ tool: 'Read', file_path: '~/.oh-my-zsh/custom/apikey.env' })).deny).toContain('env file')
+  expect((await $.tool.call({ tool: 'Read', file_path: '~/.config/secrets/keys.env' })).deny).toContain('env file')
   expect((await $.tool.call({ tool: 'Bash', command: 'git diff --no-index /dev/null .ENV' })).deny).toContain('env file')
   expect((await $.tool.call({ tool: 'Bash', command: 'printenv | sort' })).deny).toContain('printenv')
   expect((await $.tool.call({ tool: 'Read', file_path: '/proj/README.md' })).deny).toBe(undefined)

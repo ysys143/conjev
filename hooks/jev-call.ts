@@ -3,12 +3,12 @@
 import type { EngineInterface } from 'claude-code'
 import { admit, afterCall, readBudget } from './budget'
 import { JEV_ENDPOINT, parseResponse, requestBody, type JevFailure, type JevQuestion, type JevResult } from './jev'
-import { pickKey } from './key'
+import { pickKey, type KeySource } from './key'
 import { runtime, settingsOf } from './state'
 import { decideTrust, type Trust } from './tool-gate'
 
 /** The key from the first source that has one: sensitive setting, the plugin's .env, the environment. */
-export async function resolveKey($: EngineInterface, configured: unknown): Promise<{ key: string; source: string } | undefined> {
+export async function resolveKey($: EngineInterface, configured: unknown): Promise<{ key: string; source: KeySource } | undefined> {
   const dotenvPath = `${$.plugin.root}/.env`
   const dotenv = (await $.fs.exists(dotenvPath)) ? await $.fs.read(dotenvPath) : undefined
 
