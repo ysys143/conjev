@@ -1,7 +1,7 @@
 import type { HttpResponse } from 'claude-code'
 import { expect, test } from 'claude-code/testing'
 import { STOP_MESSAGE } from '../hooks/stop-gate'
-import { HOME, KEY_ENV, records, settle, setup as kitSetup, type On, type Setup } from './kit'
+import { HOME, KEY_ENV, drawnStatus, records, settle, setup as kitSetup, type On, type Setup } from './kit'
 
 const ANNOUNCE = (p: number): HttpResponse => ({
   status: 200,
@@ -112,7 +112,7 @@ test('without a key nothing is sent and the status says so', { options: { stopGa
   await settle(() => records(io.writes, 'stop').length > 0)
   expect(io.fetches.length).toBe(0)
   expect(records(io.writes, 'stop')[0]?.error).toBe('no-key')
-  expect(io.statuses).toContain('jev: no key')
+  expect(await drawnStatus($)).toBe('jev: no key')
 })
 
 test('the sensitive setting outranks the plugin .env, which outranks the environment', { options: { stopGate: 'active', apiKey: 'tk-config' } }, async ($, on) => {

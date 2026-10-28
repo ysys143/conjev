@@ -71,5 +71,27 @@ export function showStatus($: EngineInterface): void {
     foldStatus(runtime.folded),
     settings === undefined ? undefined : jevStatus(settings, runtime.counts, runtime.key === null, runtime.filter?.droppedChars),
   ])
-  if (line !== undefined) $.ui.status(line)
+  if (line === undefined) return
+  runtime.statusLine = line
+  // Drawn after the prompt's hint, not with $.ui.status: Claude Code marks
+  // every plugin status line with a warning sign, which the plugin cannot
+  // change, and a running count is not a warning. Asking for a redraw brings
+  // the hint hook (hintWithStatus) back with the new line.
+  $.ui.invalidate('ui.render')
+}
+
+/** Prefixed so the dim text at the end of the hint says whose it is. */
+export const HINT_PREFIX = 'context-harness: '
+
+/**
+ * The prompt hint with the status added. The terminal draws `tail` dim after
+ * the engine's own line, its pills still live; a surface that does not draw
+ * `tail` gets it appended to the hint instead, so it is not lost there.
+ */
+export function hintWithStatus<E extends { surface: string; props: { hint: string; tail?: string } }>(e: E, line: string | undefined): E {
+  if (line === undefined) return e
+  const text = `${HINT_PREFIX}${line}`
+  if (e.surface === 'terminal') return { ...e, props: { ...e.props, tail: e.props.tail === undefined ? text : `${e.props.tail} · ${text}` } }
+
+  return { ...e, props: { ...e.props, hint: e.props.hint === '' ? text : `${e.props.hint} · ${text}` } }
 }

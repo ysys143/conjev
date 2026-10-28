@@ -30,6 +30,8 @@ export const runtime: {
    * wait is the plugin's and not their own doing.
    */
   isSummarizing?: boolean
+  /** The line drawn after the prompt's hint; kept until a newer one replaces it. */
+  statusLine?: string
 } = { counts: { judged: 0, failed: 0, floor: 0, toolJudged: 0, attached: 0, foldJudged: 0, webRead: 0, foldBlocks: 0, browserRouted: 0 }, folded: { results: 0, savedChars: 0 }, pending: new Map() }
 
 // Folders already made private in this process.
@@ -54,6 +56,7 @@ export function startRuntime(settings: HarnessSettings, policy: PolicySettings):
   runtime.browsers = undefined
   runtime.folded = { results: 0, savedChars: 0 }
   runtime.filter = undefined
+  runtime.statusLine = undefined
 }
 
 /**

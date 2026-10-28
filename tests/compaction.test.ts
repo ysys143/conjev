@@ -4,7 +4,7 @@ import type { HttpResponse, SessionMessage } from 'claude-code'
 import { expect, test } from 'claude-code/testing'
 import { DEFAULT_SETTINGS, foldTranscript, makePolicy, turnsAgoOf } from '../hooks/fold'
 import { cleanupArgs, dirsBetween } from '../hooks/storage'
-import { HOME, KEY_ENV, drain, prompt, records, settle, setup } from './kit'
+import { HOME, KEY_ENV, drain, drawnStatus, prompt, records, settle, setup } from './kit'
 import { FOLD_ARMED_KEY } from '../hooks/register'
 import { EXCERPT_CHARS } from '../hooks/fold-judge'
 
@@ -191,7 +191,7 @@ test('folded but still too large, then skipped: nothing recorded and nothing cou
   expect((await $.session.compact({ trigger: 'manual', messages: OLD } as never)).skip).toBe('skipped below')
   await drain()
   expect(records(io.writes, 'fold').length).toBe(0)
-  expect(io.statuses.some(text => text.includes('folded'))).toBe(false)
+  expect((await drawnStatus($)) ?? '').not.toContain('folded')
   expect(io.appended.length).toBe(0)
 })
 
@@ -199,7 +199,7 @@ test('status: with Jev off it reads exactly as it did; with a gate on, both part
   const io = setup(on, { transcript: OLD })
   const { savedChars } = foldTranscript(OLD, makePolicy(DEFAULT_SETTINGS))
   await $.session.compact({ trigger: 'manual', messages: OLD } as never)
-  expect(io.statuses.at(-1)).toBe(`folded 1 · −${Math.round(savedChars / 1000)}k chars`)
+  expect(await drawnStatus($)).toBe(`folded 1 · −${Math.round(savedChars / 1000)}k chars`)
 })
 
 test('status keeps the fold part when the judgment layer updates it', { options: { stopGate: 'shadow' } }, async ($, on) => {
@@ -207,7 +207,7 @@ test('status keeps the fold part when the judgment layer updates it', { options:
   await $.session.compact({ trigger: 'manual', messages: OLD } as never)
   await $.classic.Stop({ stop_hook_active: false, last_assistant_message: 'Fixed it.' } as never)
   await settle(() => records(io.writes, 'stop').length > 0)
-  const last = io.statuses.at(-1) ?? ''
+  const last = (await drawnStatus($)) ?? ''
   expect(last.startsWith('folded 1 · ')).toBe(true)
   expect(last).toContain(' | jev 0, 1 failed · shadow: stop')
 })
@@ -358,7 +358,7 @@ test('with HOME the idle boundary does start one', async ($, on) => {
 test('without HOME the session still starts its judgment layer', { options: { stopGate: 'shadow' } }, async ($, on) => {
   const io = setup(on, { env: { HOME: '' } })
   await $.session.start(START)
-  expect(io.statuses).toContain('jev: no key')
+  expect(await drawnStatus($)).toBe('jev: no key')
   expect(io.logs.filter(line => line.includes('did not start') || line.includes('old records'))).toEqual([])
 })
 
@@ -380,15 +380,17 @@ test('an archive that could not be written still leaves the note that follows a 
 test('status: nothing on screen while the gates are on but have recorded nothing', { options: { stopGate: 'shadow', foldJev: 'shadow' } }, async ($, on) => {
   const io = setup(on, { env: KEY_ENV })
   await $.session.start(START)
-  expect(io.statuses).toEqual([])
+  expect(await drawnStatus($)).toBe(undefined)
 })
 
 test('status: a gate that recorded something shows the line', { options: { toolGate: 'active', providerTrust: 'external' } }, async ($, on) => {
   const io = setup(on)
   await $.session.start(START)
-  expect(io.statuses).toEqual([])
+  expect(await drawnStatus($)).toBe(undefined)
   await $.tool.call({ tool: 'Read', file_path: '/proj/.env' })
-  expect(io.statuses.at(-1)).toBe('jev 0 · floor 1 hit')
+  expect(await drawnStatus($)).toBe('jev 0 · floor 1 hit')
+  // Never as the warning-marked status line.
+  expect(io.warned).toEqual([])
 })
 
 test('a crowded window is partly summarized: the engine gets the old part, the recent stays whole', { options: { foldJev: 'shadow' } }, async ($, on) => {
@@ -500,22 +502,25 @@ test('a fold-only compaction is recorded as such, with no summary behind it', as
 })
 
 test('the status line says a summary is running, and stops saying it after', async ($, on) => {
-  const io = setup(on, { transcript: OLD, env: KEY_ENV, fetch: everyQuestion, window: 10 })
+  const during: (string | undefined)[] = []
+  setup(on, { transcript: OLD, env: KEY_ENV, fetch: everyQuestion, window: 10, duringSummary: async () => void during.push(await drawnStatus($)) })
   await $.session.compact({ trigger: 'manual', messages: OLD } as never)
   await drain()
 
   // The line was shown while the summary ran: the one wait that lasts seconds.
-  expect(io.statuses.some(text => text.includes('summarizing'))).toBe(true)
+  expect(during.some(text => text?.includes('summarizing'))).toBe(true)
   // And it is gone once the summary returned.
-  expect(io.statuses.at(-1) ?? '').not.toContain('summarizing')
+  expect((await drawnStatus($)) ?? '').not.toContain('summarizing')
 })
 
 test('a fold with no summary behind it never says it is summarizing', async ($, on) => {
-  const io = setup(on, { transcript: OLD, env: KEY_ENV, fetch: everyQuestion })
+  const during: (string | undefined)[] = []
+  setup(on, { transcript: OLD, env: KEY_ENV, fetch: everyQuestion, duringSummary: async () => void during.push(await drawnStatus($)) })
   await $.session.compact({ trigger: 'manual', messages: OLD } as never)
   await drain()
 
-  expect(io.statuses.some(text => text.includes('summarizing'))).toBe(false)
+  expect(during).toEqual([])
+  expect((await drawnStatus($)) ?? '').not.toContain('summarizing')
 })
 
 const GIT_UNPUSHED = '# branch.oid abc\n# branch.head work\n# branch.ab +3 -0\n1 M. N... 100644 100644 100644 aaa bbb src/app.ts\n? new.ts\n'

@@ -44,6 +44,8 @@ export type Setup = {
   resizeFails?: boolean
   /** What the engine's own compaction beneath answers: a summary, or a skip. */
   compactBelow?: 'summary' | 'skip'
+  /** Runs while the engine's summary beneath is running. */
+  duringSummary?: () => Promise<void> | void
   /** The plugin folder's .env, wherever the plugin root is. */
   dotenv?: string
   /** A command that exits 1 when run, by its first word. */
@@ -83,6 +85,8 @@ export const setup = (on: On, s: Setup = {}) => {
   const disk: string[] = []
   const store = new Map<string, unknown>()
   const statuses: string[] = []
+  /** Lines put up with $.ui.status, which Claude Code marks with a warning sign. */
+  const warned: string[] = []
   const toasts: string[] = []
   const logs: string[] = []
   const appended: string[] = []
@@ -184,8 +188,16 @@ export const setup = (on: On, s: Setup = {}) => {
     appended.push(JSON.stringify(e.message))
     return next(e)
   })
+  // The status is drawn after the prompt's hint. A redraw request is only
+  // acknowledged; what the hint shows is read by rendering it (drawnStatus).
+  on('ui.invalidate', () => ({ value: undefined }))
+  on('ui.render', { component: 'PromptHint' }, (_, e) => {
+    const tail = (e.props as { tail?: string }).tail
+    if (tail !== undefined) statuses.push(tail.replace(/^context-harness: /, ''))
+    return { type: 'Text', children: [(e.props as { hint: string }).hint, tail ?? ''] } as never
+  })
   on('ui.status', (_, e) => {
-    if (e.text !== undefined) statuses.push(e.text)
+    if (e.text !== undefined) warned.push(e.text)
     return { value: undefined }
   })
   on('ui.toast', (_, e) => {
@@ -223,9 +235,10 @@ export const setup = (on: On, s: Setup = {}) => {
   })
   // A summary replaces what the next request is built from; a compaction the plugin answers never gets here.
   // `summarizedOver` records the messages the engine was handed, so a test can check what a partial summary covers.
-  on('session.compact', (_, e) => {
+  on('session.compact', async (_, e) => {
     summarizedOver.push(e.messages.map(m => m.text || (m.toolResults ?? []).length > 0))
     summarizedWith.push(e.instructions)
+    await s.duringSummary?.()
     if (s.compactBelow === 'skip') return { skip: 'skipped below' } as never
     api.length = 0
     api.push({ role: 'user', content: [{ type: 'text', text: 'summary' }] })
@@ -242,7 +255,7 @@ export const setup = (on: On, s: Setup = {}) => {
     return { result: 'ok' }
   })
 
-  return { env, files, fetches, pageFetches, writes, runs, disk, store, statuses, toasts, logs, appended, submitted, summarizedOver, summarizedWith, configured, order, api, commands, loaded, sleeps, registered }
+  return { env, files, fetches, pageFetches, writes, runs, disk, store, statuses, warned, toasts, logs, appended, submitted, summarizedOver, summarizedWith, configured, order, api, commands, loaded, sleeps, registered }
 }
 
 export const records = (writes: readonly { path: string; text: string }[], point: string) =>
@@ -255,4 +268,12 @@ export const settle = async (check: () => boolean): Promise<void> => {
 /** Lets fire-and-forget work run to its end. */
 export const drain = async (): Promise<void> => {
   for (let i = 0; i < 20; i++) await new Promise<void>(resolve => setTimeout(() => resolve(), 1))
+}
+
+/** What the prompt's hint shows of this plugin's status now, its prefix taken off; undefined when nothing. */
+export const drawnStatus = async ($: { ui: { render: (input: never) => Promise<unknown> } }): Promise<string | undefined> => {
+  const drawn = JSON.stringify(await $.ui.render({ component: 'PromptHint', surface: 'terminal', requestId: 'hint', props: { isDraft: false, isWorking: false, hint: '? for shortcuts' } } as never))
+  const match = /context-harness: ([^"]*)/.exec(drawn)
+
+  return match === null ? undefined : match[1]
 }

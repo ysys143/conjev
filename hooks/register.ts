@@ -21,7 +21,7 @@ import { OFFER_TIMEOUT_MS, boardHasHandoff, boardOfferStep, handoffGap, offerAcc
 import { imageToRead } from './image-size'
 import { SHARED_CONFIG, SHARED_CONSENT, SHARED_KEY, SHARED_ONBOARDING, readShared, sharedDirOf, writeSharedRecord, type Shared } from './shared'
 import { DEFAULT_RELEVANCE, omittedRanges, selectRelevant } from './relevance'
-import { showStatus } from './status'
+import { hintWithStatus, showStatus } from './status'
 import { PARAGRAPH_CHARS, STOP_MESSAGE, STOP_POINT, STOP_QUESTION, announcesByRule, lastParagraph, stopSkipReason } from './stop-gate'
 import { cleanupRecords, homeOf, legacyArchiveRoot, migrateState, oldStateRoot, readArchived, readRecords, stateRoot, writeArchive, writeLabel, writeRecord } from './storage'
 import { judgeTool } from './tool-flow'
@@ -822,6 +822,9 @@ export const register: Register = (on, options) => {
         (demoted === undefined ? '' : ` The Stop gate's precision is ${demoted.precision.toFixed(2)} over ${demoted.labeled} labels, under ${DEMOTE_PRECISION}: it now only records (shadow).`),
     }
   })
+
+  // The status, drawn after the prompt's hint (see showStatus).
+  on('ui.render', { component: 'PromptHint' }, ($, e, next) => next(hintWithStatus(e, runtime.statusLine)))
 
   // /context-harness:onboard is a Markdown command, so the model writes the
   // answer. What only the plugin knows is where it finds a key; that rides along
