@@ -240,13 +240,6 @@ export const register: Register = (on, options) => {
       // Registered, not only answered: without this call the name never reaches
       // the slash list. `/install` alone is a built-in name and stays the
       // engine's, which is why this one carries the plugin's name.
-      await $.command.register({
-        name: 'install-context-harness',
-        description: "context-harness: what the plugin needs, what each gate sends, and where the shared settings and key go",
-      })
-      // Registered, not only answered: without this call the name never reaches
-      // the slash list. `/install` alone is a built-in name and stays the
-      // engine's, which is why this one carries the plugin's name.
 
       if (settings.instructions !== 'off') await loadFragments($)
       if (isOn) {
@@ -652,94 +645,6 @@ export const register: Register = (on, options) => {
 
     return { text: `Labeled ${id} as ${value === 'y' ? 'positive' : 'negative'}.` }
   })
-  // /install: what the plugin needs, what leaves the machine when each gate is
-  // on, and where to change it. It prints no key and sends nothing anywhere.
-  on('command.run', { command: 'install-context-harness' }, async $ => {
-    const key = await keyFor($)
-    const home = await homeOf($)
-    const dir = home === undefined ? '~/.context-harness' : sharedDirOf(home)
-    const gates: [string, string, string][] = [
-      ['stop', settings.stopGate, "the turn's last paragraph, scrubbed"],
-      ['tool gate', settings.toolGate, 'nothing leaves the machine'],
-      ['tool jev', settings.toolJev, "the call's target, scrubbed"],
-      ['instructions', settings.instructions, "the prompt's first 600 characters, scrubbed"],
-      ['instruction filter', settings.instructionFilter, 'the instruction files, scrubbed'],
-      ['web', settings.webRead, 'the page text and the question, scrubbed'],
-      ['fold blocks', settings.foldBlocks, 'the folded results and the last prompt'],
-      ['browser', settings.browserRoute, "the prompt's first 600 characters, scrubbed"],
-    ]
-    const lines = key === undefined
-      ? [
-          'context-harness: install',
-          '',
-          'No Jev key found. Everything below the fold works without one; the gates',
-          'that ask Jev need it. Get a key from https://console.typesafe.ai/home,',
-          'then do one of these, and run this command again to check:',
-          '',
-          '  1. For one profile, keep it in secure storage (it is never printed):',
-          '       claude plugin configure context-harness@context-harness',
-          '',
-          '  2. For every profile at once, write the key alone into a file:',
-          `       mkdir -p ${dir} && chmod 700 ${dir}`,
-          `       printf '%s\\n' '<paste-the-key>' > ${dir}/key && chmod 600 ${dir}/key`,
-          '',
-          '  3. For one shell session only:',
-          '       export TYPESAFE_API_KEY=<paste the key here>',
-          '',
-          'The plugin reads them in that order, prints the key nowhere, and sends it',
-          `only to Jev. To keep the key out of your shell history, write ${dir}/key`,
-          'in an editor instead of by hand at the prompt.',
-        ]
-      : [
-          'context-harness: install',
-          '',
-          `Key: found, from ${key.source}.`,
-          `To share it with every profile, put the same key in ${dir}/key`,
-          'and remove the per-profile copies.',
-          'The plugin never prints it and sends it nowhere but Jev.',
-        ]
-    lines.push(
-      '',
-      'What each gate sends when it is on. Every text is scrubbed first: secrets,',
-      'Korean personal information, email addresses and home paths come out.',
-      ...gates.map(([name, mode, what]) => `  ${name.padEnd(19)} ${mode.padEnd(7)} ${what}`),
-      '',
-      'Settings and the key can live in one folder, shared by every profile:',
-      `  ${dir}/config.json   the same values as /config writes`,
-      `  ${dir}/key           the key, alone in the file`,
-      'Nothing is written there by the plugin: the folder is yours to make.',
-      '',
-      'Every gate is off until you turn it on, key or no key. Set one to shadow',
-      'first: it judges and records, and changes nothing. Read what it would have',
-      'done with /jev-report, then set it to active. Folding needs no key and is',
-      'already on.',
-    )
-
-    // What the person sees is the summary; what the model reads is what to do
-    // about a missing key. The agent can ask, look and write the folder; the
-    // plugin can only say. The key itself never passes through either of them.
-    const context = key === undefined
-      ? [
-          'The person ran /install-context-harness and no Jev key was found. Help them place one, without ever showing the key.',
-          '',
-          'First ask whether they already have a key (ask once, plainly). Then:',
-          '',
-          '- If they do not: tell them to get one at https://console.typesafe.ai/home. Nothing else can be done until they have it; say so and stop.',
-          '- If they do: offer the two ways to place it and let them pick.',
-          `  1. Their own terminal, which keeps it out of the transcript and out of shell history if they use an editor: create ${dir} (mode 700) and let them write ${dir}/key (mode 600) themselves. You may run "mkdir -p ${dir} && chmod 700 ${dir}" for them. Do not read, cat, echo or paste the key back.`,
-          '  2. "claude plugin configure context-harness@context-harness" in their own terminal, for one profile only.',
-          '',
-          'Do not ask them to paste the key into the chat: it would land in the transcript and in any archive. If they paste it anyway, do not repeat it, and tell them it is now in the transcript and should be rotated.',
-          `When they are done, run /install-context-harness again: it should say the key was found and where it came from. If it still says none, the file is not where the plugin reads it (${dir}/key, the plugin's secure setting, or TYPESAFE_API_KEY).`,
-          '',
-          'The gates all start off, key or no key. Once the key is in place, set the ones they want to shadow with /config (context-harness), and read /jev-report after a while.',
-        ].join('\n')
-      : undefined
-
-    return { text: lines.join('\n'), ...(context === undefined ? {} : { context: [context] }) }
-  })
-
-
   // E5: a turn that ends by announcing work. Settings Stop hooks run first.
   on('classic.Stop', async ($, e, next) => {
     const below = await next(e)

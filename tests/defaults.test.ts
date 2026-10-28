@@ -82,89 +82,42 @@ test('without a shared folder nothing changes: each profile keeps its own settin
   expect(report.current.settings.foldAtPercent).toBe(60)
 })
 
-test('with no key, /install-context-harness says where to get one and where to put it', async ($, on) => {
-  const io = setup(on, {})
-  await $.session.start(START)
-  const { text } = (await $.command.run({ command: 'install-context-harness' })) as { text: string }
+// The command is a Markdown file now, not a `command.run` hook: its body is the
+// prompt the model runs, which is what lets the agent ask and act instead of
+// printing a string. The hook could only answer; it could not start a turn.
+import { INSTALL_COMMAND_BODY, INSTALL_COMMAND_DESCRIPTION } from '../hooks/install-command'
 
-  // Where a key comes from, and where to put one to share it.
-  expect(text).toContain('No Jev key found')
-  // The steps to take, not just where to get one: each one runnable as printed.
-  expect(text).toContain('claude plugin configure context-harness@context-harness')
-  expect(text).toContain(`mkdir -p ${HOME}/.context-harness`)
-  expect(text).toContain(`chmod 600 ${HOME}/.context-harness/key`)
-  expect(text).toContain('export TYPESAFE_API_KEY=')
-  // The placeholder is not a key: a paste of it would be an obvious mistake.
-  expect(text).toContain('<paste-the-key>')
-  expect(text).toContain('console.typesafe.ai/home')
-  expect(text).toContain('/.context-harness/key')
-  expect(io.fetches.length).toBe(0)
+const COMMAND = INSTALL_COMMAND_BODY
+
+test('the install command is a prompt the model runs, not a string it prints', () => {
+  // The body is what the model receives, so it addresses the agent and asks the
+  // person a question. `scripts/build-command.ts` writes the Markdown file from
+  // this text; the tests hold the text, and --check holds the two together.
+  expect(COMMAND).toContain('Ask one plain question')
+  expect(INSTALL_COMMAND_DESCRIPTION).toContain('Jev key')
+
+  // It asks before it acts, and it never asks for the key itself.
+  expect(COMMAND).toContain('do you already have a TypeSafe key')
+  expect(COMMAND).toContain('Never ask them to paste the key to you')
+  expect(COMMAND).toContain('should rotate it')
+
+  // The ways to place one, including the one the agent runs itself.
+  expect(COMMAND).toContain('https://console.typesafe.ai/home')
+  expect(COMMAND).toContain('claude plugin configure context-harness@context-harness')
+  expect(COMMAND).toContain('$HOME/.context-harness/key')
+  // Placed without the value ever reaching the agent's context.
+  expect(COMMAND).toContain('source ~/.oh-my-zsh/custom/apikey.env')
+  expect(COMMAND).toContain('chmod 600')
+  expect(COMMAND).toContain('test -s')
+
+  // And what to check afterwards.
+  expect(COMMAND).toContain('/install-context-harness')
+  expect(COMMAND).toContain('Key: found, from')
 })
 
-test('/install-context-harness names what each gate sends, and what is scrubbed first', async ($, on) => {
-  const io = setup(on, { env: KEY_ENV })
-  await $.session.start(START)
-  const { text } = (await $.command.run({ command: 'install-context-harness' })) as { text: string }
-
-  expect(text).toContain('/.context-harness/key')
-  // Each gate is listed with its mode and what it sends.
-  expect(text).toContain('stop')
-  expect(text).toContain('instruction filter')
-  // And it says what is scrubbed before anything leaves.
-  expect(text).toContain('Korean personal information')
-  // The key itself is never printed, and nothing is sent by the command.
-  expect(text).not.toContain('tk-env')
-  expect(io.fetches.length).toBe(0)
-})
-
-test('/install-context-harness says the key was found, and from where, without printing it', { options: { apiKey: 'tk-config' } }, async ($, on) => {
-  const io = setup(on, { env: KEY_ENV })
-  await $.session.start(START)
-  const { text } = (await $.command.run({ command: 'install-context-harness' })) as { text: string }
-
-  expect(text).toContain('Key: found, from config')
-  expect(text).toContain('To share it with every profile')
-  expect(text).not.toContain('tk-config')
-  expect(io.fetches.length).toBe(0)
-})
-
-test('every command it answers is also registered, so the name reaches the slash list', async ($, on) => {
-  const io = setup(on, { env: KEY_ENV })
-  await $.session.start(START)
-
-  // A hook alone answers a name that was already typed; only registering puts
-  // it in the list. `/install-context-harness` was missing from this for a
-  // while, and a user typing `/install-` saw nothing.
-  expect(io.registered).toContain('install-context-harness')
-  expect(io.registered).toContain('jev-report')
-  expect(io.registered).toContain('jev-mark')
-})
-
-test('with no key, the model is told to help place one, and never to ask for it in chat', async ($, on) => {
-  const io = setup(on, {})
-  await $.session.start(START)
-  const result = (await $.command.run({ command: 'install-context-harness' })) as { text: string; context?: readonly string[] }
-
-  // The person sees the summary; the model gets the steps, and does not see
-  // them echoed back into the transcript.
-  const context = (result.context ?? []).join('\n')
-  expect(context).toContain('no Jev key was found')
-  expect(context).toContain('ask whether they already have a key')
-  expect(context).toContain('console.typesafe.ai/home')
-  // The one thing it must not do.
-  expect(context).toContain('Do not ask them to paste the key into the chat')
-  expect(context).toContain('should be rotated')
-  // And what to check after they place it.
-  expect(context).toContain('run /install-context-harness again')
-  // It never carries a key value, and the visible text says none was found.
-  expect(context).not.toContain('TYPESAFE_API_KEY=')
-  expect(result.text).toContain('No Jev key found')
-})
-
-test('with a key found, no help is offered: there is nothing to place', async ($, on) => {
-  const io = setup(on, { env: KEY_ENV })
-  await $.session.start(START)
-  const result = (await $.command.run({ command: 'install-context-harness' })) as { context?: readonly string[] }
-
-  expect(result.context ?? []).toEqual([])
+test('the command never tells the agent to read or print a key', () => {
+  const forbidden = [/cat\s+\S*apikey\.env/, /echo\s+\$TYPESAFE/, /printenv/]
+  for (const pattern of forbidden) expect(COMMAND).not.toMatch(pattern)
+  // The one grep it does run prints a count, never a value.
+  expect(COMMAND).toContain("grep -c '^TYPESAFE_API_KEY='")
 })
