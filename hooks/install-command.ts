@@ -1,10 +1,10 @@
-// The body of `/install-context-harness`, as the model reads it.
+// The body of `/context-harness:onboard`, as the model reads it.
 //
 // Why this is code and not only the Markdown file beside it: a command file's
 // body is the prompt the model runs, and there is no way for a test to read a
 // file (a hooks module imports its own `.ts` by relative path and nothing
 // else). Keeping the text here lets the tests hold it to what it must say — and
-// `commands/install-context-harness.md` is generated from it, so the two cannot
+// `commands/context-harness:onboard.md` is generated from it, so the two cannot
 // drift.
 //
 // It replaces an earlier `command.run` hook. That hook could print a summary
@@ -17,7 +17,7 @@
 // KEY_CHECK's note (register.ts), so the body never has to guess or probe.
 import type { KeySource } from './key'
 
-export const INSTALL_COMMAND_NAME = 'install-context-harness'
+export const INSTALL_COMMAND_NAME = 'onboard'
 
 export const INSTALL_COMMAND_DESCRIPTION =
   'context-harness: find a Jev key, help place one without showing it, and say what each gate sends'
@@ -200,7 +200,7 @@ archive.
 
 ## 4. Check the result
 
-Whatever they did, ask them to run \`/install-context-harness\` again. The plugin
+Whatever they did, ask them to run \`/context-harness:onboard\` again. The plugin
 looks afresh each time, so its note should now say found. If it still says none,
 the value is not where the plugin reads it; check, in this order:
 
@@ -233,7 +233,7 @@ Then ask them to answer by typing it themselves; you cannot answer for them:
   key is in place.
 - \`/jev-consent no\`: refuse it. The gates stay off; folding still works.
 - \`/jev-consent later\`: decide later. This setup will not start by itself
-  again; \`/install-context-harness\` brings it back.
+  again; \`/context-harness:onboard\` brings it back.
 
 Any of the three ends the setup. Say that \`/jev-consent no\` takes a yes back
 at any time, that \`jev: off\` in \`~/.context-harness/config.json\` switches every

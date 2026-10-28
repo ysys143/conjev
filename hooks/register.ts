@@ -488,7 +488,7 @@ export const register: Register = (on, options) => {
     // along with the next request, so the model would say nothing until the
     // person wrote first, and someone who has never heard of the plugin has no
     // reason to. initialUserMessage is sent as the session's first prompt, which
-    // starts a model turn, so the setup runs as /install-context-harness would.
+    // starts a model turn, so the setup runs as /context-harness:onboard would.
     const { shared, key } = await sharedState($, options)
     if (shared.onboarding !== undefined || (key !== undefined && shared.consent !== undefined)) return watched
 
@@ -799,7 +799,7 @@ export const register: Register = (on, options) => {
     await writeSharedRecord($, home, SHARED_ONBOARDING, { state: answer === 'yes' ? 'done' : 'declined', at })
     apply(await sharedState($, options))
     showStatus($)
-    if (answer === 'later') return { text: 'context-harness: the setup will not start by itself again. Run /install-context-harness when you want it.' }
+    if (answer === 'later') return { text: 'context-harness: the setup will not start by itself again. Run /context-harness:onboard when you want it.' }
 
     return {
       text:
@@ -823,7 +823,7 @@ export const register: Register = (on, options) => {
     }
   })
 
-  // /install-context-harness is a Markdown command, so the model writes the
+  // /context-harness:onboard is a Markdown command, so the model writes the
   // answer. What only the plugin knows is where it finds a key; that rides along
   // as a note when the command expands. It looks afresh each time, so running the
   // command again after placing a key sees it, and the gates use it from then on.

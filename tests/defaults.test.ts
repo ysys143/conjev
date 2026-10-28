@@ -112,7 +112,7 @@ test('the install command is a prompt the model runs, not a string it prints', (
   expect(COMMAND).toContain('test -s')
 
   // And what to check afterwards.
-  expect(COMMAND).toContain('/install-context-harness')
+  expect(COMMAND).toContain('/context-harness:onboard')
   expect(COMMAND).toContain(KEY_CHECK)
 })
 
@@ -146,7 +146,7 @@ test('the command never tells the agent to read or print a key, or where one per
 
 // Where the key is, only the plugin knows; it says so when the command expands,
 // so the model reads it beside the body instead of guessing or probing files.
-const EXPAND = { expansion_type: 'slash_command', command_name: 'context-harness:install-context-harness', command_args: '', prompt: '/context-harness:install-context-harness' } as const
+const EXPAND = { expansion_type: 'slash_command', command_name: 'context-harness:onboard', command_args: '', prompt: '/context-harness:onboard' } as const
 const expand = async ($: Parameters<TestBody>[0], command = EXPAND): Promise<string> =>
   ((await $.classic.UserPromptExpansion(command as never)).additionalContext ?? []).join('\n')
 

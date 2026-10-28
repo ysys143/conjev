@@ -155,7 +155,7 @@ test('first run: no key and no record, the setup starts by itself with what the 
 
   expect(result.initialUserMessage).toContain(ONBOARDING_MARK)
   expect(result.initialUserMessage).toContain(`${KEY_CHECK} none found`)
-  // The same body /install-context-harness runs, consent step included.
+  // The same body /context-harness:onboard runs, consent step included.
   expect(result.initialUserMessage).toContain('## 5. Consent')
   expect(result.initialUserMessage).toContain('/jev-consent yes')
   expect(result.initialUserMessage).not.toContain('$ARGUMENTS')
@@ -212,7 +212,7 @@ test('a key placed during the session turns the consented auto gates on when the
   expect(await header($)).toContain('stop off')
 
   io.files[`${SHARED}/key`] = 'ts_placed\n'
-  await $.classic.UserPromptExpansion({ expansion_type: 'slash_command', command_name: 'context-harness:install-context-harness', command_args: '', prompt: '/x' } as never)
+  await $.classic.UserPromptExpansion({ expansion_type: 'slash_command', command_name: 'context-harness:onboard', command_args: '', prompt: '/x' } as never)
   expect(await header($)).toContain('stop active')
   await $.classic.Stop(STOP)
   expect(io.fetches[0]?.headers.authorization).toBe('Bearer ts_placed')

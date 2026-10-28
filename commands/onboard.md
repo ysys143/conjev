@@ -150,7 +150,7 @@ archive.
 
 ## 4. Check the result
 
-Whatever they did, ask them to run `/install-context-harness` again. The plugin
+Whatever they did, ask them to run `/context-harness:onboard` again. The plugin
 looks afresh each time, so its note should now say found. If it still says none,
 the value is not where the plugin reads it; check, in this order:
 
@@ -183,7 +183,7 @@ Then ask them to answer by typing it themselves; you cannot answer for them:
   key is in place.
 - `/jev-consent no`: refuse it. The gates stay off; folding still works.
 - `/jev-consent later`: decide later. This setup will not start by itself
-  again; `/install-context-harness` brings it back.
+  again; `/context-harness:onboard` brings it back.
 
 Any of the three ends the setup. Say that `/jev-consent no` takes a yes back
 at any time, that `jev: off` in `~/.context-harness/config.json` switches every
