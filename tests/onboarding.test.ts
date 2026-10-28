@@ -243,7 +243,7 @@ test('the shared fold policy is the one the fold uses, not only the one it repor
   await $.session.compact({ trigger: 'manual', messages } as never)
 
   // The shared minimum is above the result's size: nothing is folded.
-  expect(io.writes.some(w => w.path.includes('/archive/'))).toBe(false)
+  expect(io.writes.some(w => w.path.includes('/archive/') && !w.path.includes('/conversation-'))).toBe(false)
 })
 
 // B4: the shared files are watched, and a change reaches the running session.

@@ -196,7 +196,7 @@
     "foldJev": {
       "type": "string",
       "title": "Fold relevance",
-      "description": "auto (default): active once a key is in place, jev is on, and you consented with /jev-consent; off until then. off: nothing. shadow: at each compaction Jev judges which large earlier tool results the current request still needs, beside what the policy folded, and records it. active: a result Jev says is finished with is folded even inside the recent window, and one it says is still needed is left whole; the judgment is made only when a person asks for the compaction, never on the automatic path, so no one waits for it. Your last prompt (scrubbed) and each result's tool and target are sent, never the contents.",
+      "description": "auto (default): active once a key is in place, jev is on, and you consented with /jev-consent; off until then. off: nothing. shadow: at each compaction Jev judges which large earlier tool results the current request still needs, beside what the policy folded, and records it. active: a result Jev says is finished with is folded even inside the recent window, and one it says is still needed is left whole, at every compaction, automatic ones included; a Jev that does not answer within the timeout leaves the fold to the rule. Your last prompt (scrubbed), each result's tool and target, and the scrubbed opening of each result (at most 300 characters) are sent.",
       "options": [
         "auto",
         "off",

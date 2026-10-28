@@ -163,11 +163,13 @@ test('fold blocks active: when Jev fails, the fold is a pointer alone', { option
   expect(folded).not.toContain(KEPT_MARK)
 })
 
-test('fold blocks off: no tool output reaches Jev', { options: { foldJev: 'shadow' } }, async ($, on) => {
+test('fold blocks off: no more tool output reaches Jev than the fold judgment\'s opening excerpt', { options: { foldJev: 'shadow' } }, async ($, on) => {
   const io = setup(on, { transcript: TRANSCRIPT, env: KEY_ENV, fetch: jev })
   await $.session.compact({ trigger: 'manual', messages: TRANSCRIPT } as never)
   await drain()
-  expect(sent(io)).not.toContain('line 12 ')
+  // E6/F4 sends the result's scrubbed opening; nothing past it goes.
+  expect(sent(io)).toContain('line 1 ')
+  expect(sent(io)).not.toContain('line 13 ')
   expect(HOME.length > 0).toBe(true)
 })
 

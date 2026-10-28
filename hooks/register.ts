@@ -1,5 +1,5 @@
 import type { EngineInterface, Register } from 'claude-code'
-import { DEFAULT_SETTINGS, SETTING_KEYS, dueBeforeFold, dueNote, foldTranscript, makePolicy, messageViewOf, partialCut, pointerMessage, reportFor, settingsFrom, sliceLines, splitForSummary, stillIdle, transcriptChars, type MessageView, type PolicySettings } from './fold'
+import { DEFAULT_SETTINGS, SETTING_KEYS, conversationArchive, dueBeforeFold, dueNote, foldTranscript, makePolicy, messageViewOf, partialCut, pointerMessage, reportFor, settingsFrom, sliceLines, splitForSummary, stillIdle, transcriptChars, type Archived, type MessageView, type PolicySettings } from './fold'
 import { routeBrowser } from './browser-flow'
 import { BROWSER_BLOCK, BROWSER_POINT } from './browser-route'
 import { FOLD_BLOCKS_POINT, judgeBlocks, withKeptBlocks } from './fold-blocks'
@@ -47,6 +47,14 @@ import {
 const SUMMARIZE_ABOVE_SHARE = 0.6
 const CHARS_PER_TOKEN = 4
 const READ_LIMIT = 400
+
+/**
+ * E3: what every summary this plugin lets the engine write is also asked to
+ * keep, after whatever the person typed after /compact.
+ */
+export const PRESERVE_INSTRUCTIONS =
+  "context-harness: keep the person's own requests and decisions in their words, quoted where they are short. " +
+  'Keep every line that starts with "[folded " exactly as it is, id included: read_coordinate returns the original behind it.'
 
 /** How much of a read_coordinate query goes to Jev; the rest is dropped, not summarized. */
 const QUERY_CHARS = 400
@@ -325,7 +333,10 @@ export const register: Register = (on, options) => {
   on('prompt.submit', async ($, e, nextBelow) => {
     // The person is here: an automatic fold waiting for a quiet moment will see
     // this and stand down, so their request is never queued behind a summary.
-    if (!e.isMeta && e.command === undefined) state.promptedAt = await $.clock.now()
+    if (!e.isMeta && e.command === undefined) {
+      state.promptedAt = await $.clock.now()
+      state.promptsSince = (state.promptsSince ?? 0) + 1
+    }
     // A project with no status board is offered one, once, and silence for
     // three hours is taken as a yes. The model is told what to do about it.
     if (!e.isMeta && e.command === undefined) {
@@ -466,7 +477,12 @@ export const register: Register = (on, options) => {
     // is fewer tokens. Both are recorded, by trigger: only then can a later
     // look say whether a summary was worth the wait it caused.
     const startedAt = await $.clock.now()
+    // D5: how long since the previous compaction, in prompts, turns and time.
+    const sinceMs = startedAt - (await since($, state))
+    const sinceFacts = { sincePrompts: String(state.promptsSince ?? 0), sinceTurns: String(state.turnsSince ?? 0), sinceMs: String(sinceMs) }
     const recordCompaction = async (isSummarized: boolean, before?: number, after?: number): Promise<void> => {
+      state.promptsSince = 0
+      state.turnsSince = 0
       await writeRecord($, {
         id: newId(startedAt),
         ts: new Date(startedAt).toISOString(),
@@ -479,6 +495,7 @@ export const register: Register = (on, options) => {
         facts: {
           trigger: e.trigger,
           messagesBefore: String(e.messages.length),
+          ...sinceFacts,
           ...(before === undefined ? {} : { tokensBefore: String(before) }),
           ...(after === undefined ? {} : { tokensAfter: String(after) }),
         },
@@ -500,12 +517,31 @@ export const register: Register = (on, options) => {
       if (settings.foldJev === 'shadow') void judgeFold($, e.messages, new Set(archivedIds), view).catch(() => undefined)
     }
 
+    // E3: whatever the person typed after /compact goes first; the plugin's own
+    // request to keep their words and the pointers follows it.
+    const instructions = [e.instructions, PRESERVE_INSTRUCTIONS].filter(text => text !== undefined && text.trim() !== '').join('\n\n')
+    // E2: what a summary is about to replace is kept first, whole, so the
+    // conversation stays readable through read_coordinate after it is gone.
+    const summarize = async (messages: readonly (typeof e.messages)[number][]) => {
+      const kept = conversationArchive(messages, `conversation-${newId(startedAt)}`)
+      let isKept = false
+      try {
+        await writeArchive($, sessionId, [kept])
+        isKept = true
+      } catch (error) {
+        $.ui.log(`${$.plugin.name}: could not keep the summarized conversation (${String(error)})`)
+      }
+      const below = await next({ ...e, messages, instructions })
+
+      return { below, kept: isKept ? [kept] : [] }
+    }
+
     // Fold relevance, active: Jev decides which results are still needed before
     // the fold, so the fold keeps those and takes the finished ones, recent or
-    // not. Only when a person asked for the compaction: on the automatic path
-    // the wait would land on them as they finish reading an answer.
+    // not. On the automatic path too (A4): a Jev that does not answer in time
+    // leaves every result to the rule, so the wait is bounded by the timeout.
     let foldPolicy = policy
-    if (settings.foldJev === 'active' && e.trigger === 'manual') {
+    if (settings.foldJev === 'active') {
       try {
         foldPolicy = judgedPolicy(policySettings, await askNeeded($, e.messages, view), settings.foldThreshold)
       } catch (error) {
@@ -514,10 +550,12 @@ export const register: Register = (on, options) => {
     }
     const outcome = foldTranscript(e.messages, foldPolicy, view)
     if (outcome.archived.length === 0) {
-      const summarized = await next(e)
+      const { below: summarized, kept } = await summarize(e.messages)
       if (summarized.skip === undefined) {
         await recordCompaction(true, summarized.tokensBefore, summarized.tokensAfter)
         await after(0, [], true)
+
+        return kept.length === 0 ? summarized : { ...summarized, messages: [...summarized.messages, pointerMessage(kept)] }
       }
 
       return summarized
@@ -527,7 +565,7 @@ export const register: Register = (on, options) => {
       await writeArchive($, sessionId, outcome.archived)
     } catch (error) {
       $.ui.log(`${$.plugin.name}: could not keep folded results, summarizing instead (${String(error)})`)
-      const summarized = await next(e)
+      const summarized = await next({ ...e, instructions })
       if (summarized.skip === undefined) {
         await recordCompaction(true)
         await after(0, [], true)
@@ -568,6 +606,7 @@ export const register: Register = (on, options) => {
     const isDeferred = due.length > 0 && state.deferrals < MAX_DEFERRALS
     if (isDeferred) {
       state.deferrals++
+      state.isCleanupAsked = true
       await note($, dueNote(due, await handoffLine($, policySettings.phaseFile)))
     }
 
@@ -576,8 +615,9 @@ export const register: Register = (on, options) => {
     runtime.isSummarizing = split !== undefined
     if (runtime.isSummarizing) showStatus($)
     let below
+    let conversation: Archived[] = []
     try {
-      below = split !== undefined ? await next({ ...e, messages: split.older }) : undefined
+      if (split !== undefined) ({ below, kept: conversation } = await summarize(split.older))
     } finally {
       runtime.isSummarizing = false
     }
@@ -590,7 +630,7 @@ export const register: Register = (on, options) => {
     // person's own prompts come back the same way — a summary would have
     // replaced the only copy of what they said.
     const messages = isSummarized && split !== undefined
-      ? [...below.messages, pointerMessage(outcome.archived), ...split.keptPrompts, ...outcome.messages.slice(cut)]
+      ? [...below.messages, pointerMessage([...conversation, ...outcome.archived]), ...split.keptPrompts, ...outcome.messages.slice(cut)]
       : outcome.messages
     runtime.folded.results += outcome.archived.length
     runtime.folded.savedChars += outcome.savedChars
@@ -608,6 +648,7 @@ export const register: Register = (on, options) => {
   // The idle boundary: the turn has ended and the person has not written yet.
   on('turn.complete', async ($, e, next) => {
     const done = await next(e)
+    if (e.agentId === undefined) state.turnsSince = (state.turnsSince ?? 0) + 1
     if (e.agentId !== undefined || isFoldScheduled || policySettings.foldAtPercent === 0) return done
     if (state.isJustCompacted) {
       state.isJustCompacted = false
@@ -633,6 +674,7 @@ export const register: Register = (on, options) => {
     const due = dueBeforeFold(await anchorsOf($, policySettings), await since($, state))
     if (due.length > 0 && state.deferrals < MAX_DEFERRALS) {
       state.deferrals++
+      state.isCleanupAsked = true
       await note($, dueNote(due, await handoffLine($, policySettings.phaseFile)))
 
       return done
@@ -754,7 +796,12 @@ export const register: Register = (on, options) => {
 
     const t0 = await $.clock.now()
     const paragraph = lastParagraph(e.last_assistant_message)
+    // A6: the turn that answers the plugin's own request to bring the canonical
+    // files up to date before a fold is not held: the fold is waiting on it.
+    const isFoldCleanup = state.isCleanupAsked === true && e.agent_id === undefined
+    if (isFoldCleanup) state.isCleanupAsked = false
     const skipped = stopSkipReason({
+      isFoldCleanup,
       stopHookActive: e.stop_hook_active,
       permissionMode: e.permission_mode,
       backgroundTasks: e.background_tasks?.length ?? 0,

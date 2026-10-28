@@ -6,6 +6,7 @@ import { DEFAULT_SETTINGS, foldTranscript, makePolicy, turnsAgoOf } from '../hoo
 import { cleanupArgs, dirsBetween } from '../hooks/storage'
 import { HOME, KEY_ENV, drain, prompt, records, settle, setup } from './kit'
 import { FOLD_ARMED_KEY } from '../hooks/register'
+import { EXCERPT_CHARS } from '../hooks/fold-judge'
 
 const call = (id: string, tool: string, input: Record<string, unknown>): SessionMessage => ({ role: 'assistant', text: '', toolUses: [{ tool_use_id: id, tool, input }] })
 const answer = (id: string, text: string, isError = false): SessionMessage => ({ role: 'user', text: '', toolUses: [], toolResults: [{ tool_use_id: id, text, isError }] })
@@ -78,13 +79,23 @@ test('every fold record states what the fold did, under a policy that is not the
   expect((byId.get('late')?.facts as Record<string, string>).turnsAgo).toBe('1')
 })
 
-test('canary: no tool output and no unshown input reaches Jev', { options: NON_DEFAULT }, async ($, on) => {
+test('canary: no unshown input reaches Jev, and tool output only as its scrubbed opening', { options: NON_DEFAULT }, async ($, on) => {
   const io = setup(on, { transcript: BUSY, env: KEY_ENV, fetch: everyQuestion })
   await $.session.compact({ trigger: 'manual', messages: BUSY } as never)
   await settle(() => records(io.writes, 'fold').length >= 48)
 
   expect(io.fetches.length).toBe(2)
-  for (const fetch of io.fetches) expect(JSON.stringify(fetch.body)).not.toContain(MARK)
+  for (const fetch of io.fetches) {
+    // E6/F4: each question carries the opening of its output, once, and no more of it.
+    for (const question of Object.values(fetch.body.questions as Record<string, { instructions: string }>)) {
+      const excerpt = question.instructions.split('\nIts output begins:\n')[1] ?? ''
+      expect(excerpt.length).toBeLessThanOrEqual(EXCERPT_CHARS)
+      // The marker in the unshown `description` input never goes; the one opening the output may.
+      expect(question.instructions.split(MARK).length).toBeLessThanOrEqual(2)
+      if (question.instructions.includes(MARK)) expect(excerpt.startsWith(MARK)).toBe(true)
+    }
+  }
+  expect(JSON.stringify(io.fetches.map(f => f.body))).toContain(`Its output begins:\\n${MARK}`)
   // The request is the person's last prompt, not the reminder or the /command.
   expect(io.fetches[0]?.body.state).toEqual({ current_request: 'Now fix the parser test' })
 })
@@ -162,7 +173,8 @@ test('nothing folded: the engine summarizes, and nothing is judged either', { op
   // The one result is too recent for the policy to fold, so the judgment is not
   // asked about it: a result the fold leaves whole is not judged.
   expect(records(io.writes, 'fold')).toEqual([])
-  expect(archivedIds(io.writes).size).toBe(0)
+  // No tool result was kept; only the conversation the summary replaced (E2).
+  expect([...archivedIds(io.writes)].filter(id => !id.startsWith('conversation-'))).toEqual([])
 })
 
 test('a skipped compaction with nothing to fold records nothing and counts nothing', { options: { foldJev: 'shadow' } }, async ($, on) => {
@@ -719,12 +731,32 @@ test('fold relevance active: a finished result still inside the recent window is
   expect(io.fetches.length).toBeGreaterThan(0)
 })
 
-test('fold relevance active: an automatic compaction asks Jev nothing, so nobody waits', { options: { foldJev: 'active' } }, async ($, on) => {
-  const io = setup(on, { transcript: OLD, env: KEY_ENV, fetch: neededAt(0.9) })
-  const out = await $.session.compact({ trigger: 'plugin', messages: OLD } as never)
+// A4: the automatic path is judged too; only a Jev that does not answer leaves it to the rule.
+for (const trigger of ['auto', 'plugin']) {
+  test(`fold relevance active: an ${trigger} compaction asks Jev too, and a result it needs stays whole`, { options: { foldJev: 'active' } }, async ($, on) => {
+    const io = setup(on, { transcript: OLD, env: KEY_ENV, fetch: neededAt(0.9) })
+    const out = await $.session.compact({ trigger, messages: OLD } as never)
 
-  expect(io.fetches.length).toBe(0)
+    expect(io.fetches.length).toBeGreaterThan(0)
+    expect(folded(out)).toBe(false)
+  })
+}
+
+test('fold relevance active: a Jev that does not answer in time leaves the automatic fold to the rule', { options: { foldJev: 'active' } }, async ($, on) => {
+  // The timer fires at once and the answer never comes.
+  const io = setup(on, { transcript: OLD, env: KEY_ENV, fetch: () => new Promise<HttpResponse>(() => undefined) })
+  const out = await $.session.compact({ trigger: 'auto', messages: OLD } as never)
+
+  expect(io.fetches.length).toBeGreaterThan(0)
+  expect(records(io.writes, 'fold')[0]?.error).toBe('timeout')
   // The rule alone decided, and it folds the old read.
+  expect(folded(out)).toBe(true)
+})
+
+test('fold relevance active: a Jev that fails leaves the automatic fold to the rule', { options: { foldJev: 'active' } }, async ($, on) => {
+  setup(on, { transcript: OLD, env: KEY_ENV, fetch: () => ({ status: 500, ok: false, headers: {}, text: '' }) })
+  const out = await $.session.compact({ trigger: 'auto', messages: OLD } as never)
+
   expect(folded(out)).toBe(true)
 })
 

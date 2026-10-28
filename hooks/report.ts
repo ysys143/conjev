@@ -89,6 +89,7 @@ export function sweep(points: readonly { probability: number; label: boolean }[]
 
 const fmt = (n: number | undefined, digits = 2): string => (n === undefined ? '-' : n.toFixed(digits))
 const ms = (n: number | undefined): string => (n === undefined ? '-' : `${Math.round(n)} ms`)
+const seconds = (n: number | undefined): string => (n === undefined ? '-' : `${(n / 1000).toFixed(1)}s`)
 
 /** The report for one point, as plain text. */
 export function pointReport(point: string, records: readonly ShadowRecord[], labels: ReadonlyMap<string, boolean>, threshold: number): string {
@@ -255,6 +256,19 @@ export function compactReport(records: readonly ShadowRecord[]): string | undefi
     )
   } else {
     lines.push('window: no compaction reported token counts')
+  }
+  // D5: how soon one compaction follows another, to compare against later changes.
+  const since = (name: string): number[] =>
+    compactions.flatMap(r => {
+      const value = Number((r.facts as Record<string, string> | undefined)?.[name])
+
+      return (r.facts as Record<string, string> | undefined)?.[name] !== undefined && Number.isFinite(value) ? [value] : []
+    })
+  const [prompts, turns, times] = [since('sincePrompts'), since('sinceTurns'), since('sinceMs')]
+  if (times.length > 0) {
+    lines.push(
+      `between compactions: prompts p50 ${percentile(prompts, 0.5) ?? '-'}, turns p50 ${percentile(turns, 0.5) ?? '-'}, time p50 ${seconds(percentile(times, 0.5))}, p95 ${seconds(percentile(times, 0.95))}`,
+    )
   }
 
   return lines.join('\n')

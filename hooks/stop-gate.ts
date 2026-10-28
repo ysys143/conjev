@@ -60,6 +60,8 @@ export function announcesByRule(paragraph: string): boolean {
 }
 
 export type StopFacts = {
+  /** The turn answers the plugin's own request to update the canonical files before a fold. */
+  isFoldCleanup?: boolean
   stopHookActive: boolean
   permissionMode?: string
   backgroundTasks: number
@@ -71,6 +73,7 @@ export type StopFacts = {
 /** Why this stop is not judged at all, or undefined when it is. */
 export function stopSkipReason(facts: StopFacts): string | undefined {
   if (facts.agentId !== undefined) return 'subagent'
+  if (facts.isFoldCleanup === true) return 'fold-cleanup'
   if (facts.stopHookActive) return 'stop-hook-active'
   if (facts.permissionMode === 'plan') return 'plan-mode'
   if (facts.backgroundTasks > 0) return 'background-tasks'

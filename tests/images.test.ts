@@ -222,9 +222,11 @@ test('without the api view no message can be shown free of media, so nothing fol
   const io = setup(on, { apiFails: true })
   const handed = await compact($, messages)
 
-  expect(JSON.stringify(handed)).not.toContain('[folded ')
-  expect(handed.map(m => m.text)).toEqual(['summary'])
-  expect(io.writes.some(w => w.path.startsWith(`${ARCHIVE}/`))).toBe(false)
+  expect(handed.some(m => m.toolResults?.some(r => r.text.startsWith('[folded ')))).toBe(false)
+  expect(handed[0]!.text).toBe('summary')
+  // Only the conversation the summary replaced is kept, and pointed to (E2).
+  expect(handed.slice(1).map(m => m.text.split('\n')[1]?.startsWith('[folded conversation'))).toEqual([true])
+  expect(io.writes.filter(w => w.path.startsWith(`${ARCHIVE}/`)).every(w => w.path.includes('/conversation-'))).toBe(true)
 })
 
 test('a message the api view does not hold is left whole', async ($, on) => {
@@ -232,5 +234,5 @@ test('a message the api view does not hold is left whole', async ($, on) => {
   setup(on, { api: api.filter(m => !m.content.some(b => b.type === 'tool_result')) })
   const handed = await compact($, messages)
 
-  expect(JSON.stringify(handed)).not.toContain('[folded ')
+  expect(handed.some(m => m.toolResults?.some(r => r.text.startsWith('[folded ')))).toBe(false)
 })

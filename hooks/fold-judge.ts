@@ -5,16 +5,26 @@
 import type { SessionMessage, ToolUseSummary } from 'claude-code'
 import { NOTE_MARKS, foldableResults, makePolicy, type FoldPolicy, type PolicySettings } from './fold'
 import type { JevQuestion } from './jev'
+import { clip, scrub } from './scrub'
 import { normalizePath, targetOfCommand, targetOfPath } from './tool-gate'
 
 export const FOLD_POINT = 'fold'
 
-/** What the judgment sees of one result: never its text or its full input. */
+/**
+ * E6/F4: how much of a result's opening Jev sees, after scrubbing. The text is
+ * scrubbed over twice this length and then cut, so a value the cut would split
+ * lies past the part that is sent.
+ */
+export const EXCERPT_CHARS = 300
+
+/** What the judgment sees of one result: its call, and the scrubbed opening of its text. */
 export type FoldCandidate = {
   id: string
   tool: string
   /** What Jev is shown: the tool, its target as tool-gate shows targets, and the size. */
   call: string
+  /** The scrubbed opening of the result, at most EXCERPT_CHARS. */
+  excerpt: string
   chars: number
   turnsAgo: number
   /** Whether the fold policy folds it. */
@@ -77,6 +87,7 @@ export function foldCandidates(messages: readonly SessionMessage[], settings: Po
       id: result.id,
       tool: result.tool,
       call: `${describeCall(result, home, cwd)} (${result.text.split('\n').length} lines)`,
+      excerpt: clip(scrub(result.text.slice(0, EXCERPT_CHARS * 2), home), EXCERPT_CHARS),
       chars: result.text.length,
       turnsAgo: result.turnsAgo,
       ruleFolds: result.fold,
@@ -116,10 +127,12 @@ export function judgedPolicy(settings: PolicySettings, needed: ReadonlyMap<strin
 
 // Measured with jev-1.14.0 on 10 results of a bug-fix request: results the
 // fix needed got 0.38-0.85 for "needed", the others 0.00-0.26.
-export function foldQuestion(call: string): JevQuestion {
+export function foldQuestion(call: string, excerpt = ''): JevQuestion {
   return {
     type: 'choice',
-    instructions: `Will the agent need the full output of this earlier tool call again to finish the current request? Tool call: ${call}`,
+    instructions:
+      `Will the agent need the full output of this earlier tool call again to finish the current request? Tool call: ${call}` +
+      (excerpt === '' ? '' : `\nIts output begins:\n${excerpt}`),
     criteria: { needed: 'The output is still needed for the current request.', done: 'The output is no longer needed for it.' },
   }
 }

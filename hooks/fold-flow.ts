@@ -22,6 +22,13 @@ export type Continuity = {
   // When the person last wrote, in ms. An automatic fold that was waiting for a
   // quiet moment stands down if this moved past the moment it began waiting.
   promptedAt?: number
+  // A6: the plugin has just asked for the canonical files to be brought up to
+  // date before a fold. The turn that does it is not held by the Stop gate.
+  isCleanupAsked?: boolean
+  // D5: the person's prompts and the finished turns since the last compaction
+  // (or the session start), recorded with the next one.
+  promptsSince?: number
+  turnsSince?: number
 }
 
 /** The project's canonical files that exist now; the episode folder by its newest file. */
@@ -83,7 +90,7 @@ export async function judgeFold($: EngineInterface, messages: readonly SessionMe
   for (let start = 0; start < candidates.length; start += 24) {
     const batch = candidates.slice(start, start + 24)
     const t0 = await $.clock.now()
-    const questions = Object.fromEntries(batch.map((candidate, i) => [`r${i}`, foldQuestion(clip(scrub(candidate.call, home), CALL_CHARS))]))
+    const questions = Object.fromEntries(batch.map((candidate, i) => [`r${i}`, foldQuestion(clip(scrub(candidate.call, home), CALL_CHARS), candidate.excerpt)]))
     const result = await judge($, { sessionId, point: FOLD_POINT, cap: settings.foldCap }, key.key, sent, questions, settings.timeoutMs * 2)
     for (const [i, candidate] of batch.entries()) {
       const answer = result.ok ? result.answers[`r${i}`] : undefined
@@ -98,7 +105,7 @@ export async function judgeFold($: EngineInterface, messages: readonly SessionMe
         mode: 'shadow',
         // Positive means "fold": what the fold did, and Jev's probability that the output is done with.
         heuristic: archived.has(candidate.id),
-        sent: { ...sent, call: clip(scrub(candidate.call, home), CALL_CHARS) },
+        sent: { ...sent, call: clip(scrub(candidate.call, home), CALL_CHARS), excerpt: candidate.excerpt },
         jev: needed === undefined ? undefined : 1 - needed,
         usage: result.ok && i === 0 ? result.usage : undefined,
         error: errorOf(result),
@@ -137,7 +144,7 @@ export async function askNeeded($: EngineInterface, messages: readonly SessionMe
   for (let start = 0; start < candidates.length; start += 24) {
     const batch = candidates.slice(start, start + 24)
     const t0 = await $.clock.now()
-    const questions = Object.fromEntries(batch.map((candidate, i) => [`r${i}`, foldQuestion(clip(scrub(candidate.call, home), CALL_CHARS))]))
+    const questions = Object.fromEntries(batch.map((candidate, i) => [`r${i}`, foldQuestion(clip(scrub(candidate.call, home), CALL_CHARS), candidate.excerpt)]))
     const result = await judge($, { sessionId, point: FOLD_POINT, cap: settings.foldCap }, key.key, sent, questions, settings.timeoutMs * 2)
     for (const [i, candidate] of batch.entries()) {
       const answer = result.ok ? result.answers[`r${i}`] : undefined
@@ -155,7 +162,7 @@ export async function askNeeded($: EngineInterface, messages: readonly SessionMe
         point: FOLD_POINT,
         mode: 'active',
         heuristic: ruleFolds,
-        sent: { ...sent, call: clip(scrub(candidate.call, home), CALL_CHARS) },
+        sent: { ...sent, call: clip(scrub(candidate.call, home), CALL_CHARS), excerpt: candidate.excerpt },
         jev: p === undefined ? undefined : 1 - p,
         usage: result.ok && i === 0 ? result.usage : undefined,
         error: errorOf(result),

@@ -215,7 +215,7 @@ export function pointerFor(id: string, candidate: FoldCandidate): string {
 export function pointerMessage(archived: readonly Archived[]): SessionMessage {
   const lines = archived.map(item => pointerFor(item.id, { tool: item.tool, input: item.input, text: item.text, isError: item.isError, turnsAgo: 0 }))
   const text = [
-    `${NOTE_MARKS[0]} The summary above replaced these tool results. Each line is one of them; read_coordinate returns an original.`,
+    `${NOTE_MARKS[0]} The summary above replaced these tool results, and the conversation itself where a line says conversation. Each line is one of them; read_coordinate returns an original.`,
     ...lines,
   ].join('\n')
 
@@ -441,6 +441,79 @@ export function foldTranscript(messages: readonly SessionMessage[], policy: Fold
     const text = view?.get(results[0]!.tool_use_id)?.text ?? message.text
 
     return { role: 'user', text, toolUses: [], toolResults: nextResults }
+  })
+
+  const inputs = foldInputs(folded, policy)
+
+  return { messages: inputs.messages, archived: [...archived, ...inputs.archived], savedChars: savedChars + inputs.savedChars }
+}
+
+/**
+ * E2: the part of the conversation a summary is about to replace, as one
+ * archived item read_coordinate returns: each message's role and text, its
+ * tool calls with their inputs, and its results as they stood (a folded one as
+ * its pointer, whose own original is kept under its id).
+ */
+export function conversationArchive(messages: readonly SessionMessage[], id: string): Archived {
+  const text = messages
+    .map(message => {
+      const parts = [`## ${message.role}`, ...(message.text.trim() === '' ? [] : [message.text])]
+      for (const use of message.toolUses) parts.push(`-> ${use.tool} ${JSON.stringify(use.input)} (${use.tool_use_id})`)
+      for (const result of message.toolResults ?? []) parts.push(`<- ${result.tool_use_id}${result.isError ? ' error' : ''}\n${result.text}`)
+
+      return parts.join('\n')
+    })
+    .join('\n\n')
+
+  return { id, tool: 'conversation', input: { messages: messages.length }, text, isError: false }
+}
+
+/** Where a folded tool input is kept: the call id with this suffix, so it never meets a result's. */
+export const INPUT_SUFFIX = ':input'
+
+/** The fields of a tool input that carry a body: a file's text, an edit, a command. */
+const BODY_KEYS = ['content', 'new_string', 'old_string', 'command', 'new_source', 'edits'] as const
+
+/** The pointer that replaces a large body field of an older tool call. */
+export function inputPointerFor(id: string, tool: string, input: Readonly<Record<string, unknown>>, chars: number): string {
+  const key = (['file_path', 'notebook_path', 'path', 'command'] as const).find(k => typeof input[k] === 'string')
+  const target = key === undefined ? '' : oneLine(String(input[key]), 60, PATH_KEYS.has(key) ? 'tail' : 'head')
+
+  return `${FOLD_MARK}input · ${[tool, target, `${chars} chars`].filter(Boolean).join(' · ')} — read_coordinate("${id}${INPUT_SUFFIX}")]`
+}
+
+/**
+ * D4: the large bodies older tool calls carried (a Write's content, an Edit's
+ * strings, a long Bash command) leave the window the way results do. The same
+ * policy decides, over the body's text, so recency, kept tools and the minimum
+ * size hold for inputs as they do for outputs; the original goes to the archive
+ * under `<id>:input`, and read_coordinate returns it.
+ */
+function foldInputs(messages: readonly SessionMessage[], policy: FoldPolicy): FoldOutcome {
+  const turnsAgoAt = turnsAgoOf(messages)
+  const archived: Archived[] = []
+  let savedChars = 0
+  const folded = messages.map((message, i): SessionMessage => {
+    if (message.role !== 'assistant' || message.toolUses.length === 0) return message
+    let isChanged = false
+    const uses = message.toolUses.map(use => {
+      const input = use.input as Record<string, unknown>
+      const bodies = BODY_KEYS.filter(k => input[k] !== undefined && !(typeof input[k] === 'string' && String(input[k]).startsWith(FOLD_MARK)))
+      const text = bodies.map(k => (typeof input[k] === 'string' ? `--- ${k} ---\n${String(input[k])}` : `--- ${k} ---\n${JSON.stringify(input[k], null, 2)}`)).join('\n')
+      if (text === '') return use
+      const id = `${use.tool_use_id}${INPUT_SUFFIX}`
+      const pointer = inputPointerFor(use.tool_use_id, use.tool, input, text.length)
+      const candidate: FoldCandidate = { tool: use.tool, input, text, isError: false, turnsAgo: turnsAgoAt[i] ?? 0, id }
+      if (!policy(candidate) || pointer.length >= text.length) return use
+      isChanged = true
+      const kept = Object.fromEntries(Object.entries(input).filter(([k]) => !(BODY_KEYS as readonly string[]).includes(k)))
+      savedChars += text.length - pointer.length
+      archived.push({ id, tool: use.tool, input: kept, text, isError: false })
+      // The first body field holds the pointer; the others leave with it.
+      return { ...use, input: { ...kept, [bodies[0]!]: pointer } }
+    })
+
+    return isChanged ? { role: 'assistant', text: message.text, toolUses: uses } : message
   })
 
   return { messages: folded, archived, savedChars }

@@ -89,6 +89,8 @@ export const setup = (on: On, s: Setup = {}) => {
   const submitted: { text: string; context?: readonly string[] }[] = []
   // What each engine summary was handed: one entry per call, its messages as text or '-'. 
   const summarizedOver: (string | boolean)[][] = []
+  // What each engine summary was told to keep: the instructions it was handed.
+  const summarizedWith: (string | undefined)[] = []
   const configured: [string, unknown][] = []
   const order: string[] = []
   const commands: string[] = []
@@ -223,6 +225,7 @@ export const setup = (on: On, s: Setup = {}) => {
   // `summarizedOver` records the messages the engine was handed, so a test can check what a partial summary covers.
   on('session.compact', (_, e) => {
     summarizedOver.push(e.messages.map(m => m.text || (m.toolResults ?? []).length > 0))
+    summarizedWith.push(e.instructions)
     if (s.compactBelow === 'skip') return { skip: 'skipped below' } as never
     api.length = 0
     api.push({ role: 'user', content: [{ type: 'text', text: 'summary' }] })
@@ -239,7 +242,7 @@ export const setup = (on: On, s: Setup = {}) => {
     return { result: 'ok' }
   })
 
-  return { env, files, fetches, pageFetches, writes, runs, disk, store, statuses, toasts, logs, appended, submitted, summarizedOver, configured, order, api, commands, loaded, sleeps, registered }
+  return { env, files, fetches, pageFetches, writes, runs, disk, store, statuses, toasts, logs, appended, submitted, summarizedOver, summarizedWith, configured, order, api, commands, loaded, sleeps, registered }
 }
 
 export const records = (writes: readonly { path: string; text: string }[], point: string) =>
