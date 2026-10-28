@@ -36,6 +36,8 @@ export async function resolveTrust($: EngineInterface, override: 'auto' | 'exter
 }
 
 export async function keyFor($: EngineInterface): Promise<{ key: string; source: string } | undefined> {
+  // The switch: with `jev: off` no gate has a key, so none sends anything.
+  if (settingsOf().jev === 'off') return undefined
   if (runtime.key === undefined) runtime.key = (await resolveKey($, settingsOf().apiKey)) ?? null
 
   return runtime.key ?? undefined

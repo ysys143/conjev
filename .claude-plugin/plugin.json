@@ -1,7 +1,7 @@
 {
   "name": "context-harness",
   "version": "0.0.3",
-  "description": "Context management for Claude Code: fold completed tool results into one-line pointers at compaction instead of summarizing, keep the project's intent and status files current, and, with a Jev key, judgment gates for announced-but-undone turns, secret files under other providers, and conditional instructions. Folding needs no key; every Jev setting is off by default.",
+  "description": "Context management for Claude Code: fold completed tool results into one-line pointers at compaction instead of summarizing, keep the project's intent and status files current, and Jev judgment gates for announced-but-undone turns, secret files under other providers, conditional instructions and what to fold. Folding needs no key; the Jev gates are auto by default and turn on once a key is in place and you consent (/jev-consent).",
   "author": {
     "name": "ysys143",
     "url": "https://github.com/ysys143"
@@ -72,16 +72,27 @@
       "description": "Dated logs of what happened. Must have a new entry before a fold. Used only while it exists; empty turns it off.",
       "default": "sessions"
     },
+    "jev": {
+      "type": "string",
+      "title": "Jev (every judgment gate)",
+      "description": "on (default): the gates send to Jev as each one's mode says. off: nothing is sent to Jev by any gate, whatever its mode; folding runs by rule alone.",
+      "options": [
+        "on",
+        "off"
+      ],
+      "default": "on"
+    },
     "stopGate": {
       "type": "string",
       "title": "Stop gate (announced-but-not-done turns)",
-      "description": "off: nothing. shadow: Jev judges each turn end and only records it; the last paragraph (scrubbed) is sent to TypeSafe. active: a judged announcement makes the model continue.",
+      "description": "auto (default): active once a key is in place, jev is on, and you consented with /jev-consent; off until then. off: nothing. shadow: Jev judges each turn end and only records it; the last paragraph (scrubbed) is sent to TypeSafe. active: a judged announcement makes the model continue.",
       "options": [
+        "auto",
         "off",
         "shadow",
         "active"
       ],
-      "default": "off"
+      "default": "auto"
     },
     "toolGate": {
       "type": "string",
@@ -97,13 +108,14 @@
     "toolJev": {
       "type": "string",
       "title": "Tool gate: Jev judgment (external sessions)",
-      "description": "off: nothing. shadow: in sessions served by a provider other than Anthropic, Jev classifies each call the floor let through (open, standard, restricted, custom) from its path or command and records it; the scrubbed path or the command's first 200 characters are sent to TypeSafe, never file contents. active: calls judged restricted or custom are refused.",
+      "description": "auto (default): active once a key is in place, jev is on, and you consented with /jev-consent; off until then. off: nothing. shadow: in sessions served by a provider other than Anthropic, Jev classifies each call the floor let through (open, standard, restricted, custom) from its path or command and records it; the scrubbed path or the command's first 200 characters are sent to TypeSafe, never file contents. active: calls judged restricted or custom are refused.",
       "options": [
+        "auto",
         "off",
         "shadow",
         "active"
       ],
-      "default": "off"
+      "default": "auto"
     },
     "stopThreshold": {
       "type": "number",
@@ -154,13 +166,14 @@
     "instructions": {
       "type": "string",
       "title": "Conditional instructions",
-      "description": "off: nothing. shadow: for each prompt you type, Jev judges which fragments' conditions hold and records it; the prompt (scrubbed, first 600 characters) and the fragments' conditions are sent to TypeSafe, never their bodies. active: matching fragments are appended to that prompt once, and pinned fragments go at the end of the system prompt.",
+      "description": "auto (default): active once a key is in place, jev is on, and you consented with /jev-consent; off until then. off: nothing. shadow: for each prompt you type, Jev judges which fragments' conditions hold and records it; the prompt (scrubbed, first 600 characters) and the fragments' conditions are sent to TypeSafe, never their bodies. active: matching fragments are appended to that prompt once, and pinned fragments go at the end of the system prompt.",
       "options": [
+        "auto",
         "off",
         "shadow",
         "active"
       ],
-      "default": "off"
+      "default": "auto"
     },
     "fragmentsDir": {
       "type": "string",
@@ -183,13 +196,14 @@
     "foldJev": {
       "type": "string",
       "title": "Fold relevance",
-      "description": "off: nothing. shadow: at each compaction Jev judges which large earlier tool results the current request still needs, beside what the policy folded, and records it. active: a result Jev says is finished with is folded even inside the recent window, and one it says is still needed is left whole; the judgment is made only when a person asks for the compaction, never on the automatic path, so no one waits for it. Your last prompt (scrubbed) and each result's tool and target are sent, never the contents.",
+      "description": "auto (default): active once a key is in place, jev is on, and you consented with /jev-consent; off until then. off: nothing. shadow: at each compaction Jev judges which large earlier tool results the current request still needs, beside what the policy folded, and records it. active: a result Jev says is finished with is folded even inside the recent window, and one it says is still needed is left whole; the judgment is made only when a person asks for the compaction, never on the automatic path, so no one waits for it. Your last prompt (scrubbed) and each result's tool and target are sent, never the contents.",
       "options": [
+        "auto",
         "off",
         "shadow",
         "active"
       ],
-      "default": "off"
+      "default": "auto"
     },
     "foldThreshold": {
       "type": "number",
@@ -212,24 +226,26 @@
     "instructionFilter": {
       "type": "string",
       "title": "Instruction filter (CLAUDE.md, AGENTS.md)",
-      "description": "off: nothing. shadow: each time the instruction files load, records which chunks are loaded twice and, with a key, Jev's reading of which chunks every request needs and which repeat earlier ones; the scrubbed instruction text, and for chunks Jev would defer your prompts (first 600 characters), are sent to TypeSafe. active: chunks loaded twice byte for byte are left out; Jev's readings are still only recorded.",
+      "description": "auto (default): active once a key is in place, jev is on, and you consented with /jev-consent; off until then. off: nothing. shadow: each time the instruction files load, records which chunks are loaded twice and, with a key, Jev's reading of which chunks every request needs and which repeat earlier ones; the scrubbed instruction text, and for chunks Jev would defer your prompts (first 600 characters), are sent to TypeSafe. active: chunks loaded twice byte for byte are left out; Jev's readings are still only recorded.",
       "options": [
+        "auto",
         "off",
         "shadow",
         "active"
       ],
-      "default": "off"
+      "default": "auto"
     },
     "webRead": {
       "type": "string",
       "title": "Web reading (web_read)",
-      "description": "off: nothing. shadow: after each WebFetch call, the same page is fetched and Jev judges which of its blocks answer the call's prompt; what web_read would have returned is recorded, WebFetch's answer is unchanged. active: adds the web_read tool, which returns only the blocks of a page that answer the question, verbatim, and keeps the whole page for read_coordinate. The page's text and your question, scrubbed, are sent to TypeSafe.",
+      "description": "auto (default): active once a key is in place, jev is on, and you consented with /jev-consent; off until then. off: nothing. shadow: after each WebFetch call, the same page is fetched and Jev judges which of its blocks answer the call's prompt; what web_read would have returned is recorded, WebFetch's answer is unchanged. active: adds the web_read tool, which returns only the blocks of a page that answer the question, verbatim, and keeps the whole page for read_coordinate. The page's text and your question, scrubbed, are sent to TypeSafe.",
       "options": [
+        "auto",
         "off",
         "shadow",
         "active"
       ],
-      "default": "off"
+      "default": "auto"
     },
     "webReadCap": {
       "type": "number",
@@ -246,13 +262,14 @@
     "foldBlocks": {
       "type": "string",
       "title": "Kept blocks at a fold",
-      "description": "off: nothing. shadow: at each compaction, Jev judges which blocks of the largest folded results your last prompt still needs, and records it. active: those blocks stay verbatim under the pointer; the rest is in read_coordinate. The results' text and your last prompt, scrubbed, are sent to TypeSafe.",
+      "description": "auto (default): active once a key is in place, jev is on, and you consented with /jev-consent; off until then. off: nothing. shadow: at each compaction, Jev judges which blocks of the largest folded results your last prompt still needs, and records it. active: those blocks stay verbatim under the pointer; the rest is in read_coordinate. The results' text and your last prompt, scrubbed, are sent to TypeSafe.",
       "options": [
+        "auto",
         "off",
         "shadow",
         "active"
       ],
-      "default": "off"
+      "default": "auto"
     },
     "foldBlocksCap": {
       "type": "number",
@@ -275,13 +292,14 @@
     "browserRoute": {
       "type": "string",
       "title": "Browser routing",
-      "description": "off: nothing. shadow: for each prompt you write, records whether it needs a web browser operated (keywords, else Jev) and which installed tool would be used. active: such a prompt gets one instruction naming the tool to use, in the order ego-browser, Aside, agent-browser, Playwright, then a CDP tool you name; with none installed, you are told once in 14 days. Your prompt (scrubbed, first 600 characters) is sent to TypeSafe when no keyword decides.",
+      "description": "auto (default): active once a key is in place, jev is on, and you consented with /jev-consent; off until then. off: nothing. shadow: for each prompt you write, records whether it needs a web browser operated (keywords, else Jev) and which installed tool would be used. active: such a prompt gets one instruction naming the tool to use, in the order ego-browser, Aside, agent-browser, Playwright, then a CDP tool you name; with none installed, you are told once in 14 days. Your prompt (scrubbed, first 600 characters) is sent to TypeSafe when no keyword decides.",
       "options": [
+        "auto",
         "off",
         "shadow",
         "active"
       ],
-      "default": "off"
+      "default": "auto"
     },
     "browserThreshold": {
       "type": "number",

@@ -3,6 +3,17 @@
 
 export type Mode = 'off' | 'shadow' | 'active'
 
+/** The Jev gates: those that `auto` and the `jev` switch apply to. The tool gate's floor is a rule, not one of them. */
+export const JEV_GATES = ['stopGate', 'toolJev', 'instructions', 'foldJev', 'instructionFilter', 'webRead', 'foldBlocks', 'browserRoute'] as const
+export type JevGate = (typeof JEV_GATES)[number]
+
+/**
+ * What `auto` needs to become `active`: a key, the `jev` switch on, and the
+ * person's recorded consent. Unknown until the session can look (register has
+ * no `$`), and then everything is false, so `auto` starts as `off`.
+ */
+export type AutoFacts = { hasKey: boolean; isConsented: boolean }
+
 export type HarnessSettings = {
   stopGate: Mode
   toolGate: Mode
@@ -36,20 +47,40 @@ export type HarnessSettings = {
   browserBlocked: string
   browserCdp: string
   imageMaxPx: number
+  /** The switch over every Jev gate: off sends nothing to Jev, whatever a gate says. */
+  jev: 'on' | 'off'
+  /** The gates set to `auto`, before they were resolved: what /jev-report shows as auto. */
+  auto: JevGate[]
 }
 
 const modeOf = (value: unknown): Mode => (value === 'shadow' || value === 'active' ? value : 'off')
 const numberOf = (value: unknown, fallback: number, min: number, max: number): number =>
   typeof value === 'number' && Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : fallback
 
-export function harnessSettingsFrom(options: Readonly<Record<string, unknown>>): HarnessSettings {
+/**
+ * A Jev gate's mode: `auto` is `active` once a key is there, the switch is on
+ * and the person has consented, and `off` until then. An explicit `off`,
+ * `shadow` or `active` stands as written.
+ */
+export function gateMode(value: unknown, jev: 'on' | 'off', facts: AutoFacts): Mode {
+  if (value !== 'auto') return modeOf(value)
+
+  return jev === 'on' && facts.hasKey && facts.isConsented ? 'active' : 'off'
+}
+
+export function harnessSettingsFrom(options: Readonly<Record<string, unknown>>, facts: AutoFacts = { hasKey: false, isConsented: false }): HarnessSettings {
+  const jev = options.jev === 'off' ? 'off' : 'on'
+  const gate = (value: unknown): Mode => gateMode(value, jev, facts)
+
   return {
-    stopGate: modeOf(options.stopGate),
+    jev,
+    auto: JEV_GATES.filter(name => options[name] === 'auto'),
+    stopGate: gate(options.stopGate),
     toolGate: modeOf(options.toolGate),
     stopThreshold: numberOf(options.stopThreshold, 0.7, 0, 1),
     timeoutMs: numberOf(options.timeoutMs, 2000, 200, 8000),
     stopCap: numberOf(options.stopCap, 200, 0, 10_000),
-    toolJev: modeOf(options.toolJev),
+    toolJev: gate(options.toolJev),
     toolThreshold: numberOf(options.toolThreshold, 0.8, 0, 1),
     toolCap: numberOf(options.toolCap, 300, 0, 10_000),
     providerTrust: options.providerTrust === 'external' ? 'external' : 'auto',
@@ -61,22 +92,22 @@ export function harnessSettingsFrom(options: Readonly<Record<string, unknown>>):
             .filter(Boolean)
         : [],
     apiKey: options.apiKey,
-    instructions: modeOf(options.instructions),
+    instructions: gate(options.instructions),
     fragmentsDir: typeof options.fragmentsDir === 'string' && options.fragmentsDir.trim() !== '' ? options.fragmentsDir : '~/.agents/fragments',
     instructionThreshold: numberOf(options.instructionThreshold, 0.95, 0, 1),
     instructionCap: numberOf(options.instructionCap, 200, 0, 10_000),
-    foldJev: modeOf(options.foldJev),
+    foldJev: gate(options.foldJev),
     foldThreshold: numberOf(options.foldThreshold, 0.3, 0, 1),
     foldCap: numberOf(options.foldCap, 20, 0, 1000),
-    instructionFilter: modeOf(options.instructionFilter),
-    webRead: modeOf(options.webRead),
+    instructionFilter: gate(options.instructionFilter),
+    webRead: gate(options.webRead),
     webReadCap: numberOf(options.webReadCap, 600, 0, 100_000),
     webTimeoutMs: numberOf(options.webTimeoutMs, 10_000, 1000, 60_000),
-    foldBlocks: modeOf(options.foldBlocks),
+    foldBlocks: gate(options.foldBlocks),
     foldBlocksCap: numberOf(options.foldBlocksCap, 300, 0, 100_000),
     foldBlocksResults: numberOf(options.foldBlocksResults, 4, 1, 24),
     foldBlocksBudgetMs: numberOf(options.foldBlocksBudgetMs, 10_000, 1000, 60_000),
-    browserRoute: modeOf(options.browserRoute),
+    browserRoute: gate(options.browserRoute),
     browserThreshold: numberOf(options.browserThreshold, 0.9, 0, 1),
     browserCap: numberOf(options.browserCap, 200, 0, 10_000),
     imageMaxPx: numberOf(options.imageMaxPx, 0, 0, 4096),

@@ -230,6 +230,7 @@ export const setup = (on: On, s: Setup = {}) => {
   })
   on('classic.PostCompact', () => ({}))
   on('classic.SessionStart', () => ({}))
+  on('classic.FileChanged', () => ({}))
   on('classic.Stop', () => s.stopBelow ?? {})
   on('classic.UserPromptExpansion', () => ({}))
   on('turn.complete', () => ({ text: '' }))

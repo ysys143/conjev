@@ -40,6 +40,17 @@ export function keyNote(source: KeySource | 'shared' | undefined): string {
   return `${KEY_CHECK} none found. The plugin looked in ${Object.values(SOURCE_WORDS).join('; ')}.`
 }
 
+/**
+ * What consenting means, in the words /jev-consent and the setup both use: what
+ * leaves the machine, and in what form.
+ */
+export const CONSENT_TEXT =
+  'With your consent, the gates set to auto (the default) send parts of this session to Jev, a judging model run by TypeSafe: ' +
+  'your latest prompt, the end of the assistant\'s last paragraph, tool names and targets, the opening lines of large tool results, ' +
+  'instruction file text, and the passages of a folded result or web page a question is about. Parts of the original text are included. ' +
+  'Before anything leaves, secrets, email addresses, your home folder and Korean personal information (names, phone, resident and card numbers) ' +
+  'are replaced by labels, and each part is cut to a fixed length. Nothing is sent without a key, and `jev: off` in ~/.context-harness/config.json stops all of it.'
+
 /** The body, front matter left to the writer. `$ARGUMENTS` is the engine's. */
 export const INSTALL_COMMAND_BODY = `# context-harness: getting a Jev key in place
 
@@ -100,9 +111,7 @@ it is not \`~/.context-harness/key\`, offer to copy it there, the same way as in
 secure setting is kept per profile, so a person with several profiles enters the
 key once per profile.
 
-Then say what each gate sends when it is on, and that every gate starts \`off\`,
-key or no key. Offer to set the ones they want to \`shadow\` with \`/config\`; do not
-set them unasked.
+Then go to 5: the gates wait for the person's consent.
 
 ## 3. If no key was found
 
@@ -110,7 +119,7 @@ Ask one plain question: **do you already have a TypeSafe key?**
 
 - **No.** Give the address, https://console.typesafe.ai/home, and say that
   getting one is the next step. Until then the plugin runs folding by rule
-  only, without Jev. Then stop.
+  only, without Jev. Then go to 5: consent can be given before the key.
 - **Yes.** Offer these ways and let them pick. Do not pick for them.
 
   1. **If the key is already on this machine**, you can place it without ever
@@ -163,13 +172,44 @@ the value is not where the plugin reads it; check, in this order:
 3. \`TYPESAFE_API_KEY\` in the environment of the session that runs Claude Code,
    not only in the shell that started it, and not exported after it started.
 
-## 5. When it works
+Once it says found, go to 5.
 
-Say that the gates are off until set, that \`shadow\` judges and records without
-changing anything, and that \`/jev-report\` shows what a gate would have done.
-Suggest one gate to start with, \`foldJev: active\` if they often run into
-compaction, \`stopGate: shadow\` if they want to watch announcing endings, and
-let them decide.
+## 5. Consent
+
+The Jev gates are set to \`auto\` by default: each one turns on by itself once
+there is a key, the \`jev\` switch is on, and the person has said yes. Until
+they say yes, nothing goes to Jev, key or no key, and folding runs by rule.
+
+Tell them what saying yes sends, in their language, from this text:
+
+> ${CONSENT_TEXT}
+
+Then ask them to answer by typing it themselves; you cannot answer for them:
+
+- \`/jev-consent yes\`: allow it. The \`auto\` gates turn on now, or as soon as a
+  key is in place.
+- \`/jev-consent no\`: refuse it. The gates stay off; folding still works.
+- \`/jev-consent later\`: decide later. This setup will not start by itself
+  again; \`/install-context-harness\` brings it back.
+
+Any of the three ends the setup. Say that \`/jev-consent no\` takes a yes back
+at any time, that \`jev: off\` in \`~/.context-harness/config.json\` switches every
+Jev gate off at once, and that \`/jev-report\` shows what each gate did.
 
 $ARGUMENTS
 `
+
+/** How the setup begins when it starts by itself, on the plugin's first run. */
+export const ONBOARDING_MARK = '[context-harness first run]'
+
+/**
+ * The first run's opening prompt: the command's body as it would expand, with
+ * the key check the expansion would have attached, since no expansion runs.
+ */
+export function onboardingMessage(source: KeySource | 'shared' | undefined): string {
+  return [
+    `${ONBOARDING_MARK} context-harness was just installed and has not been set up. Run its setup now, as /${INSTALL_COMMAND_NAME} would: the person did not type anything yet.`,
+    keyNote(source),
+    INSTALL_COMMAND_BODY.replace(/\n\$ARGUMENTS\n$/, '\n'),
+  ].join('\n\n')
+}

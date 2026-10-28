@@ -6,9 +6,12 @@
 // so a person with three profiles enters the key three times and tunes the same
 // settings three times. Reading one file under the home folder settles that.
 //
-// The order is: this folder first, then wherever the value was before. Nothing
-// is written here by the plugin: the key is put there by the person (the
-// `key` file is theirs to write), and this only reads. A folder that cannot be
+// The order is: this folder first, then wherever the value was before. The key
+// is put there by the person (the `key` file is theirs to write) and the plugin
+// only reads it. The plugin writes two records of its own beside it, both of
+// them answers the person gave: whether they consented to sending to Jev
+// (`consent.json`, written by /jev-consent), and whether the first-run setup is
+// finished or declined (`onboarding.json`), so it is not offered again. A folder that cannot be
 // read is not an error — every value then comes from the older source, which is
 // exactly how the plugin behaved before this existed.
 import type { EngineInterface } from 'claude-code'
@@ -17,6 +20,23 @@ import type { EngineInterface } from 'claude-code'
 export const SHARED_DIR = '.context-harness'
 export const SHARED_CONFIG = 'config.json'
 export const SHARED_KEY = 'key'
+export const SHARED_CONSENT = 'consent.json'
+export const SHARED_ONBOARDING = 'onboarding.json'
+
+export type Onboarding = 'done' | 'declined'
+
+/** What a record file says, or undefined for a missing or unreadable one. */
+export function consentFromShared(text: string | undefined): boolean | undefined {
+  const value = settingsFromShared(text).consent
+
+  return typeof value === 'boolean' ? value : undefined
+}
+
+export function onboardingFromShared(text: string | undefined): Onboarding | undefined {
+  const value = settingsFromShared(text).state
+
+  return value === 'done' || value === 'declined' ? value : undefined
+}
 
 /** The file's contents as settings, or undefined when there is no readable file. */
 export function settingsFromShared(text: string | undefined): Record<string, unknown> {
@@ -53,7 +73,9 @@ export function sharedDirOf(home: string): string {
  * the file is not there, which is the ordinary case for anyone who has not
  * moved them.
  */
-export async function readShared($: EngineInterface, home: string | undefined): Promise<{ settings: Record<string, unknown>; key?: string }> {
+export type Shared = { settings: Record<string, unknown>; key?: string; consent?: boolean; onboarding?: Onboarding }
+
+export async function readShared($: EngineInterface, home: string | undefined): Promise<Shared> {
   if (home === undefined) return { settings: {} }
   const dir = sharedDirOf(home)
   const read = async (name: string): Promise<string | undefined> => {
@@ -67,7 +89,24 @@ export async function readShared($: EngineInterface, home: string | undefined): 
       return undefined
     }
   }
-  const [config, key] = await Promise.all([read(SHARED_CONFIG), read(SHARED_KEY)])
+  const [config, key, consent, onboarding] = await Promise.all([read(SHARED_CONFIG), read(SHARED_KEY), read(SHARED_CONSENT), read(SHARED_ONBOARDING)])
+  const consented = consentFromShared(consent)
+  const onboarded = onboardingFromShared(onboarding)
 
-  return { settings: settingsFromShared(config), ...(keyFromShared(key) === undefined ? {} : { key: keyFromShared(key)! }) }
+  return {
+    settings: settingsFromShared(config),
+    ...(keyFromShared(key) === undefined ? {} : { key: keyFromShared(key)! }),
+    ...(consented === undefined ? {} : { consent: consented }),
+    ...(onboarded === undefined ? {} : { onboarding: onboarded }),
+  }
+}
+
+/** Writes one of the plugin's own records into the shared folder, made private first. */
+export async function writeSharedRecord($: EngineInterface, home: string, name: typeof SHARED_CONSENT | typeof SHARED_ONBOARDING, value: Record<string, unknown>): Promise<void> {
+  const dir = sharedDirOf(home)
+  for (const argv of [['mkdir', '-p', dir], ['chmod', '700', dir]]) {
+    const { exitCode } = await $.process.run(argv)
+    if (exitCode !== 0) throw new Error(`${argv[0]} exited ${exitCode}`)
+  }
+  await $.fs.write(`${dir}/${name}`, `${JSON.stringify(value)}\n`)
 }

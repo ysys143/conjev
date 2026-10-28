@@ -10,16 +10,16 @@ import { askConditions, attachedNow, forgetAttached, fragmentsDirOf, loadFragmen
 import { INSTRUCTIONS_POINT, attachedNames, decideFragments, fragmentBlock, keywordHit, pinnedSection } from './instructions'
 import { probabilityOf, type JevResult } from './jev'
 import { errorOf, judge, keyFor, resolveKey, trustFor } from './jev-call'
-import { INSTALL_COMMAND_NAME, keyNote } from './install-command'
+import { CONSENT_TEXT, INSTALL_COMMAND_NAME, keyNote, onboardingMessage } from './install-command'
 import { blockReport, compactReport, filterReport, pointReport, type ShadowRecord } from './report'
 import { chunksOf, exactDuplicates, normalized, supersededOmc, withoutChunks, type DocFile } from './instruction-docs'
 import { judgeDeferred, omcVersionsOf, recordFilter, recordToolUse, stateKeyOf } from './filter-flow'
 import { clip, scrub } from './scrub'
-import { harnessSettingsFrom, usesJev } from './settings'
-import { newId, retuneRuntime, runtime, settingsOf, startRuntime } from './state'
+import { harnessSettingsFrom, usesJev, type HarnessSettings } from './settings'
+import { newId, retuneRuntime, runtime, startRuntime } from './state'
 import { OFFER_TIMEOUT_MS, boardHasHandoff, boardOfferStep, handoffGap, offerAccepted, repoStateOf, type BoardOffer } from './repostate'
 import { imageToRead } from './image-size'
-import { readShared, sharedDirOf } from './shared'
+import { SHARED_CONFIG, SHARED_CONSENT, SHARED_KEY, SHARED_ONBOARDING, readShared, sharedDirOf, writeSharedRecord, type Shared } from './shared'
 import { DEFAULT_RELEVANCE, omittedRanges, selectRelevant } from './relevance'
 import { showStatus } from './status'
 import { PARAGRAPH_CHARS, STOP_MESSAGE, STOP_POINT, STOP_QUESTION, announcesByRule, lastParagraph, stopSkipReason } from './stop-gate'
@@ -152,12 +152,41 @@ async function boardOffer($: EngineInterface, phaseFile: string): Promise<string
     : undefined
 }
 
+/**
+ * The settings as they stand now: the shared folder over this profile's own
+ * (`/config`), and every `auto` gate resolved against the key and the recorded
+ * consent. Read afresh at session start, when a shared file changes, and when
+ * the person places a key or answers /jev-consent.
+ */
+async function sharedState(
+  $: EngineInterface,
+  options: Readonly<Record<string, unknown>>,
+): Promise<{ gates: HarnessSettings; policy: PolicySettings; shared: Shared; key: { key: string; source: string } | undefined }> {
+  const shared = await readShared($, await homeOf($))
+  // The shared file wins over /config: one file tunes every profile.
+  const merged = { ...options, ...shared.settings }
+  const key = shared.key === undefined ? await resolveKey($, merged.apiKey) : { key: shared.key, source: 'shared' }
+  const gates = harnessSettingsFrom(merged, { hasKey: key !== undefined, isConsented: shared.consent === true })
+
+  return { gates, policy: settingsFrom(merged), shared, key }
+}
+
 export const register: Register = (on, options) => {
   let policySettings = settingsFrom(options)
-  const policy = makePolicy(policySettings)
-  const settings = harnessSettingsFrom(options)
+  let policy = makePolicy(policySettings)
+  let settings = harnessSettingsFrom(options)
   startRuntime(settings, policySettings)
-  const isOn = usesJev(settings) || settings.toolGate !== 'off'
+  let isOn = usesJev(settings) || settings.toolGate !== 'off'
+  // Every hook below reads `settings` and `policy` when it runs, so replacing
+  // them here is what a changed shared file or a new consent takes effect by.
+  const apply = (next: Awaited<ReturnType<typeof sharedState>>): void => {
+    settings = next.gates
+    policySettings = next.policy
+    policy = makePolicy(policySettings)
+    isOn = usesJev(settings) || settings.toolGate !== 'off'
+    retuneRuntime(settings, policySettings)
+    runtime.key = next.key ?? null
+  }
   const { counts } = runtime
   let isFoldScheduled = false
   const state: Continuity = { deferrals: 0, isJustCompacted: false }
@@ -167,14 +196,7 @@ export const register: Register = (on, options) => {
     // a person with several profiles tunes one file rather than each of them.
     // Read here rather than at register time, where there is no `$` to read with.
     try {
-      const home = await homeOf($)
-      const shared = await readShared($, home)
-      const merged = { ...options, ...shared.settings }
-      const policyShared = settingsFrom(merged)
-      const gatesShared = harnessSettingsFrom(merged)
-      retuneRuntime(gatesShared, policyShared)
-      runtime.key = shared.key === undefined ? undefined : { key: shared.key, source: 'shared' }
-      policySettings = policyShared
+      apply(await sharedState($, options))
     } catch (error) {
       $.ui.log(`${$.plugin.name}: the shared settings could not be read (${String(error)})`)
     }
@@ -238,6 +260,7 @@ export const register: Register = (on, options) => {
     try {
       await $.command.register({ name: 'jev-report', description: 'context-harness: what the gates recorded and how Jev agreed with the rules' })
       await $.command.register({ name: 'jev-mark', description: 'context-harness: label a record, /jev-mark <id> y|n', argumentHint: '<id> y|n' })
+      await $.command.register({ name: 'jev-consent', description: 'context-harness: allow or refuse sending to Jev, /jev-consent yes|no|later', argumentHint: 'yes|no|later' })
       // Registered, not only answered: without this call the name never reaches
       // the slash list. `/install` alone is a built-in name and stays the
       // engine's, which is why this one carries the plugin's name.
@@ -393,7 +416,37 @@ export const register: Register = (on, options) => {
   // where the compaction is answered, below.
   on('classic.SessionStart', async ($, e, next) => {
     const below = await next(e)
-    if (e.agent_id === undefined && settings.instructions !== 'off' && e.source === 'clear') await forgetAttached($, await $.session.id())
+    if (e.agent_id !== undefined) return below
+    if (settings.instructions !== 'off' && e.source === 'clear') await forgetAttached($, await $.session.id())
+    const home = await homeOf($)
+    if (home === undefined) return below
+    const dir = sharedDirOf(home)
+    // B4: the shared files are watched, so a change made in another profile
+    // or an editor reaches this session (classic.FileChanged, below).
+    const watched = { ...below, watchPaths: [...(below.watchPaths ?? []), ...[SHARED_CONFIG, SHARED_KEY, SHARED_CONSENT].map(name => `${dir}/${name}`)] }
+    if (e.source !== 'startup') return watched
+    // The first run: no key or no answer about consent, and the setup neither
+    // finished nor declined. The setup starts by itself, as the first turn.
+    //
+    // initialUserMessage, not additionalContext: additionalContext only rides
+    // along with the next request, so the model would say nothing until the
+    // person wrote first, and someone who has never heard of the plugin has no
+    // reason to. initialUserMessage is sent as the session's first prompt, which
+    // starts a model turn, so the setup runs as /install-context-harness would.
+    const { shared, key } = await sharedState($, options)
+    if (shared.onboarding !== undefined || (key !== undefined && shared.consent !== undefined)) return watched
+
+    return { ...watched, initialUserMessage: onboardingMessage(key?.source as Parameters<typeof keyNote>[0]) }
+  }).catch((_, e, next) => next(e))
+
+  // A shared file changed during the session: read them again, so a gate, a
+  // fold value, a key or a consent takes effect without a new session.
+  on('classic.FileChanged', async ($, e, next) => {
+    const below = await next(e)
+    const home = await homeOf($)
+    if (home === undefined || !e.file_path.startsWith(`${sharedDirOf(home)}/`)) return below
+    apply(await sharedState($, options))
+    showStatus($)
 
     return below
   }).catch((_, e, next) => next(e))
@@ -639,6 +692,32 @@ export const register: Register = (on, options) => {
     return { text: [...header, ...reports].join('\n\n') }
   })
 
+  // C2: the person's answer, typed by them; the model cannot give it for them.
+  on('command.run', { command: 'jev-consent' }, async ($, e) => {
+    const answer = e.args.trim().toLowerCase()
+    const home = await homeOf($)
+    if (answer === '' || home === undefined) {
+      const { shared } = await sharedState($, options)
+      const now = shared.consent === undefined ? 'not answered yet' : shared.consent ? 'allowed' : 'refused'
+
+      return { text: `context-harness: sending to Jev is ${now}.\n\n${CONSENT_TEXT}\n\nUsage: /jev-consent yes|no|later` }
+    }
+    if (answer !== 'yes' && answer !== 'no' && answer !== 'later') return { text: 'Usage: /jev-consent yes|no|later' }
+    const at = new Date(await $.clock.now()).toISOString()
+    if (answer !== 'later') await writeSharedRecord($, home, SHARED_CONSENT, { consent: answer === 'yes', at })
+    await writeSharedRecord($, home, SHARED_ONBOARDING, { state: answer === 'yes' ? 'done' : 'declined', at })
+    apply(await sharedState($, options))
+    showStatus($)
+    if (answer === 'later') return { text: 'context-harness: the setup will not start by itself again. Run /install-context-harness when you want it.' }
+
+    return {
+      text:
+        answer === 'yes'
+          ? `context-harness: sending to Jev is allowed. Gates set to auto are ${settings.auto.length > 0 && runtime.key ? 'on now' : 'on once a key is in place'}. /jev-consent no takes it back.`
+          : 'context-harness: sending to Jev is refused. Gates set to auto stay off, and folding runs by rule. /jev-consent yes changes it.',
+    }
+  })
+
   on('command.run', { command: 'jev-mark' }, async ($, e) => {
     const [id, value] = e.args.trim().split(/\s+/)
     if (id === undefined || !/^[a-z0-9]{4,20}$/.test(id) || (value !== 'y' && value !== 'n')) return { text: 'Usage: /jev-mark <id> y|n' }
@@ -654,9 +733,10 @@ export const register: Register = (on, options) => {
   on('classic.UserPromptExpansion', async ($, e, next) => {
     const below = await next(e)
     if (e.expansion_type !== 'slash_command' || e.command_name.replace(/^.*:/, '') !== INSTALL_COMMAND_NAME) return below
-    const shared = await readShared($, await homeOf($))
-    const found = shared.key === undefined ? await resolveKey($, settingsOf().apiKey) : { key: shared.key, source: 'shared' as const }
-    runtime.key = found ?? null
+    const next0 = await sharedState($, options)
+    // A key placed since the session started turns its `auto` gates on now.
+    apply(next0)
+    const found = next0.key as { key: string; source: Parameters<typeof keyNote>[0] } | undefined
 
     return { ...below, additionalContext: [...(below.additionalContext ?? []), keyNote(found?.source)] }
   }).catch((_, e, next) => next(e))
