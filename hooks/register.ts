@@ -49,6 +49,9 @@ const MAX_DEFERRALS = 2
 // moment: long enough to read the answer, short enough to run while they are away.
 const FOLD_IDLE_MS = 30_000
 
+/** Where the armed automatic fold records the moment it began waiting. */
+export const FOLD_ARMED_KEY = 'fold-armed-at'
+
 const SETTINGS_SCHEMA = {
   type: 'object',
   properties: {
@@ -414,6 +417,10 @@ export const register: Register = (on, options) => {
     // So it waits for a quiet moment, and stands down if they type first —
     // their request is never queued behind a summary.
     const at = await $.clock.now()
+    await $.store.set(FOLD_ARMED_KEY, at)
+    // Where the timer's own check can find the moment it was armed: the value
+    // is written to the store rather than held in a closure, so a test can see
+    // that the fold is armed and what it will compare against.
     $.clock.after(FOLD_IDLE_MS, () => {
       // A prompt that arrived while this waited took the moment back.
       if (!stillIdle(state.promptedAt, at)) {
@@ -421,6 +428,7 @@ export const register: Register = (on, options) => {
 
         return
       }
+      state.promptedAt = undefined
       // /compact as the person would type it: a compaction this plugin starts
       // with $.session.compact() skips this plugin's own session.compact hook,
       // so it would summarize instead of fold. Queued until the session is idle.

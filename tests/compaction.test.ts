@@ -5,6 +5,7 @@ import { expect, test } from 'claude-code/testing'
 import { DEFAULT_SETTINGS, foldTranscript, makePolicy, turnsAgoOf } from '../hooks/fold'
 import { cleanupArgs, dirsBetween } from '../hooks/storage'
 import { HOME, KEY_ENV, drain, prompt, records, settle, setup } from './kit'
+import { FOLD_ARMED_KEY } from '../hooks/register'
 
 const call = (id: string, tool: string, input: Record<string, unknown>): SessionMessage => ({ role: 'assistant', text: '', toolUses: [{ tool_use_id: id, tool, input }] })
 const answer = (id: string, text: string, isError = false): SessionMessage => ({ role: 'user', text: '', toolUses: [], toolResults: [{ tool_use_id: id, text, isError }] })
@@ -437,4 +438,27 @@ test('a current status board lets the summary run', { options: { foldJev: 'shado
   await $.session.compact({ trigger: 'manual', messages: OLD } as never)
 
   expect(io.summarizedOver.length).toBe(1)
+})
+
+test('the automatic fold records the moment it began waiting, so its own check has something to compare', async ($, on) => {
+  const io = setup(on, { messages: OLD, percent: 90 })
+  await $.turn.complete({ answer: '', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+  await settle(() => io.commands.length > 0)
+
+  // The armed moment is in the store: the fold's own timer reads it to decide
+  // whether the person wrote first. Without this write there is nothing for
+  // that check to compare against, and it would always stand down.
+  expect(io.store.has(FOLD_ARMED_KEY)).toBe(true)
+  expect(typeof io.store.get(FOLD_ARMED_KEY)).toBe('number')
+})
+
+test('a prompt records when it arrived, so the fold can tell it came first', async ($, on) => {
+  const io = setup(on, { messages: OLD, percent: 90 })
+  await $.prompt.submit({ text: 'hold on', wait: false, turnId: 't3', origin: { kind: 'composer' as const } } as never)
+  await $.turn.complete({ answer: '', durationMs: 1, isAborted: false, turnId: 't4', reason: 'answer' })
+  await drain()
+
+  // The prompt was recorded, so the fold armed after it sees a later time and
+  // stands down instead of compacting over the person's turn.
+  expect(io.store.get(FOLD_ARMED_KEY)).toBeGreaterThan(0)
 })
