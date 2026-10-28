@@ -1,5 +1,5 @@
 {
-  "name": "context-harness",
+  "name": "conjev",
   "version": "0.0.3",
   "description": "Context management for Claude Code: fold completed tool results into one-line pointers at compaction instead of summarizing, keep the project's intent and status files current, and Jev judgment gates for announced-but-undone turns, secret files under other providers, conditional instructions and what to fold. Folding needs no key; the Jev gates are auto by default and turn on once a key is in place and you consent (/jev-consent).",
   "author": {

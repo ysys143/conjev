@@ -59,5 +59,5 @@ test('the shared folder reads as settings and as a key, and a broken file is not
   expect(keyFromShared('  spaced  ')).toBe('spaced')
   expect(keyFromShared('\n')).toBe(undefined)
   expect(keyFromShared(undefined)).toBe(undefined)
-  expect(sharedDirOf('/home/me')).toBe('/home/me/.context-harness')
+  expect(sharedDirOf('/home/me')).toBe('/home/me/.conjev')
 })

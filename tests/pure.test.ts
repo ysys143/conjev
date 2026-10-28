@@ -229,8 +229,8 @@ test('writes are told apart from reads', () => {
 })
 
 test('the plugin, its logs and Claude settings are protected from the agent', () => {
-  const roots = ['/plugins/context-harness', `${HOME}/.local/state/context-harness`]
-  expect(selfProtectReason('/plugins/context-harness/hooks/register.ts', roots)).toBe('context-harness files')
+  const roots = ['/plugins/conjev', `${HOME}/.local/state/context-harness`]
+  expect(selfProtectReason('/plugins/conjev/hooks/register.ts', roots)).toBe('conjev files')
   expect(selfProtectReason(`${HOME}/.claude-3/settings.json`, roots)).toBe('claude settings')
   expect(selfProtectReason('/p/src/settings.json', roots)).toBe(undefined)
 })

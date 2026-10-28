@@ -1,11 +1,11 @@
-// B2: the records and folded originals live under ~/.context-harness/state,
+// B2: the records and folded originals live under ~/.conjev/state,
 // beside the shared settings. The old root is moved there once, and while both
 // exist the old one is still read.
 import { expect, test } from 'claude-code/testing'
 import { cleanupArgs } from '../hooks/storage'
 import { HOME, setup } from './kit'
 
-const NEW = `${HOME}/.context-harness/state`
+const NEW = `${HOME}/.conjev/state`
 const OLD = `${HOME}/.local/state/context-harness`
 const START = { cwd: '/proj', surface: 'terminal', isInteractive: true } as never
 const ARCHIVED = JSON.stringify({ id: 'toolu_old', tool: 'Read', input: { file_path: '/proj/a.ts' }, text: 'line one\nline two', isError: false })
@@ -15,7 +15,7 @@ test('a session start moves the old state root to the new one, private', async (
   await $.session.start(START)
 
   expect(io.runs).toContainEqual(['mv', OLD, NEW])
-  expect(io.runs).toContainEqual(['chmod', '700', `${HOME}/.context-harness`])
+  expect(io.runs).toContainEqual(['chmod', '700', `${HOME}/.conjev`])
   expect(io.runs).toContainEqual(['chmod', '700', NEW])
   // The move comes before anything else touches the roots.
   expect(io.runs.findIndex(r => r[0] === 'mv')).toBeLessThan(io.runs.findIndex(r => r[0] === 'find') === -1 ? Infinity : io.runs.findIndex(r => r[0] === 'find'))
@@ -33,7 +33,7 @@ test('nothing moves on a fresh install', async ($, on) => {
   expect(io.runs.some(r => r[0] === 'mv')).toBe(false)
 })
 
-test('new folds and records are written under ~/.context-harness/state', { options: { stopGate: 'shadow' } }, async ($, on) => {
+test('new folds and records are written under ~/.conjev/state', { options: { stopGate: 'shadow' } }, async ($, on) => {
   const io = setup(on, { env: { TYPESAFE_API_KEY: 'k' } })
   await $.session.start(START)
   await $.command.run({ command: 'jev-mark', args: 'abcd y' } as never)
@@ -44,7 +44,7 @@ test('new folds and records are written under ~/.context-harness/state', { optio
 test('a folded original left in the old root is still read', async ($, on) => {
   setup(on, { files: { [`${OLD}/archive/sess-1/toolu_old.json`]: ARCHIVED, [`${NEW}/archive/other/x.json`]: '{}' } })
   await $.session.start(START)
-  const result = await $.tool.call({ tool: 'mcp__context-harness__read_coordinate', id: 'toolu_old', full: true } as never)
+  const result = await $.tool.call({ tool: 'mcp__conjev__read_coordinate', id: 'toolu_old', full: true } as never)
 
   expect(String(result.result)).toContain('line two')
 })
@@ -67,13 +67,52 @@ test('records and labels left in the old root are still reported', async ($, on)
 test('old records are cleaned under both roots, and only there', () => {
   expect(cleanupArgs(`${NEW}/records`)[0]?.[1]).toBe(`${NEW}/records`)
   expect(cleanupArgs(`${OLD}/records`)[0]?.[1]).toBe(`${OLD}/records`)
-  expect(cleanupArgs(`${HOME}/.context-harness/records`)).toEqual([])
+  expect(cleanupArgs(`${HOME}/.conjev/records`)).toEqual([])
 })
 
 test('the agent cannot write into either root, or read folded originals in either', { options: { toolGate: 'active', providerTrust: 'external' } }, async ($, on) => {
   setup(on)
   for (const root of [NEW, OLD]) {
-    expect((await $.tool.call({ tool: 'Bash', command: `echo x > ${root}/a.json` })).deny).toContain('context-harness files')
+    expect((await $.tool.call({ tool: 'Bash', command: `echo x > ${root}/a.json` })).deny).toContain('conjev files')
     expect((await $.tool.call({ tool: 'Read', file_path: `${root}/archive/s/a.json` })).deny).toBeDefined()
   }
+})
+
+// The plugin was called context-harness; its folder was ~/.context-harness.
+// The rename moves the whole folder once, so a person who set it up keeps the
+// key, the two answers and the state, and is not asked again.
+const PREVIOUS = `${HOME}/.context-harness`
+const SHARED = `${HOME}/.conjev`
+const EXPAND = { expansion_type: 'slash_command', command_name: 'conjev:onboard', command_args: '', prompt: '/conjev:onboard' } as never
+
+test('the folder from before the rename becomes ~/.conjev, key and answers with it', async ($, on) => {
+  const io = setup(on, {
+    files: {
+      [`${PREVIOUS}/key`]: 'ts_old\n',
+      [`${PREVIOUS}/consent.json`]: '{"consent":true,"at":"t"}\n',
+      [`${PREVIOUS}/onboarding.json`]: '{"state":"done","at":"t"}\n',
+      [`${PREVIOUS}/state/archive/s/x.json`]: '{}',
+    },
+  })
+  await $.session.start(START)
+
+  expect(io.runs).toContainEqual(['mv', PREVIOUS, SHARED])
+  expect(io.runs).toContainEqual(['chmod', '700', SHARED])
+  // The move comes before the session reads the folder: with the key and the
+  // consent found, the gates left at auto are on from the start.
+  const report = await $.command.run({ command: 'jev-report', args: '' } as never)
+  expect(report.text).toContain('stop active')
+  // The key is found where it now is.
+  const note = ((await $.classic.UserPromptExpansion(EXPAND)).additionalContext ?? []).join('\n')
+  expect(note).toContain('found, in ~/.conjev/key')
+  expect(note).not.toContain('ts_old')
+  // And the setup, finished before the rename, does not start again.
+  expect((await $.classic.SessionStart({ source: 'startup' } as never)).initialUserMessage).toBe(undefined)
+  expect(Object.keys(io.files).some(path => path.startsWith(`${PREVIOUS}/`))).toBe(false)
+})
+
+test('nothing moves when ~/.conjev exists already', async ($, on) => {
+  const io = setup(on, { files: { [`${PREVIOUS}/key`]: 'ts_old\n', [`${SHARED}/key`]: 'ts_new\n' } })
+  await $.session.start(START)
+  expect(io.runs.some(r => r[0] === 'mv' && r[1] === PREVIOUS)).toBe(false)
 })

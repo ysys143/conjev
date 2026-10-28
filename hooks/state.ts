@@ -71,7 +71,7 @@ export function retuneRuntime(settings: HarnessSettings, policy: PolicySettings)
 }
 
 export function settingsOf(): HarnessSettings {
-  if (runtime.settings === undefined) throw new Error('context-harness: settings read before register')
+  if (runtime.settings === undefined) throw new Error('conjev: settings read before register')
 
   return runtime.settings
 }

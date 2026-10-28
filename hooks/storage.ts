@@ -1,8 +1,8 @@
 // Everything the plugin keeps on disk, under one root only the user can enter,
 // beside the shared settings and key so one folder holds all of it:
-//   ~/.context-harness/state/archive/<session>/<id>.json  folded originals, never deleted
-//   ~/.context-harness/state/records/<session>/<point>/   judgment records, 14 days
-//   ~/.context-harness/state/records/labels/labels/       labels, kept
+//   ~/.conjev/state/archive/<session>/<id>.json  folded originals, never deleted
+//   ~/.conjev/state/records/<session>/<point>/   judgment records, 14 days
+//   ~/.conjev/state/records/labels/labels/       labels, kept
 // The root was ~/.local/state/context-harness before: a session start moves it
 // here when only the old one exists, and the old one is still read when both do.
 // Folds made before the rename stay readable at ~/.claude-context-fold/<session>/.
@@ -11,7 +11,7 @@ import type { Archived } from './fold'
 import type { ShadowRecord } from './report'
 import { madeDirs } from './state'
 
-export const STATE_DIR = '.context-harness/state'
+export const STATE_DIR = '.conjev/state'
 export const OLD_STATE_DIR = '.local/state/context-harness'
 const LEGACY_ARCHIVE_DIR = '.claude-context-fold'
 

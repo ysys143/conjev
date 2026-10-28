@@ -41,7 +41,7 @@ export async function loadFragments($: EngineInterface): Promise<{ list: Fragmen
   }
   const hash = fragmentsHash(list)
   const seen = await $.store.get('fragments-hash')
-  if (seen !== undefined && seen !== hash) $.ui.toast(`context-harness: instruction fragments changed (#${hash.slice(0, 6)}, ${list.length} in ${dir})`)
+  if (seen !== undefined && seen !== hash) $.ui.toast(`conjev: instruction fragments changed (#${hash.slice(0, 6)}, ${list.length} in ${dir})`)
   await $.store.set('fragments-hash', hash)
   runtime.fragments = { list, hash, dir, problems }
 

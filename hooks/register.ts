@@ -19,7 +19,7 @@ import { harnessSettingsFrom, usesJev, type HarnessSettings } from './settings'
 import { newId, retuneRuntime, runtime, startRuntime } from './state'
 import { OFFER_TIMEOUT_MS, boardHasHandoff, boardOfferStep, handoffGap, offerAccepted, repoStateOf, type BoardOffer } from './repostate'
 import { imageToRead } from './image-size'
-import { SHARED_CONFIG, SHARED_CONSENT, SHARED_KEY, SHARED_ONBOARDING, readShared, sharedDirOf, writeSharedRecord, type Shared } from './shared'
+import { SHARED_CONFIG, SHARED_CONSENT, SHARED_KEY, SHARED_ONBOARDING, migrateShared, readShared, sharedDirOf, writeSharedRecord, type Shared } from './shared'
 import { DEFAULT_RELEVANCE, omittedRanges, selectRelevant } from './relevance'
 import { hintWithStatus, showStatus } from './status'
 import { PARAGRAPH_CHARS, STOP_MESSAGE, STOP_POINT, STOP_QUESTION, announcesByRule, lastParagraph, stopSkipReason } from './stop-gate'
@@ -53,7 +53,7 @@ const READ_LIMIT = 400
  * keep, after whatever the person typed after /compact.
  */
 export const PRESERVE_INSTRUCTIONS =
-  "context-harness: keep the person's own requests and decisions in their words, quoted where they are short. " +
+  "conjev: keep the person's own requests and decisions in their words, quoted where they are short. " +
   'Keep every line that starts with "[folded " exactly as it is, id included: read_coordinate returns the original behind it.'
 
 /** How much of a read_coordinate query goes to Jev; the rest is dropped, not summarized. */
@@ -91,7 +91,7 @@ async function demoteStop($: EngineInterface, threshold: number): Promise<StopDe
   if (!shouldDemoteStop(p)) return undefined
   const demotion = { precision: p.precision!, labeled: p.labeled, at: new Date(await $.clock.now()).toISOString() }
   await $.store.set(STOP_DEMOTED_KEY, demotion)
-  const text = `context-harness: the Stop gate was right ${Math.round(demotion.precision * 100)}% of the time over ${demotion.labeled} labels, under ${DEMOTE_PRECISION * 100}%, so it now only records (shadow).`
+  const text = `conjev: the Stop gate was right ${Math.round(demotion.precision * 100)}% of the time over ${demotion.labeled} labels, under ${DEMOTE_PRECISION * 100}%, so it now only records (shadow).`
   $.ui.toast(text)
   $.ui.log(text)
 
@@ -159,7 +159,7 @@ async function boardOffer($: EngineInterface, phaseFile: string): Promise<string
     await $.store.set(OFFER_KEY, 'accepted')
     await $.store.delete(OFFER_ASKED_KEY)
 
-    return 'The status board was never created, and the offer to make one went unanswered for three hours; that silence counts as a yes. Create PHASE.md now, in the form the context-harness:project-state skill gives, and fill its Handoff section from the repository.'
+    return 'The status board was never created, and the offer to make one went unanswered for three hours; that silence counts as a yes. Create PHASE.md now, in the form the conjev:project-state skill gives, and fill its Handoff section from the repository.'
   }
 
   // The moment the question went up is written before it is asked, so a
@@ -181,7 +181,7 @@ async function boardOffer($: EngineInterface, phaseFile: string): Promise<string
   await $.store.delete(OFFER_ASKED_KEY)
 
   return wanted
-    ? 'The person agreed to a status board. Create PHASE.md now, in the form the context-harness:project-state skill gives, and fill its Handoff section from the repository.'
+    ? 'The person agreed to a status board. Create PHASE.md now, in the form the conjev:project-state skill gives, and fill its Handoff section from the repository.'
     : undefined
 }
 
@@ -228,6 +228,12 @@ export const register: Register = (on, options) => {
   const state: Continuity = { deferrals: 0, isJustCompacted: false }
 
   on('session.start', async ($, e, next) => {
+    // Before anything reads it: the folder from before the rename becomes ~/.conjev.
+    try {
+      if (await migrateShared($, await homeOf($))) $.ui.log(`${$.plugin.name}: moved ~/.context-harness to ~/.conjev`)
+    } catch (error) {
+      $.ui.log(`${$.plugin.name}: could not move ~/.context-harness to ~/.conjev (${String(error)})`)
+    }
     // The shared folder comes first, then whatever this profile's settings say:
     // a person with several profiles tunes one file rather than each of them.
     // Read here rather than at register time, where there is no `$` to read with.
@@ -264,7 +270,7 @@ export const register: Register = (on, options) => {
       await $.tool.register({
         name: 'policy_report',
         description:
-          "Measure this session's tool results and what context-harness's fold policy would fold now. " +
+          "Measure this session's tool results and what conjev's fold policy would fold now. " +
           'With no input it reports the current policy; give any policy values to dry-run a candidate beside it. ' +
           'Used by the tune-policy skill.',
         inputSchema: SETTINGS_SCHEMA,
@@ -272,7 +278,7 @@ export const register: Register = (on, options) => {
       await $.tool.register({
         name: 'set_policy',
         description:
-          "Set context-harness's fold policy values in the person's Claude Code settings, the same as /config. " +
+          "Set conjev's fold policy values in the person's Claude Code settings, the same as /config. " +
           'Give only the values to change. Call it only after the person agreed to the values.',
         inputSchema: SETTINGS_SCHEMA,
       })
@@ -295,9 +301,9 @@ export const register: Register = (on, options) => {
       $.ui.log(`${$.plugin.name}: could not register its tools (${String(error)})`)
     }
     try {
-      await $.command.register({ name: 'jev-report', description: 'context-harness: what the gates recorded and how Jev agreed with the rules' })
-      await $.command.register({ name: 'jev-mark', description: 'context-harness: label a record, /jev-mark <id> y|n', argumentHint: '<id> y|n' })
-      await $.command.register({ name: 'jev-consent', description: 'context-harness: allow or refuse sending to Jev, /jev-consent yes|no|later', argumentHint: 'yes|no|later' })
+      await $.command.register({ name: 'jev-report', description: 'conjev: what the gates recorded and how Jev agreed with the rules' })
+      await $.command.register({ name: 'jev-mark', description: 'conjev: label a record, /jev-mark <id> y|n', argumentHint: '<id> y|n' })
+      await $.command.register({ name: 'jev-consent', description: 'conjev: allow or refuse sending to Jev, /jev-consent yes|no|later', argumentHint: 'yes|no|later' })
       // Registered, not only answered: without this call the name never reaches
       // the slash list. `/install` alone is a built-in name and stays the
       // engine's, which is why this one carries the plugin's name.
@@ -310,9 +316,9 @@ export const register: Register = (on, options) => {
     } catch (error) {
       $.ui.log(`${$.plugin.name}: the judgment layer did not start (${String(error)})`)
     }
-    // B2: the state moves under ~/.context-harness once; the old root stays readable.
+    // B2: the state moves under ~/.conjev once; the old root stays readable.
     try {
-      if (await migrateState($)) $.ui.log(`${$.plugin.name}: moved its records and folded originals to ~/.context-harness/state`)
+      if (await migrateState($)) $.ui.log(`${$.plugin.name}: moved its records and folded originals to ~/.conjev/state`)
     } catch (error) {
       $.ui.log(`${$.plugin.name}: could not move its state, reading it where it is (${String(error)})`)
     }
@@ -350,8 +356,8 @@ export const register: Register = (on, options) => {
     const hookMs = (await $.clock.now()) - t0
     // Judged and recorded after the request has gone.
     void recordFilter($, chunks, drops, mode, t0, hookMs).catch(() => undefined)
-    if (passed !== undefined && drops.size > 0) $.ui.toast(`context-harness: left out ${drops.size} instruction chunks loaded twice (${droppedChars} chars)`)
-    if (passed !== undefined && jevDrops.size > 0) $.ui.toast(`context-harness: left out ${jevDrops.size} instruction chunks Jev read as repeated or needed only for some work`)
+    if (passed !== undefined && drops.size > 0) $.ui.toast(`conjev: left out ${drops.size} instruction chunks loaded twice (${droppedChars} chars)`)
+    if (passed !== undefined && jevDrops.size > 0) $.ui.toast(`conjev: left out ${jevDrops.size} instruction chunks Jev read as repeated or needed only for some work`)
     showStatus($)
 
     return passed === undefined ? next(e) : next({ ...e, instructionFiles: passed as unknown as typeof files })
@@ -364,7 +370,7 @@ export const register: Register = (on, options) => {
     const text = pinnedSection((await loadFragments($)).list)
     if (text === undefined) return composed
 
-    return { ...composed, sections: [...composed.sections, { id: 'context-harness:pinned', text, scope: 'session' as const }] }
+    return { ...composed, sections: [...composed.sections, { id: 'conjev:pinned', text, scope: 'session' as const }] }
   }).catch((_, e, next) => next(e))
 
   // E1, conditional fragments: appended to the prompt that first meets their
@@ -381,7 +387,7 @@ export const register: Register = (on, options) => {
     if (!e.isMeta && e.command === undefined) {
       try {
         const offer = await boardOffer($, policySettings.phaseFile)
-        if (offer !== undefined) await note($, `[context-harness] ${offer}`)
+        if (offer !== undefined) await note($, `[conjev] ${offer}`)
       } catch (error) {
         $.ui.log(`${$.plugin.name}: the status board offer was skipped (${String(error)})`)
       }
@@ -488,7 +494,7 @@ export const register: Register = (on, options) => {
     // along with the next request, so the model would say nothing until the
     // person wrote first, and someone who has never heard of the plugin has no
     // reason to. initialUserMessage is sent as the session's first prompt, which
-    // starts a model turn, so the setup runs as /context-harness:onboard would.
+    // starts a model turn, so the setup runs as /conjev:onboard would.
     const { shared, key } = await sharedState($, options)
     if (shared.onboarding !== undefined || (key !== undefined && shared.consent !== undefined)) return watched
 
@@ -758,7 +764,7 @@ export const register: Register = (on, options) => {
     const trust = await trustFor($)
     const fragments = settings.instructions === 'off' ? undefined : await loadFragments($)
     const header = [
-      `context-harness: stop ${stopMode()}, tool ${settings.toolGate}, tool jev ${settings.toolJev}, instructions ${settings.instructions}, fold ${settings.foldJev}, instruction filter ${settings.instructionFilter}, web ${settings.webRead}, fold blocks ${settings.foldBlocks}, browser ${settings.browserRoute}`,
+      `conjev: stop ${stopMode()}, tool ${settings.toolGate}, tool jev ${settings.toolJev}, instructions ${settings.instructions}, fold ${settings.foldJev}, instruction filter ${settings.instructionFilter}, web ${settings.webRead}, fold blocks ${settings.foldBlocks}, browser ${settings.browserRoute}`,
       `key ${key ? `from ${key.source}` : 'none'}, provider ${trust.trust} (${trust.why})`,
       ...(fragments
         ? [`fragments: ${fragments.list.length} in ${fragments.dir} (#${fragments.hash.slice(0, 6)})${fragments.problems.length ? `; skipped: ${fragments.problems.join('; ')}` : ''}`]
@@ -791,7 +797,7 @@ export const register: Register = (on, options) => {
       const { shared } = await sharedState($, options)
       const now = shared.consent === undefined ? 'not answered yet' : shared.consent ? 'allowed' : 'refused'
 
-      return { text: `context-harness: sending to Jev is ${now}.\n\n${CONSENT_TEXT}\n\nUsage: /jev-consent yes|no|later` }
+      return { text: `conjev: sending to Jev is ${now}.\n\n${CONSENT_TEXT}\n\nUsage: /jev-consent yes|no|later` }
     }
     if (answer !== 'yes' && answer !== 'no' && answer !== 'later') return { text: 'Usage: /jev-consent yes|no|later' }
     const at = new Date(await $.clock.now()).toISOString()
@@ -799,13 +805,13 @@ export const register: Register = (on, options) => {
     await writeSharedRecord($, home, SHARED_ONBOARDING, { state: answer === 'yes' ? 'done' : 'declined', at })
     apply(await sharedState($, options))
     showStatus($)
-    if (answer === 'later') return { text: 'context-harness: the setup will not start by itself again. Run /context-harness:onboard when you want it.' }
+    if (answer === 'later') return { text: 'conjev: the setup will not start by itself again. Run /conjev:onboard when you want it.' }
 
     return {
       text:
         answer === 'yes'
-          ? `context-harness: sending to Jev is allowed. Gates set to auto are ${settings.auto.length > 0 && runtime.key ? 'on now' : 'on once a key is in place'}. /jev-consent no takes it back.`
-          : 'context-harness: sending to Jev is refused. Gates set to auto stay off, and folding runs by rule. /jev-consent yes changes it.',
+          ? `conjev: sending to Jev is allowed. Gates set to auto are ${settings.auto.length > 0 && runtime.key ? 'on now' : 'on once a key is in place'}. /jev-consent no takes it back.`
+          : 'conjev: sending to Jev is refused. Gates set to auto stay off, and folding runs by rule. /jev-consent yes changes it.',
     }
   })
 
@@ -826,7 +832,7 @@ export const register: Register = (on, options) => {
   // The status, drawn after the prompt's hint (see showStatus).
   on('ui.render', { component: 'PromptHint' }, ($, e, next) => next(hintWithStatus(e, runtime.statusLine)))
 
-  // /context-harness:onboard is a Markdown command, so the model writes the
+  // /conjev:onboard is a Markdown command, so the model writes the
   // answer. What only the plugin knows is where it finds a key; that rides along
   // as a note when the command expands. It looks afresh each time, so running the
   // command again after placing a key sees it, and the gates use it from then on.
@@ -988,7 +994,7 @@ export const register: Register = (on, options) => {
     return next(e)
   }).catch((_, e, next) =>
     // The floor fails closed when active: a guard that broke refuses rather than lets through.
-    next.called || settings.toolGate !== 'active' ? next(e) : { deny: 'context-harness: the tool guard failed, so this call was refused.' },
+    next.called || settings.toolGate !== 'active' ? next(e) : { deny: 'conjev: the tool guard failed, so this call was refused.' },
   )
 
   // A Read of a large image reads a smaller copy instead. An image is not
@@ -1008,7 +1014,7 @@ export const register: Register = (on, options) => {
     return next({ ...e, file_path: smaller })
   }).catch((_, e, next) => next(e))
 
-  on('tool.call', { tool: 'mcp__context-harness__read_coordinate' }, async ($, e) => {
+  on('tool.call', { tool: 'mcp__conjev__read_coordinate' }, async ($, e) => {
     const input = e as unknown as { id?: unknown; offset?: unknown; limit?: unknown; query?: unknown; full?: unknown }
     const id = typeof input.id === 'string' ? input.id : ''
     const item = await readArchived($, await $.session.id(), id)
@@ -1086,7 +1092,7 @@ export const register: Register = (on, options) => {
     return { isReadOnly: true, result: `${head}\n${part.body}` }
   }).catch($ => ({ isError: true, result: `${$.plugin.name}: could not read the folded result.` }))
 
-  on('tool.call', { tool: 'mcp__context-harness__web_read' }, async ($, e) => {
+  on('tool.call', { tool: 'mcp__conjev__web_read' }, async ($, e) => {
     const input = e as unknown as { url?: unknown; question?: unknown }
     const url = typeof input.url === 'string' ? input.url.trim() : ''
     const question = typeof input.question === 'string' ? input.question.trim() : ''
@@ -1112,7 +1118,7 @@ export const register: Register = (on, options) => {
     return result
   }).catch((_, e, next) => next(e))
 
-  on('tool.call', { tool: 'mcp__context-harness__policy_report' }, async ($, e) => {
+  on('tool.call', { tool: 'mcp__conjev__policy_report' }, async ($, e) => {
     const input = e as unknown as Record<string, unknown>
     const messages = await $.session.messages()
     // The dry run must fold what a real compaction would, so it reads the same
@@ -1131,7 +1137,7 @@ export const register: Register = (on, options) => {
   }).catch($ => ({ isError: true, result: `${$.plugin.name}: could not measure this session.` }))
 
   // Only the fold policy's own values: never a gate, a Jev mode or the key.
-  on('tool.call', { tool: 'mcp__context-harness__set_policy' }, async ($, e) => {
+  on('tool.call', { tool: 'mcp__conjev__set_policy' }, async ($, e) => {
     const input = e as unknown as Record<string, unknown>
     const wanted = settingsFrom(input, policySettings)
     const lines: string[] = []

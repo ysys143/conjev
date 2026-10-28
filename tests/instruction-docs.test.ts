@@ -68,7 +68,7 @@ test('chunk ids are ASCII, stable, and read back as attached fragment names', ()
   expect(a.map(c => c.id)).toEqual(b.map(c => c.id))
   for (const chunk of a) {
     expect(/^doc-[0-9a-f]{8}$/.test(chunk.id)).toBe(true)
-    const block = `<instruction name="${chunk.id}" source="context-harness">\nx\n</instruction>`
+    const block = `<instruction name="${chunk.id}" source="conjev">\nx\n</instruction>`
     expect([...attachedNames([{ role: 'user', content: [{ type: 'text', text: block }] }])]).toEqual([chunk.id])
   }
 })
@@ -87,8 +87,8 @@ test('a chunk loaded twice keeps its first copy; organization and memory files a
   const out = withoutChunks([managed, user, project, memory], chunks, drops, '/u')
   expect(out[0]).toBe(managed)
   expect(out[3]).toBe(memory)
-  expect(out[1]?.content).toBe('[context-harness: left out "문체", loaded from /etc/CLAUDE.md]\n\n## 산출물\n\nWrite reports in Markdown, always.\n')
-  expect(out[2]?.content).toBe('[context-harness: left out "산출물", loaded from ~/AGENTS.md]\n\n')
+  expect(out[1]?.content).toBe('[conjev: left out "문체", loaded from /etc/CLAUDE.md]\n\n## 산출물\n\nWrite reports in Markdown, always.\n')
+  expect(out[2]?.content).toBe('[conjev: left out "산출물", loaded from ~/AGENTS.md]\n\n')
 })
 
 test('an organization file loaded after a copy of its section is never cut, by the duplicate rule or by any drop', () => {

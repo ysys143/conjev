@@ -83,7 +83,7 @@
   <rect x="272" y="442" width="230" height="120" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="0.8"/>
   <text x="288" y="470" class="name">Archive</text>
   <text x="288" y="492" class="mono">~/.local/state/</text>
-  <text x="288" y="508" class="mono">context-harness/archive/</text>
+  <text x="288" y="508" class="mono">conjev/archive/</text>
   <text x="288" y="534" class="small">the originals, unchanged</text>
 
   <rect x="618" y="442" width="230" height="120" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="0.8"/>

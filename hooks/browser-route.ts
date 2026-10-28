@@ -89,7 +89,7 @@ export function routeBlock(detected: Detected): string {
       ' For reading a page without interacting, a fetch tool is enough.'
   }
 
-  return `<instruction name="${BROWSER_BLOCK}" source="context-harness">\n${body}\n</instruction>`
+  return `<instruction name="${BROWSER_BLOCK}" source="conjev">\n${body}\n</instruction>`
 }
 
 export const parseBlocked = (value: string): BrowserId[] =>

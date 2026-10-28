@@ -16,7 +16,7 @@ const ANNOUNCE: HttpResponse = {
     usage: { input_tokens: 373, output_tokens: 31 },
   }),
 }
-const SHARED = `${HOME}/.context-harness`
+const SHARED = `${HOME}/.conjev`
 const CONSENTED = { [`${SHARED}/consent.json`]: '{"consent":true,"at":"2026-10-28T00:00:00.000Z"}\n' }
 const START = { cwd: '/proj', surface: 'terminal', isInteractive: true } as never
 const STOP = { stop_hook_active: false, last_assistant_message: 'Next, I will refactor the cache.' } as never
@@ -31,7 +31,7 @@ test('auto: a key, jev on and a recorded consent make every Jev gate active; the
   await $.session.start(START)
 
   expect(await header($)).toBe(
-    'context-harness: stop active, tool off, tool jev active, instructions active, fold active, instruction filter active, web active, fold blocks active, browser active',
+    'conjev: stop active, tool off, tool jev active, instructions active, fold active, instruction filter active, web active, fold blocks active, browser active',
   )
   const result = await $.classic.Stop(STOP)
   expect(result.block).toBeDefined()
@@ -155,7 +155,7 @@ test('first run: no key and no record, the setup starts by itself with what the 
 
   expect(result.initialUserMessage).toContain(ONBOARDING_MARK)
   expect(result.initialUserMessage).toContain(`${KEY_CHECK} none found`)
-  // The same body /context-harness:onboard runs, consent step included.
+  // The same body /conjev:onboard runs, consent step included.
   expect(result.initialUserMessage).toContain('## 5. Consent')
   expect(result.initialUserMessage).toContain('/jev-consent yes')
   expect(result.initialUserMessage).not.toContain('$ARGUMENTS')
@@ -212,7 +212,7 @@ test('a key placed during the session turns the consented auto gates on when the
   expect(await header($)).toContain('stop off')
 
   io.files[`${SHARED}/key`] = 'ts_placed\n'
-  await $.classic.UserPromptExpansion({ expansion_type: 'slash_command', command_name: 'context-harness:onboard', command_args: '', prompt: '/x' } as never)
+  await $.classic.UserPromptExpansion({ expansion_type: 'slash_command', command_name: 'conjev:onboard', command_args: '', prompt: '/x' } as never)
   expect(await header($)).toContain('stop active')
   await $.classic.Stop(STOP)
   expect(io.fetches[0]?.headers.authorization).toBe('Bearer ts_placed')
@@ -258,7 +258,7 @@ test('the shared files are watched from the session start', async ($, on) => {
 test('a changed shared file takes effect in the running session', async ($, on) => {
   const io = on$(on)
   await $.session.start(START)
-  const policy = async () => (JSON.parse(String((await $.tool.call({ tool: 'mcp__context-harness__policy_report' })).result)) as { current: { settings: { foldAtPercent: number } } }).current.settings.foldAtPercent
+  const policy = async () => (JSON.parse(String((await $.tool.call({ tool: 'mcp__conjev__policy_report' })).result)) as { current: { settings: { foldAtPercent: number } } }).current.settings.foldAtPercent
   expect(await policy()).toBe(60)
 
   io.files[`${SHARED}/config.json`] = '{"foldAtPercent": 7}'

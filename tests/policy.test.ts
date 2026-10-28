@@ -69,12 +69,12 @@ test('policy_report reports the current policy and a dry-run candidate', async (
   on('session.messages', (_, e) => ({ value: (e.as === 'api' ? TRANSCRIPT.map(apiOf) : TRANSCRIPT) as never }))
   on('fs.exists', () => ({ value: false }))
 
-  const plain = await $.tool.call({ tool: 'mcp__context-harness__policy_report' })
+  const plain = await $.tool.call({ tool: 'mcp__conjev__policy_report' })
   const report = JSON.parse(String(plain.result)) as { current: { folds: { results: number } }; candidate?: unknown }
   expect(report.current.folds.results).toBe(1)
   expect(report.candidate).toBe(undefined)
 
-  const dry = await $.tool.call({ tool: 'mcp__context-harness__policy_report', keepRecentTurns: 1, minFoldChars: 500 })
+  const dry = await $.tool.call({ tool: 'mcp__conjev__policy_report', keepRecentTurns: 1, minFoldChars: 500 })
   const both = JSON.parse(String(dry.result)) as { candidate: { folds: { results: number }; settings: { keepRecentTurns: number } } }
   expect(both.candidate.folds.results).toBe(3)
   expect(both.candidate.settings.keepRecentTurns).toBe(1)
@@ -96,7 +96,7 @@ test('the dry run folds what a real compaction would: a message holding media is
   on('session.messages', (_, e) => ({ value: (e.as === 'api' ? shotApi : withShot) as never }))
   on('fs.exists', () => ({ value: false }))
 
-  const plain = await $.tool.call({ tool: 'mcp__context-harness__policy_report', keepRecentTurns: 1, minFoldChars: 500 })
+  const plain = await $.tool.call({ tool: 'mcp__conjev__policy_report', keepRecentTurns: 1, minFoldChars: 500 })
   const report = JSON.parse(String(plain.result)) as { candidate: { folds: { results: number } } }
   // Both results in that message are held back, so the count is the Read and
   // the Grep only: without the view it would also count the Bash result.
@@ -107,7 +107,7 @@ test('the plugin reads its policy from its options', { options: { keepRecentTurn
   on('session.messages', (_, e) => ({ value: (e.as === 'api' ? TRANSCRIPT.map(apiOf) : TRANSCRIPT) as never }))
   on('fs.exists', () => ({ value: false }))
 
-  const plain = await $.tool.call({ tool: 'mcp__context-harness__policy_report' })
+  const plain = await $.tool.call({ tool: 'mcp__conjev__policy_report' })
   const report = JSON.parse(String(plain.result)) as { current: { settings: { keepRecentTurns: number }; folds: { results: number } } }
   expect(report.current.settings.keepRecentTurns).toBe(1)
   expect(report.current.folds.results).toBe(3)
@@ -121,20 +121,20 @@ test('set_policy writes only the given values through the settings menu', async 
     return { value: e.value }
   })
 
-  const set = await $.tool.call({ tool: 'mcp__context-harness__set_policy', minFoldChars: 3000, keepTools: ['TodoWrite', 'Read'] })
+  const set = await $.tool.call({ tool: 'mcp__conjev__set_policy', minFoldChars: 3000, keepTools: ['TodoWrite', 'Read'] })
   expect(written).toEqual([
-    ['context-harness.minFoldChars', 3000],
-    ['context-harness.keepTools', 'TodoWrite,Read'],
+    ['conjev.minFoldChars', 3000],
+    ['conjev.keepTools', 'TodoWrite,Read'],
   ])
   expect(set.result).toBe('minFoldChars = 3000\nkeepTools = "TodoWrite,Read"')
 
-  const none = await $.tool.call({ tool: 'mcp__context-harness__set_policy' })
+  const none = await $.tool.call({ tool: 'mcp__conjev__set_policy' })
   expect(none.result).toBe('No policy value was given.')
 })
 
 test('set_policy reports a refused value', async ($, on) => {
   on('config.set', () => ({ deny: 'locked by policy' }))
 
-  const set = await $.tool.call({ tool: 'mcp__context-harness__set_policy', foldAtPercent: 0 })
+  const set = await $.tool.call({ tool: 'mcp__conjev__set_policy', foldAtPercent: 0 })
   expect(set.result).toBe('foldAtPercent refused: locked by policy')
 })

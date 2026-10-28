@@ -90,16 +90,16 @@ test('fold candidates come from the fold policy itself: its turn count, its size
 test('attached fragments are counted in the messages the next request carries', () => {
   const text = (t: string) => ({ type: 'text', text: t })
   const names = attachedNames([
-    { role: 'user', content: [text('Publish it'), text('<instruction name="deploy" source="context-harness">\nx\n</instruction>')] },
+    { role: 'user', content: [text('Publish it'), text('<instruction name="deploy" source="conjev">\nx\n</instruction>')] },
     { role: 'user', content: [text('<instruction name="prose" source="jev-harness">\ny\n</instruction>')] },
-    { role: 'assistant', content: [text('<instruction name="quoted" source="context-harness">')] },
+    { role: 'assistant', content: [text('<instruction name="quoted" source="conjev">')] },
     { role: 'user', content: [text('<instruction name="other" source="someone-else">')] },
   ])
   expect([...names].sort()).toEqual(['deploy', 'prose'])
   // An opening tag alone, quoted or carried into a summary, is not a block; text before a whole block is fine.
   const quoted = attachedNames([
-    { role: 'user', content: [text('Why does <instruction name="release" source="context-harness"> show up?')] },
-    { role: 'user', content: [text('prompt.submit hook additional context: <instruction name="deploy" source="context-harness">\nx\n</instruction>')] },
+    { role: 'user', content: [text('Why does <instruction name="release" source="conjev"> show up?')] },
+    { role: 'user', content: [text('prompt.submit hook additional context: <instruction name="deploy" source="conjev">\nx\n</instruction>')] },
   ])
   expect([...quoted]).toEqual(['deploy'])
 })
@@ -138,7 +138,7 @@ test('active: a fragment whose condition holds is appended to that prompt, once'
   expect(io.fetches.length).toBe(1)
   // Neither had a keyword hit, so both are asked about; only deploy applies.
   expect(Object.keys(io.fetches[0]!.body.questions as object).sort()).toEqual(['deploy', 'prose'])
-  expect(io.submitted[0]?.context).toEqual(['<instruction name="deploy" source="context-harness">\nCheck the rollback plan first.\n</instruction>'])
+  expect(io.submitted[0]?.context).toEqual(['<instruction name="deploy" source="conjev">\nCheck the rollback plan first.\n</instruction>'])
 
   await $.prompt.submit(typed('Publish the next release too'))
   expect(io.submitted[1]?.context).toBe(undefined)
@@ -218,7 +218,7 @@ test('slash commands and messages from other origins are left alone', ACTIVE, as
 test('pinned fragments become one section at the end of the system prompt, only when active', ACTIVE, async ($, on) => {
   setup(on, { files: FILES })
   const { sections } = await $.prompt.compose(COMPOSE as never)
-  expect(sections.map(s => [s.id, s.scope])).toEqual([['base', 'shared'], ['context-harness:pinned', 'session']])
+  expect(sections.map(s => [s.id, s.scope])).toEqual([['base', 'shared'], ['conjev:pinned', 'session']])
   expect(sections[1]?.text).toContain("Answer in the person's language.")
 })
 
@@ -239,7 +239,7 @@ test('fold shadow: the judgment rides the fold, and its rule verdict is what the
     ['c', true, '0.1'],
     ['a', true, '0.8'],
   ])
-  const archived = io.writes.filter(w => w.path.startsWith(`${HOME}/.context-harness/state/archive/sess-1/`)).map(w => w.path.split('/').at(-1))
+  const archived = io.writes.filter(w => w.path.startsWith(`${HOME}/.conjev/state/archive/sess-1/`)).map(w => w.path.split('/').at(-1))
   expect(archived).toEqual(['a.json', 'c.json'])
 })
 

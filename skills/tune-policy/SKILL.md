@@ -1,11 +1,11 @@
 ---
 name: tune-policy
-description: Tune context-harness's folding policy with the person from measurements of their own session - measure, interview, dry-run a candidate, then apply it. Use when the person wants to change what context-harness folds, or says folding is too aggressive, too weak, or makes the model re-read too often.
+description: Tune conjev's folding policy with the person from measurements of their own session - measure, interview, dry-run a candidate, then apply it. Use when the person wants to change what conjev folds, or says folding is too aggressive, too weak, or makes the model re-read too often.
 ---
 
-# Tune the context-harness policy
+# Tune the conjev policy
 
-The policy decides which completed tool results context-harness folds into one-line pointers at compaction. Its values are this plugin's settings, the same rows `/config` shows under context-harness. This skill picks them with the person from what their own session shows, and applies them only after they agree.
+The policy decides which completed tool results conjev folds into one-line pointers at compaction. Its values are this plugin's settings, the same rows `/config` shows under conjev. This skill picks them with the person from what their own session shows, and applies them only after they agree.
 
 | Value | Default | What it changes |
 | --- | --- | --- |
@@ -17,7 +17,7 @@ The policy decides which completed tool results context-harness folds into one-l
 | `minSavedPercent` | 20 | ...and only when folding removes at least this share of the transcript |
 | `intentFile`, `phaseFile`, `episodeDir` | `INTENT.md`, `PHASE.md`, `sessions` | The project's canonical files (the project-state and consolidate skills); change them only when the person names other paths |
 
-The two tools below are `mcp__context-harness__policy_report` and `mcp__context-harness__set_policy`. When they are not listed, load them with ToolSearch.
+The two tools below are `mcp__conjev__policy_report` and `mcp__conjev__set_policy`. When they are not listed, load them with ToolSearch.
 
 ## 1. Measure
 

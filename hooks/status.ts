@@ -81,7 +81,7 @@ export function showStatus($: EngineInterface): void {
 }
 
 /** Prefixed so the dim text at the end of the hint says whose it is. */
-export const HINT_PREFIX = 'context-harness: '
+export const HINT_PREFIX = 'conjev: '
 
 /**
  * The prompt hint with the status added. The terminal draws `tail` dim after

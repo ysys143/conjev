@@ -13,7 +13,7 @@ import { HOME, KEY_ENV, drain, prompt, records, settle, setup } from './kit'
 
 const call = (id: string, tool: string, input: Record<string, unknown>): SessionMessage => ({ role: 'assistant', text: '', toolUses: [{ tool_use_id: id, tool, input }] })
 const answer = (id: string, text: string): SessionMessage => ({ role: 'user', text: '', toolUses: [], toolResults: [{ tool_use_id: id, text, isError: false }] })
-const ARCHIVE = `${HOME}/.context-harness/state/archive/sess-1`
+const ARCHIVE = `${HOME}/.conjev/state/archive/sess-1`
 const BODY = 'export const a = 1\n'.repeat(200)
 const START = { cwd: '/proj', surface: 'terminal', isInteractive: true } as never
 
@@ -63,7 +63,7 @@ test('a compaction keeps a folded body, and read_coordinate returns it', async (
 
   expect(String((out.messages?.[1]?.toolUses[0]?.input as Record<string, unknown>).content).startsWith(FOLD_MARK)).toBe(true)
   expect(io.writes.some(w => w.path === `${ARCHIVE}/w_input.json`)).toBe(true)
-  const read = await $.tool.call({ tool: 'mcp__context-harness__read_coordinate', id: 'w:input', full: true } as never)
+  const read = await $.tool.call({ tool: 'mcp__conjev__read_coordinate', id: 'w:input', full: true } as never)
   expect(String(read.result)).toContain('export const a = 1')
 })
 
@@ -81,7 +81,7 @@ test('a summary over nothing foldable keeps the conversation it replaces first, 
   expect(JSON.parse(kept!.text).text).toContain('It splits the input into tokens.')
   const id = JSON.parse(kept!.text).id as string
   expect(out.messages?.at(-1)?.text).toContain(`read_coordinate("${id}")`)
-  const read = await $.tool.call({ tool: 'mcp__context-harness__read_coordinate', id, full: true } as never)
+  const read = await $.tool.call({ tool: 'mcp__conjev__read_coordinate', id, full: true } as never)
   expect(String(read.result)).toContain('What does the parser do?')
 })
 

@@ -118,10 +118,10 @@ test('read_coordinate answers with the archived lines', async ($, on) => {
   on('fs.read', () => ({ value: JSON.stringify(kept) }))
 
   // The engine takes a plugin tool's result only as a string or content blocks.
-  const found = await $.tool.call({ tool: 'mcp__context-harness__read_coordinate', id: 'toolu_old', offset: 10, limit: 2 })
+  const found = await $.tool.call({ tool: 'mcp__conjev__read_coordinate', id: 'toolu_old', offset: 10, limit: 2 })
   expect(found.result).toBe('Read {"file_path":"src/app.ts"} — lines 10-11 of 300\nline 10\nline 11')
 
-  const missing = await $.tool.call({ tool: 'mcp__context-harness__read_coordinate', id: 'toolu_gone' })
+  const missing = await $.tool.call({ tool: 'mcp__conjev__read_coordinate', id: 'toolu_gone' })
   expect(missing.isError).toBe(true)
   expect(typeof missing.result).toBe('string')
 })

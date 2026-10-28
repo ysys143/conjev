@@ -81,7 +81,7 @@ export async function judgeTool(
   if (verdict !== undefined && verdict.risk >= settings.toolThreshold) {
     return {
       deny:
-        `context-harness: Jev judged ${sent.target} as ${verdict.choice} data (${verdict.risk.toFixed(2)}), and this session is ` +
+        `conjev: Jev judged ${sent.target} as ${verdict.choice} data (${verdict.risk.toFixed(2)}), and this session is ` +
         `served by a provider other than Anthropic (${trust.why}). Do it from a first-party session instead.`,
     }
   }

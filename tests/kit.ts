@@ -144,6 +144,16 @@ export const setup = (on: On, s: Setup = {}) => {
   on('process.run', (_, e) => {
     runs.push([...e.argv])
     disk.push(`run ${e.argv[0]}`)
+    // `mv <from> <to>` moves every file under <from>, so what a migration moved
+    // is read from its new place afterwards.
+    if (e.argv[0] === 'mv' && e.argv.length === 3) {
+      const [from, to] = [e.argv[1]!, e.argv[2]!]
+      for (const path of Object.keys(files)) {
+        if (path !== from && !path.startsWith(`${from}/`)) continue
+        files[`${to}${path.slice(from.length)}`] = files[path]!
+        delete files[path]
+      }
+    }
     const isGit = e.argv[0] === 'git'
     const isMeasure = e.argv.includes('-g') || e.argv[0] === 'identify'
     const isResize = e.argv.includes('-Z') || e.argv.includes('-resize')
@@ -193,7 +203,7 @@ export const setup = (on: On, s: Setup = {}) => {
   on('ui.invalidate', () => ({ value: undefined }))
   on('ui.render', { component: 'PromptHint' }, (_, e) => {
     const tail = (e.props as { tail?: string }).tail
-    if (tail !== undefined) statuses.push(tail.replace(/^context-harness: /, ''))
+    if (tail !== undefined) statuses.push(tail.replace(/^conjev: /, ''))
     return { type: 'Text', children: [(e.props as { hint: string }).hint, tail ?? ''] } as never
   })
   on('ui.status', (_, e) => {
@@ -273,7 +283,7 @@ export const drain = async (): Promise<void> => {
 /** What the prompt's hint shows of this plugin's status now, its prefix taken off; undefined when nothing. */
 export const drawnStatus = async ($: { ui: { render: (input: never) => Promise<unknown> } }): Promise<string | undefined> => {
   const drawn = JSON.stringify(await $.ui.render({ component: 'PromptHint', surface: 'terminal', requestId: 'hint', props: { isDraft: false, isWorking: false, hint: '? for shortcuts' } } as never))
-  const match = /context-harness: ([^"]*)/.exec(drawn)
+  const match = /conjev: ([^"]*)/.exec(drawn)
 
   return match === null ? undefined : match[1]
 }

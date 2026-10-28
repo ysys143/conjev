@@ -67,7 +67,7 @@ test('shadow: WebFetch answers unchanged; what web_read would return is recorded
 
 test('active: web_read returns the answering blocks verbatim and keeps the whole page for read_coordinate', { options: { webRead: 'active' } }, async ($, on) => {
   const io = setup(on, { env: KEY_ENV, fetch: jev, pages: { [URL]: PAGE } })
-  const out = await $.tool.call({ tool: 'mcp__context-harness__web_read', url: URL, question: 'what does 421 mean?' } as never)
+  const out = await $.tool.call({ tool: 'mcp__conjev__web_read', url: URL, question: 'what does 421 mean?' } as never)
   const text = String(out.result)
 
   expect(out.isError).not.toBe(true)
@@ -78,13 +78,13 @@ test('active: web_read returns the answering blocks verbatim and keeps the whole
   expect(text).not.toContain('Paragraph 30 ')
   const id = /read_coordinate\("([^"]+)"\)/.exec(text)?.[1]
   expect(id).not.toBe(undefined)
-  const whole = String((await $.tool.call({ tool: 'mcp__context-harness__read_coordinate', id } as never)).result)
+  const whole = String((await $.tool.call({ tool: 'mcp__conjev__read_coordinate', id } as never)).result)
   expect(whole).toContain('Paragraph 30 ')
 })
 
 test('active: without a key web_read says so and sends nothing', { options: { webRead: 'active' } }, async ($, on) => {
   const io = setup(on, { fetch: jev, pages: { [URL]: PAGE } })
-  const out = await $.tool.call({ tool: 'mcp__context-harness__web_read', url: URL, question: 'q' } as never)
+  const out = await $.tool.call({ tool: 'mcp__conjev__web_read', url: URL, question: 'q' } as never)
   expect(out.isError).toBe(true)
   expect(String(out.result)).toContain('TypeSafe key')
   expect(io.fetches.length).toBe(0)
@@ -92,7 +92,7 @@ test('active: without a key web_read says so and sends nothing', { options: { we
 
 test('active: a page that does not load is a fetch error, and Jev is not asked', { options: { webRead: 'active' } }, async ($, on) => {
   const io = setup(on, { env: KEY_ENV, fetch: jev, pages: {} })
-  const out = await $.tool.call({ tool: 'mcp__context-harness__web_read', url: URL, question: 'q' } as never)
+  const out = await $.tool.call({ tool: 'mcp__conjev__web_read', url: URL, question: 'q' } as never)
   expect(out.isError).toBe(true)
   expect(String(out.result)).toContain('fetch_error (HTTP 404)')
   expect(io.fetches.length).toBe(0)
@@ -186,7 +186,7 @@ test('fold blocks active: past the time budget the fold goes ahead as pointers a
 test('active: local and private-network addresses are never fetched', { options: { webRead: 'active' } }, async ($, on) => {
   const io = setup(on, { env: KEY_ENV, fetch: jev })
   for (const url of ['http://localhost:8080/x', 'http://127.0.0.1/', 'http://169.254.169.254/latest/meta-data/', 'http://10.1.2.3/', 'http://192.168.0.1/', 'http://[::1]/', 'http://intranet/', 'http://127.1/', 'http://0177.0.0.1/', 'http://0x7f.0.0.1/', 'http://[0:0:0:0:0:0:0:1]/']) {
-    const out = await $.tool.call({ tool: 'mcp__context-harness__web_read', url, question: 'q' } as never)
+    const out = await $.tool.call({ tool: 'mcp__conjev__web_read', url, question: 'q' } as never)
     expect(String(out.result)).toContain('private-network address')
   }
   expect(io.pageFetches.length).toBe(0)
@@ -202,7 +202,7 @@ test('shadow: a WebFetch of a signed link is not fetched a second time', { optio
 
 test('the call cap holds while a page is judged many requests at once', { options: { webRead: 'active', webReadCap: 5 } }, async ($, on) => {
   const io = setup(on, { env: KEY_ENV, fetch: jev, pages: { [URL]: PAGE } })
-  await $.tool.call({ tool: 'mcp__context-harness__web_read', url: URL, question: 'what does 421 mean?' } as never)
+  await $.tool.call({ tool: 'mcp__conjev__web_read', url: URL, question: 'what does 421 mean?' } as never)
   expect(io.fetches.length).toBe(5)
 })
 

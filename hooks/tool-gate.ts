@@ -167,7 +167,7 @@ export function isUnder(absolute: string, roots: readonly string[]): boolean {
 
 /** Why writing to an absolute path would let the agent switch the gates off, or undefined. */
 export function selfProtectReason(absolute: string, protectedRoots: readonly string[]): string | undefined {
-  if (isUnder(absolute, protectedRoots)) return 'context-harness files'
+  if (isUnder(absolute, protectedRoots)) return 'conjev files'
   if (/\/\.claude[^/]*\/settings(\.local)?\.json$/.test(absolute.toLowerCase())) return 'claude settings'
 
   return undefined
@@ -216,9 +216,9 @@ export function callPaths(input: Readonly<Record<string, unknown>>, home: string
 export type FloorVerdict = { reason: string; path?: string; kind: 'restricted' | 'secret-dump' | 'self' }
 
 export function denyMessage(verdict: FloorVerdict, trust: Trust): string {
-  if (verdict.kind === 'self') return `context-harness: ${verdict.path ?? 'this path'} holds ${verdict.reason}; an agent may not change it.`
+  if (verdict.kind === 'self') return `conjev: ${verdict.path ?? 'this path'} holds ${verdict.reason}; an agent may not change it.`
 
-  return `context-harness: this call touches ${verdict.reason}${verdict.path ? ` (${verdict.path})` : ''}, and this session is served by a provider other than Anthropic (${trust}). Do it from a first-party session instead.`
+  return `conjev: this call touches ${verdict.reason}${verdict.path ? ` (${verdict.path})` : ''}, and this session is served by a provider other than Anthropic (${trust}). Do it from a first-party session instead.`
 }
 
 // Jev for tool calls (0.0.2): only in sessions served by another provider,

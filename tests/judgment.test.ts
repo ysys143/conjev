@@ -10,7 +10,7 @@ import { harnessSettingsFrom } from '../hooks/settings'
 import { AGENTS } from './fixtures'
 import { HOME, KEY_ENV, drain, prompt, records, settle, setup } from './kit'
 
-const ROOT = `${HOME}/.context-harness/state`
+const ROOT = `${HOME}/.conjev/state`
 const START = { cwd: '/proj', surface: 'terminal', isInteractive: true } as never
 const ANNOUNCE: HttpResponse = {
   status: 200,
@@ -53,7 +53,7 @@ test('150 labels under 0.9 precision demote an active Stop gate to shadow, say s
   await settle(() => records(io.writes, 'stop').length > 0)
   expect(records(io.writes, 'stop')[0]?.mode).toBe('shadow')
   const report = String((await $.command.run({ command: 'jev-report', args: '' } as never)).text)
-  expect(report).toContain('context-harness: stop shadow,')
+  expect(report).toContain('conjev: stop shadow,')
   expect(report).toContain('stop demoted to shadow')
 })
 
@@ -189,7 +189,7 @@ const onlyFailures = (body: Record<string, unknown>): HttpResponse => {
 
 test('read_coordinate with no query keeps what bears on the person\'s latest request', { options: { foldBlocks: 'active' } }, async ($, on) => {
   const io = setup(on, { env: KEY_ENV, fetch: onlyFailures, messages: [prompt('earlier'), prompt('why does the server fail?')], files: { [`${ROOT}/archive/sess-1/toolu_x.json`]: KEPT } })
-  const text = String((await $.tool.call({ tool: 'mcp__context-harness__read_coordinate', id: 'toolu_x' } as never)).result)
+  const text = String((await $.tool.call({ tool: 'mcp__conjev__read_coordinate', id: 'toolu_x' } as never)).result)
 
   expect(text).toContain('FAIL here')
   expect(text).toMatch(/Left out: lines/)
@@ -198,8 +198,8 @@ test('read_coordinate with no query keeps what bears on the person\'s latest req
 
 test('read_coordinate with a range, or full, returns the lines asked for and asks Jev nothing', { options: { foldBlocks: 'active' } }, async ($, on) => {
   const io = setup(on, { env: KEY_ENV, fetch: onlyFailures, messages: [prompt('why does the server fail?')], files: { [`${ROOT}/archive/sess-1/toolu_x.json`]: KEPT } })
-  const ranged = String((await $.tool.call({ tool: 'mcp__context-harness__read_coordinate', id: 'toolu_x', offset: 1, limit: 3 } as never)).result)
-  const full = String((await $.tool.call({ tool: 'mcp__context-harness__read_coordinate', id: 'toolu_x', full: true } as never)).result)
+  const ranged = String((await $.tool.call({ tool: 'mcp__conjev__read_coordinate', id: 'toolu_x', offset: 1, limit: 3 } as never)).result)
+  const full = String((await $.tool.call({ tool: 'mcp__conjev__read_coordinate', id: 'toolu_x', full: true } as never)).result)
 
   expect(ranged).toContain('lines 1-3 of 200')
   expect(full).toContain('line 1 of the server log')

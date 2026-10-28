@@ -52,7 +52,7 @@ test('defaults: a key in every source, every hook run, nothing sent and no judgm
   // The instruction files load as they are, the duplicate included.
   expect(io.loaded[0]).toEqual(files)
   // The modes the engine filled in from the manifest.
-  expect(report.text).toContain('context-harness: stop off, tool off, tool jev off, instructions off, fold off, instruction filter off')
+  expect(report.text).toContain('conjev: stop off, tool off, tool jev off, instructions off, fold off, instruction filter off')
   // The fragment was not attached: instructions are off.
   expect(io.submitted[0]?.context).toBe(undefined)
   // Folding needs no key and is on by default.
@@ -63,12 +63,12 @@ test('a shared folder under the home directory overrides this profile, and its k
   const io = setup(on, {
     env: KEY_ENV,
     files: {
-      [`${HOME}/.context-harness/config.json`]: '{"foldAtPercent": 5}',
-      [`${HOME}/.context-harness/key`]: 'ts_shared_key\n',
+      [`${HOME}/.conjev/config.json`]: '{"foldAtPercent": 5}',
+      [`${HOME}/.conjev/key`]: 'ts_shared_key\n',
     },
   })
   await $.session.start(START)
-  const report = JSON.parse(String((await $.tool.call({ tool: 'mcp__context-harness__policy_report' })).result)) as { current: { settings: { foldAtPercent: number } } }
+  const report = JSON.parse(String((await $.tool.call({ tool: 'mcp__conjev__policy_report' })).result)) as { current: { settings: { foldAtPercent: number } } }
 
   // The fold policy came from the shared file, not this profile's defaults.
   expect(report.current.settings.foldAtPercent).toBe(5)
@@ -77,7 +77,7 @@ test('a shared folder under the home directory overrides this profile, and its k
 test('without a shared folder nothing changes: each profile keeps its own settings', async ($, on) => {
   const io = setup(on, { env: KEY_ENV })
   await $.session.start(START)
-  const report = JSON.parse(String((await $.tool.call({ tool: 'mcp__context-harness__policy_report' })).result)) as { current: { settings: { foldAtPercent: number } } }
+  const report = JSON.parse(String((await $.tool.call({ tool: 'mcp__conjev__policy_report' })).result)) as { current: { settings: { foldAtPercent: number } } }
 
   expect(report.current.settings.foldAtPercent).toBe(60)
 })
@@ -103,8 +103,8 @@ test('the install command is a prompt the model runs, not a string it prints', (
 
   // The ways to place one, including the one the agent runs itself.
   expect(COMMAND).toContain('https://console.typesafe.ai/home')
-  expect(COMMAND).toContain('claude plugin configure context-harness@context-harness')
-  expect(COMMAND).toContain('$HOME/.context-harness/key')
+  expect(COMMAND).toContain('claude plugin configure conjev@conjev')
+  expect(COMMAND).toContain('$HOME/.conjev/key')
   // Placed without the value ever reaching the agent's context, from wherever
   // the person says they keep it.
   expect(COMMAND).toContain('Ask one question: where do they keep it?')
@@ -112,7 +112,7 @@ test('the install command is a prompt the model runs, not a string it prints', (
   expect(COMMAND).toContain('test -s')
 
   // And what to check afterwards.
-  expect(COMMAND).toContain('/context-harness:onboard')
+  expect(COMMAND).toContain('/conjev:onboard')
   expect(COMMAND).toContain(KEY_CHECK)
 })
 
@@ -128,7 +128,7 @@ test('the setup asks one thing at a time and waits', () => {
 })
 
 test('the command speaks to someone who has never heard of the key', () => {
-  // The person meets Jev, TypeSafe and ~/.context-harness/key here first: the
+  // The person meets Jev, TypeSafe and ~/.conjev/key here first: the
   // reply says what they are for before it reports anything missing.
   expect(COMMAND).toContain('it is your source, not your script')
   expect(COMMAND).toContain('Do not open with a file path, a missing file')
@@ -157,7 +157,7 @@ test('the command never tells the agent to read or print a key, or where one per
 
 // Where the key is, only the plugin knows; it says so when the command expands,
 // so the model reads it beside the body instead of guessing or probing files.
-const EXPAND = { expansion_type: 'slash_command', command_name: 'context-harness:onboard', command_args: '', prompt: '/context-harness:onboard' } as const
+const EXPAND = { expansion_type: 'slash_command', command_name: 'conjev:onboard', command_args: '', prompt: '/conjev:onboard' } as const
 const expand = async ($: Parameters<TestBody>[0], command = EXPAND): Promise<string> =>
   ((await $.classic.UserPromptExpansion(command as never)).additionalContext ?? []).join('\n')
 
@@ -184,12 +184,12 @@ test('no key: the note names every place looked; a key placed later is seen on t
   await $.session.start(START)
   const before = await expand($)
   expect(before).toContain(`${KEY_CHECK} none found`)
-  for (const place of ['~/.context-harness/key', 'secure plugin setting', '.env', 'TYPESAFE_API_KEY']) expect(before).toContain(place)
+  for (const place of ['~/.conjev/key', 'secure plugin setting', '.env', 'TYPESAFE_API_KEY']) expect(before).toContain(place)
 
   // The person places the key in the shared file; the session goes on.
-  io.files[`${HOME}/.context-harness/key`] = 'ts_placed\n'
+  io.files[`${HOME}/.conjev/key`] = 'ts_placed\n'
   const after = await expand($)
-  expect(after).toContain(`${KEY_CHECK} found, in ~/.context-harness/key`)
+  expect(after).toContain(`${KEY_CHECK} found, in ~/.conjev/key`)
   expect(after).not.toContain('ts_placed')
 
   // The gate that had no key now sends with this one, without a new session.

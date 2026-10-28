@@ -78,7 +78,7 @@ export async function fetchPage($: EngineInterface, url: string): Promise<WebPag
   if (isPrivateHost(url)) return { ok: false, error: 'a local or private-network address is not read' }
   let response
   try {
-    response = await $.http.fetch(url, { headers: { 'user-agent': 'Mozilla/5.0 (compatible; context-harness web_read)', accept: 'text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.5' } })
+    response = await $.http.fetch(url, { headers: { 'user-agent': 'Mozilla/5.0 (compatible; conjev web_read)', accept: 'text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.5' } })
   } catch (error) {
     return { ok: false, error: `the request failed (${String(error).slice(0, 200)})` }
   }
@@ -161,7 +161,7 @@ async function measure($: EngineInterface, url: string, question: string, mode: 
 
 /** web_read, as the model calls it. */
 export async function readWeb($: EngineInterface, url: string, question: string, toolUseId: string): Promise<{ text: string; isError: boolean }> {
-  if ((await keyFor($)) === undefined) return { text: 'web_read needs a TypeSafe key (context-harness settings); use WebFetch instead.', isError: true }
+  if ((await keyFor($)) === undefined) return { text: 'web_read needs a TypeSafe key (conjev settings); use WebFetch instead.', isError: true }
   const { measured, page, archiveId } = await measure($, url, question, 'active', toolUseId, {})
   if (!page.ok) return { text: `# web_read: ${url}\n# status: fetch_error (${page.error})`, isError: true }
   if (measured === undefined) return { text: 'web_read could not judge the page; use WebFetch instead.', isError: true }

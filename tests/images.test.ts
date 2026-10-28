@@ -17,7 +17,7 @@ const PNG: Block = { type: 'image', source: { type: 'base64', media_type: 'image
 // leaves the same way an image does when the message is rebuilt, so the fold
 // must treat it the same.
 const PDF: Block = { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: 'JVBERi0=' } }
-const ARCHIVE = `${HOME}/.context-harness/state/archive/sess-1`
+const ARCHIVE = `${HOME}/.conjev/state/archive/sess-1`
 const hasImage = (message: unknown): boolean => JSON.stringify(message).includes('"type":"image"')
 const hasMedia = (message: unknown): boolean => {
   const json = JSON.stringify(message)

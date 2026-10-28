@@ -1,6 +1,6 @@
 ---
 name: consolidate
-description: Turn what a stretch of work produced into lasting memory - bring PHASE.md up to date, add episodes to the dated episode log, promote repeated procedures and decision-changing lessons into project skills, and propose lasting principles for AGENTS.md. Use when context-harness asks before folding, at the end of a unit of work, or before handing off.
+description: Turn what a stretch of work produced into lasting memory - bring PHASE.md up to date, add episodes to the dated episode log, promote repeated procedures and decision-changing lessons into project skills, and propose lasting principles for AGENTS.md. Use when conjev asks before folding, at the end of a unit of work, or before handing off.
 ---
 
 # Consolidate memory

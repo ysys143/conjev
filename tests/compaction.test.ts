@@ -11,7 +11,7 @@ import { EXCERPT_CHARS } from '../hooks/fold-judge'
 const call = (id: string, tool: string, input: Record<string, unknown>): SessionMessage => ({ role: 'assistant', text: '', toolUses: [{ tool_use_id: id, tool, input }] })
 const answer = (id: string, text: string, isError = false): SessionMessage => ({ role: 'user', text: '', toolUses: [], toolResults: [{ tool_use_id: id, text, isError }] })
 
-const ROOT = `${HOME}/.context-harness/state`
+const ROOT = `${HOME}/.conjev/state`
 const ARCHIVE = `${ROOT}/archive/sess-1`
 
 // Jev answers every question it is asked, the same way.
@@ -216,7 +216,7 @@ test('after a fold the model is pointed back at what was folded', async ($, on) 
   const io = setup(on, { transcript: OLD })
   await $.session.compact({ trigger: 'manual', messages: OLD } as never)
   await settle(() => io.appended.length > 0)
-  expect(io.appended[0]).toContain('[context-harness] This conversation was just compacted; 1 tool results were folded')
+  expect(io.appended[0]).toContain('[conjev] This conversation was just compacted; 1 tool results were folded')
 })
 
 const kept = (text: string, input: Record<string, unknown> = { file_path: '/proj/a.ts' }) => JSON.stringify({ id: 'toolu_x', tool: 'Read', input, text, isError: false })
@@ -229,15 +229,15 @@ test('read_coordinate reads this plugin archive first, then the one from before 
       [`${HOME}/.claude-context-fold/sess-1/toolu_y.json`]: kept('legacy only'),
     },
   })
-  expect(String((await $.tool.call({ tool: 'mcp__context-harness__read_coordinate', id: 'toolu_x' })).result)).toContain('\nnew')
-  expect(String((await $.tool.call({ tool: 'mcp__context-harness__read_coordinate', id: 'toolu_y' })).result)).toContain('\nlegacy only')
+  expect(String((await $.tool.call({ tool: 'mcp__conjev__read_coordinate', id: 'toolu_x' })).result)).toContain('\nnew')
+  expect(String((await $.tool.call({ tool: 'mcp__conjev__read_coordinate', id: 'toolu_y' })).result)).toContain('\nlegacy only')
 })
 
 const SECRET_KEPT = { files: { [`${ARCHIVE}/toolu_x.json`]: kept('API_KEY=abc', { file_path: '/proj/.env' }) } }
 
 test('read_coordinate, external session with the gate active: a folded secret file stays folded', { options: { toolGate: 'active', providerTrust: 'external' } }, async ($, on) => {
   const io = setup(on, SECRET_KEPT)
-  const result = await $.tool.call({ tool: 'mcp__context-harness__read_coordinate', id: 'toolu_x' })
+  const result = await $.tool.call({ tool: 'mcp__conjev__read_coordinate', id: 'toolu_x' })
   expect(result.isError).toBe(true)
   expect(String(result.result)).toContain('env file')
   await settle(() => records(io.writes, 'tool').length > 0)
@@ -246,14 +246,14 @@ test('read_coordinate, external session with the gate active: a folded secret fi
 
 test('read_coordinate, the gate in shadow: returned, and recorded as it would be refused', { options: { toolGate: 'shadow', providerTrust: 'external' } }, async ($, on) => {
   const io = setup(on, SECRET_KEPT)
-  expect(String((await $.tool.call({ tool: 'mcp__context-harness__read_coordinate', id: 'toolu_x' })).result)).toContain('API_KEY=abc')
+  expect(String((await $.tool.call({ tool: 'mcp__conjev__read_coordinate', id: 'toolu_x' })).result)).toContain('API_KEY=abc')
   await settle(() => records(io.writes, 'tool').length > 0)
   expect(records(io.writes, 'tool')[0]?.decision).toBe('would-deny')
 })
 
 test('read_coordinate, first-party session: returned', { options: { toolGate: 'active' } }, async ($, on) => {
   setup(on, SECRET_KEPT)
-  expect(String((await $.tool.call({ tool: 'mcp__context-harness__read_coordinate', id: 'toolu_x' })).result)).toContain('API_KEY=abc')
+  expect(String((await $.tool.call({ tool: 'mcp__conjev__read_coordinate', id: 'toolu_x' })).result)).toContain('API_KEY=abc')
 })
 
 test('cleanup names the records folder alone, and nothing else gets a command', () => {
@@ -299,15 +299,15 @@ test('without HOME nothing is written: the engine summarizes instead of folding'
 
 test('set_policy changes the fold policy only, never a gate, a Jev mode or the key', async ($, on) => {
   const io = setup(on)
-  const set = await $.tool.call({ tool: 'mcp__context-harness__set_policy', stopGate: 'active', foldJev: 'shadow', toolGate: 'off', apiKey: 'x' })
+  const set = await $.tool.call({ tool: 'mcp__conjev__set_policy', stopGate: 'active', foldJev: 'shadow', toolGate: 'off', apiKey: 'x' })
   expect(set.result).toBe('No policy value was given.')
   expect(io.configured).toEqual([])
 })
 
 test('the agent may not write into the archives, this one or the one before the rename', { options: { toolGate: 'active' } }, async ($, on) => {
   setup(on)
-  expect((await $.tool.call({ tool: 'Write', file_path: `${ARCHIVE}/toolu_x.json`, content: '{}' })).deny).toContain('context-harness files')
-  expect((await $.tool.call({ tool: 'Bash', command: `echo x > ${HOME}/.claude-context-fold/sess-1/toolu_x.json` })).deny).toContain('context-harness files')
+  expect((await $.tool.call({ tool: 'Write', file_path: `${ARCHIVE}/toolu_x.json`, content: '{}' })).deny).toContain('conjev files')
+  expect((await $.tool.call({ tool: 'Bash', command: `echo x > ${HOME}/.claude-context-fold/sess-1/toolu_x.json` })).deny).toContain('conjev files')
 })
 
 const EXTERNAL_ACTIVE = { options: { toolGate: 'active', providerTrust: 'external' } }
@@ -329,7 +329,7 @@ test('read_coordinate judges a folded path by what it leads to as well', EXTERNA
     files: { [`${ARCHIVE}/toolu_x.json`]: kept('aws_secret_access_key = x', { file_path: '/proj/creds' }) },
     realPaths: { '/proj/creds': `${HOME}/.aws/credentials` },
   })
-  const result = await $.tool.call({ tool: 'mcp__context-harness__read_coordinate', id: 'toolu_x' })
+  const result = await $.tool.call({ tool: 'mcp__conjev__read_coordinate', id: 'toolu_x' })
   expect(result.isError).toBe(true)
   expect(String(result.result)).toContain('cloud credentials')
 })
@@ -374,7 +374,7 @@ test('an archive that could not be written still leaves the note that follows a 
   const io = setup(on, { transcript: OLD, failWrite: '/archive/', files: { '/proj/PHASE.md': 'now' } })
   await $.session.compact({ trigger: 'manual', messages: OLD } as never)
   await settle(() => io.appended.length > 0)
-  expect(io.appended[0]).toContain('[context-harness] This conversation was just compacted.')
+  expect(io.appended[0]).toContain('[conjev] This conversation was just compacted.')
 })
 
 test('status: nothing on screen while the gates are on but have recorded nothing', { options: { stopGate: 'shadow', foldJev: 'shadow' } }, async ($, on) => {
@@ -406,7 +406,7 @@ test('a crowded window is partly summarized: the engine gets the old part, the r
   // then the recent messages as they stood.
   const messages = out.messages ?? []
   expect(messages[0]?.text).toBe('summary')
-  expect(messages[1]?.text).toContain('[context-harness]')
+  expect(messages[1]?.text).toContain('[conjev]')
   expect(messages[1]?.text).toContain(String.raw`read_coordinate("a")`)
   expect(messages.at(-1)?.text).toBe('and next')
 })
@@ -663,7 +663,7 @@ const LONG_KEPT = Array.from({ length: 200 }, (_, i) => `line ${i + 1} of the se
 
 test('read_coordinate with a query keeps the passages and names the lines it left out', { options: { foldBlocks: 'active' } }, async ($, on) => {
   const io = setup(on, { env: KEY_ENV, fetch: onlyFailures, files: { [`${ARCHIVE}/toolu_x.json`]: kept(LONG_KEPT, { file_path: '/proj/server.log' }) } })
-  const result = await $.tool.call({ tool: 'mcp__context-harness__read_coordinate', id: 'toolu_x', query: 'where does it fail' })
+  const result = await $.tool.call({ tool: 'mcp__conjev__read_coordinate', id: 'toolu_x', query: 'where does it fail' })
   const text = String(result.result)
 
   // Only the passage holding the failure came back, and the answer says which
@@ -682,7 +682,7 @@ test('read_coordinate with a query keeps the passages and names the lines it lef
 
 test('read_coordinate with a query but no key returns the whole original', async ($, on) => {
   const io = setup(on, { files: { [`${ARCHIVE}/toolu_x.json`]: kept(LONG_KEPT, { file_path: '/proj/server.log' }) } })
-  const result = await $.tool.call({ tool: 'mcp__context-harness__read_coordinate', id: 'toolu_x', query: 'where does it fail' })
+  const result = await $.tool.call({ tool: 'mcp__conjev__read_coordinate', id: 'toolu_x', query: 'where does it fail' })
 
   // A fragment nothing could have chosen would only hide what is there.
   expect(String(result.result)).toContain('line 1 of the server log')
@@ -692,7 +692,7 @@ test('read_coordinate with a query but no key returns the whole original', async
 
 test('read_coordinate with full returns the whole original even with a query', { options: { foldBlocks: 'active' } }, async ($, on) => {
   const io = setup(on, { env: KEY_ENV, fetch: allRelevant, files: { [`${ARCHIVE}/toolu_x.json`]: kept(LONG_KEPT, { file_path: '/proj/server.log' }) } })
-  const result = await $.tool.call({ tool: 'mcp__context-harness__read_coordinate', id: 'toolu_x', query: 'where does it fail', full: true })
+  const result = await $.tool.call({ tool: 'mcp__conjev__read_coordinate', id: 'toolu_x', query: 'where does it fail', full: true })
 
   expect(String(result.result)).toContain('line 1 of the server log')
   expect(io.fetches.length).toBe(0)

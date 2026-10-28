@@ -17,7 +17,7 @@
 import type { EngineInterface } from 'claude-code'
 
 /** Where the shared settings and key live, under the person's home folder. */
-export const SHARED_DIR = '.context-harness'
+export const SHARED_DIR = '.conjev'
 export const SHARED_CONFIG = 'config.json'
 export const SHARED_KEY = 'key'
 export const SHARED_CONSENT = 'consent.json'
@@ -66,6 +66,27 @@ export function keyFromShared(text: string | undefined): string | undefined {
 /** The path of the shared folder, given the home folder. */
 export function sharedDirOf(home: string): string {
   return `${home}/${SHARED_DIR}`
+}
+
+/** The folder's name before the plugin was renamed conjev. */
+export const PREVIOUS_SHARED_DIR = '.context-harness'
+
+/**
+ * Moves the folder from its name before the rename, once: the key, the two
+ * answers (consent, onboarding), the settings and the state go together, so a
+ * person who set the plugin up is not asked again. Nothing moves when the new
+ * folder already exists; the old one is then left as it is.
+ */
+export async function migrateShared($: EngineInterface, home: string | undefined): Promise<boolean> {
+  if (home === undefined) return false
+  const [from, to] = [`${home}/${PREVIOUS_SHARED_DIR}`, sharedDirOf(home)]
+  if (!(await $.fs.exists(from)) || (await $.fs.exists(to))) return false
+  for (const argv of [['mv', from, to], ['chmod', '700', to]]) {
+    const { exitCode } = await $.process.run(argv)
+    if (exitCode !== 0) throw new Error(`${argv[0]} exited ${exitCode}`)
+  }
+
+  return true
 }
 
 /**

@@ -6,7 +6,7 @@ export const FOLD_MARK = '[folded '
 
 // The notes this plugin appends to the conversation start with one of these
 // (the second from before it was renamed); they are not the person's prompts.
-export const NOTE_MARKS: readonly string[] = ['[context-harness]', '[context-fold]']
+export const NOTE_MARKS: readonly string[] = ['[conjev]', '[context-fold]']
 
 /** One completed tool result, as the folding policy sees it. */
 export type FoldCandidate = {
@@ -127,8 +127,8 @@ export function dueBeforeFold(files: readonly AnchorFile[], sinceMs: number): An
 export function anchorNote(files: readonly AnchorFile[], folded: number, due: readonly AnchorFile[]): string {
   const lines = [
     folded > 0
-      ? `[context-harness] This conversation was just compacted; ${folded} tool results were folded into one-line pointers (read_coordinate returns the originals).`
-      : '[context-harness] This conversation was just compacted.',
+      ? `[conjev] This conversation was just compacted; ${folded} tool results were folded into one-line pointers (read_coordinate returns the originals).`
+      : '[conjev] This conversation was just compacted.',
   ]
   const reread = files.filter(file => file.role !== 'episodes')
   if (reread.length > 0) {
@@ -145,7 +145,7 @@ export function anchorNote(files: readonly AnchorFile[], folded: number, due: re
   if (due.length > 0) {
     lines.push(
       `Not written since the previous compaction (or the session's start): ${due.map(file => file.path).join(', ')}. ` +
-        'Run the context-harness:consolidate skill when you next can.',
+        'Run the conjev:consolidate skill when you next can.',
     )
   }
 
@@ -157,9 +157,9 @@ export function dueNote(due: readonly AnchorFile[], handoffGapText?: string): st
   const items = due.map(file => `${file.path} (${ROLE_NAMES[file.role]}, last written ${stamp(file.mtimeMs)})`)
 
   return (
-    '[context-harness] Before this conversation is folded, consolidate what this stretch of work produced. ' +
+    '[conjev] Before this conversation is folded, consolidate what this stretch of work produced. ' +
     `Not written since the last compaction (or, before the first, the session's start): ${items.join('; ')}. ` +
-    'Run the context-harness:consolidate skill now; context-harness folds the conversation once they are current.' +
+    'Run the conjev:consolidate skill now; conjev folds the conversation once they are current.' +
     (handoffGapText === undefined ? '' : ` ${handoffGapText}`)
   )
 }

@@ -171,7 +171,7 @@ test('tool gate shadow only records what it would refuse', { options: { toolGate
 test('the agent may not rewrite the plugin or the Claude settings, even first-party', { options: { toolGate: 'active' } }, async ($, on) => {
   setup(on)
   expect((await $.tool.call({ tool: 'Write', file_path: `${HOME}/.claude-3/settings.json`, content: '{}' })).deny).toContain('claude settings')
-  expect((await $.tool.call({ tool: 'Bash', command: `echo x > ${HOME}/.local/state/context-harness/a.json` })).deny).toContain('context-harness files')
+  expect((await $.tool.call({ tool: 'Bash', command: `echo x > ${HOME}/.local/state/context-harness/a.json` })).deny).toContain('conjev files')
 })
 
 test('an active tool guard that breaks refuses the call', { options: { toolGate: 'active' } }, async ($, on) => {
@@ -186,7 +186,7 @@ test('a shadow tool guard that breaks lets the call through', { options: { toolG
 
 test('/jev-mark writes a label and /jev-report reads records and labels', { options: { stopGate: 'shadow' } }, async ($, on) => {
   const io = setup(on, { env: KEY_ENV })
-  const root = `${HOME}/.context-harness/state/records`
+  const root = `${HOME}/.conjev/state/records`
   await $.session.start({ cwd: '/proj', surface: 'terminal', isInteractive: true } as never)
   await $.classic.Stop(STOP)
   await settle(() => records(io.writes, 'stop').length > 0)

@@ -10,7 +10,7 @@
 // Nothing leaves the machine unless --jev N is given: then up to N scrubbed
 // last paragraphs are sent to Jev, half from turns the rule or a nudge flags,
 // and the key is read from TYPESAFE_API_KEY. Results are written as JSONL under
-// ~/.local/state/context-harness/replay/, readable by the user alone. The
+// ~/.conjev/state/replay/, readable by the user alone. The
 // default root is $CLAUDE_CONFIG_DIR/projects, or ~/.claude/projects.
 import { mkdirSync, readFileSync, readdirSync, statSync, writeFileSync, chmodSync } from 'node:fs'
 import { homedir } from 'node:os'
@@ -150,7 +150,7 @@ async function main(): Promise<void> {
   console.log(`rule vs nudge: both ${c.both}, rule only ${c.ruleOnly}, nudge only ${c.jevOnly}, neither ${c.neither}; kappa ${kappa(c)?.toFixed(2) ?? '-'}`)
   console.log(`rule as a predictor of a nudge: precision ${pct(c.both, c.both + c.ruleOnly)}, recall ${pct(c.both, c.both + c.jevOnly)}`)
 
-  const stateDir = join(home, '.local', 'state', 'context-harness')
+  const stateDir = join(home, '.conjev', 'state')
   const outDir = join(stateDir, 'replay')
   mkdirSync(outDir, { recursive: true })
   chmodSync(stateDir, 0o700)

@@ -30,7 +30,7 @@ test('the order of preference: ego, Aside, agent-browser, Playwright, then a nam
 
 test('the block names the tool, the others in order, and the blocked ones never to use', () => {
   const block = routeBlock({ available: ['aside', 'playwright'], blocked: ['ego'], cdp: '' })
-  expect(block.startsWith(`<instruction name="${BROWSER_BLOCK}" source="context-harness">`)).toBe(true)
+  expect(block.startsWith(`<instruction name="${BROWSER_BLOCK}" source="conjev">`)).toBe(true)
   expect(block).toContain('Use Aside.')
   expect(block).toContain('Never print or serialize')
   expect(block).toContain('Also installed, in order of preference: Playwright')

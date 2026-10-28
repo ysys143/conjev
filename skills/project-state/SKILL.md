@@ -1,13 +1,13 @@
 ---
 name: project-state
-description: Keep INTENT.md (the agent's reading of what the person wants, sourced from their own words) and PHASE.md (the status board the person reads) current, alone or across several agent sessions. Use when work spans more than one session or compaction, when the person states or changes a goal, when several agents (for example over xsm) share one project, or when context-harness asks for the status board.
+description: Keep INTENT.md (the agent's reading of what the person wants, sourced from their own words) and PHASE.md (the status board the person reads) current, alone or across several agent sessions. Use when work spans more than one session or compaction, when the person states or changes a goal, when several agents (for example over xsm) share one project, or when conjev asks for the status board.
 ---
 
 # Project state: INTENT.md and PHASE.md
 
-Two files hold what a later session, another agent, or the person after a break needs: why the work is done and where it stands. A conversation summary is never the source; these files are. context-harness points the model back at them after every compaction and holds its own folds until PHASE.md is current.
+Two files hold what a later session, another agent, or the person after a break needs: why the work is done and where it stands. A conversation summary is never the source; these files are. conjev points the model back at them after every compaction and holds its own folds until PHASE.md is current.
 
-Their paths are the plugin's settings `intentFile` and `phaseFile` (defaults `INTENT.md` and `PHASE.md` in the working directory; `policy_report` shows them under `current.settings`). Create the files when the person agrees; context-harness uses each only while it exists.
+Their paths are the plugin's settings `intentFile` and `phaseFile` (defaults `INTENT.md` and `PHASE.md` in the working directory; `policy_report` shows them under `current.settings`). Create the files when the person agrees; conjev uses each only while it exists.
 
 ## INTENT.md: the agent's reading of what the person wants
 
@@ -83,7 +83,7 @@ Handoff is what a session that picks this up needs and cannot guess: which branc
 Rules:
 
 - It fits on one screen. Details live in their own place (INTENT.md, the episode log, evidence files); PHASE.md points at them.
-- Write it when something happens: a step finishes or is blocked, the person decides, before an expensive or irreversible action, before a handoff, and when context-harness asks. Not on every turn and not on a timer.
+- Write it when something happens: a step finishes or is blocked, the person decides, before an expensive or irreversible action, before a handoff, and when conjev asks. Not on every turn and not on a timer.
 - The evidence of anything in Done is a path, a commit, a message id or a folded pointer, never the agent's recollection.
 - Items of earlier phases leave Done for the episode log (the consolidate skill) instead of growing the board.
 - Keep Handoff true whenever the commit state changes: after a commit, a push, or a change to the working tree that matters. A handoff that names the wrong branch is worse than none, because a resuming session trusts it.

@@ -1,4 +1,4 @@
-// Writes commands/context-harness:onboard.md from hooks/install-command.ts, so
+// Writes commands/conjev:onboard.md from hooks/install-command.ts, so
 // the file the engine loads and the text the tests check are one source.
 //
 //   bun scripts/build-command.ts [--check]
@@ -15,7 +15,7 @@ const text = `---\ndescription: "${INSTALL_COMMAND_DESCRIPTION}"\n---\n\n${INSTA
 if (process.argv.includes('--check')) {
   const current = existsSync(target) ? readFileSync(target, 'utf8') : ''
   if (current !== text) {
-    console.error('commands/context-harness:onboard.md is out of date: run bun scripts/build-command.ts')
+    console.error('commands/conjev:onboard.md is out of date: run bun scripts/build-command.ts')
     process.exit(1)
   }
   console.log('the command file matches')

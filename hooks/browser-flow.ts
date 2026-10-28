@@ -80,6 +80,6 @@ async function recommend($: EngineInterface): Promise<void> {
   const now = await $.clock.now()
   if (typeof last === 'number' && now - last < RECOMMEND_EVERY_MS) return
   await $.store.set('browser-recommended-at', now)
-  $.ui.toast('context-harness: this request needs a browser and none is installed. ego lite (https://lite.ego.app/) provides the ego-browser command.')
+  $.ui.toast('conjev: this request needs a browser and none is installed. ego lite (https://lite.ego.app/) provides the ego-browser command.')
 }
 
