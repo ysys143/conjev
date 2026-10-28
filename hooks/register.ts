@@ -9,7 +9,7 @@ import { askConditions, attachedNow, forgetAttached, fragmentsDirOf, loadFragmen
 import { INSTRUCTIONS_POINT, attachedNames, decideFragments, fragmentBlock, keywordHit, pinnedSection } from './instructions'
 import { probabilityOf, type JevResult } from './jev'
 import { errorOf, judge, keyFor, trustFor } from './jev-call'
-import { blockReport, filterReport, pointReport, type ShadowRecord } from './report'
+import { blockReport, compactReport, filterReport, pointReport, type ShadowRecord } from './report'
 import { chunksOf, exactDuplicates, normalized, supersededOmc, withoutChunks, type DocFile } from './instruction-docs'
 import { judgeDeferred, omcVersionsOf, recordFilter, recordToolUse, stateKeyOf } from './filter-flow'
 import { clip, scrub } from './scrub'
@@ -588,7 +588,8 @@ export const register: Register = (on, options) => {
       ...(records.some(r => r.point === BROWSER_POINT) ? [pointReport(BROWSER_POINT, records, labels, settings.browserThreshold)] : []),
       ...(settings.instructionFilter === 'off' && !records.some(r => r.point === 'instr-filter') ? [] : [filterReport(records)]),
       ...[WEB_POINT, FOLD_BLOCKS_POINT].filter(point => records.some(r => r.point === point)).map(point => blockReport(point, records)),
-    ]
+      compactReport(records),
+    ].filter((part): part is string => part !== undefined)
 
     return { text: [...header, ...reports].join('\n\n') }
   })

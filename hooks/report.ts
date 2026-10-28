@@ -214,3 +214,48 @@ export function blockReport(point: string, records: readonly ShadowRecord[]): st
 
   return lines.join('\n')
 }
+
+/**
+ * What the compactions did, in the terms the person felt: how long each one
+ * held the turn, and what it changed in the window.
+ *
+ * This is the measurement that replaced the statistics. The numbers come from
+ * the engine — `tokensBefore` and `tokensAfter` as it counted them, and the
+ * wall clock the plugin measured — so they describe this person's own sessions
+ * rather than a sample of someone else's.
+ */
+export function compactReport(records: readonly ShadowRecord[]): string | undefined {
+  const compactions = records.filter(r => r.point === 'compact')
+  if (compactions.length === 0) return undefined
+  const byTrigger = new Map<string, number>()
+  for (const r of compactions) {
+    const trigger = (r.facts as Record<string, string> | undefined)?.trigger ?? 'unknown'
+    byTrigger.set(trigger, (byTrigger.get(trigger) ?? 0) + 1)
+  }
+  const summarized = compactions.filter(r => r.decision === 'summarized')
+  const withTokens = compactions.flatMap(r => {
+    const before = Number((r.facts as Record<string, string> | undefined)?.tokensBefore)
+    const after = Number((r.facts as Record<string, string> | undefined)?.tokensAfter)
+
+    return Number.isFinite(before) && Number.isFinite(after) ? [{ before, after }] : []
+  })
+  const saved = withTokens.map(({ before, after }) => before - after)
+
+  const lines = [
+    '## compact',
+    `compactions ${compactions.length} (${[...byTrigger].map(([k, v]) => `${k} ${v}`).join(', ')}); ` +
+      `summaries ${summarized.length}, folds alone ${compactions.length - summarized.length}`,
+    `held the turn: p50 ${ms(percentile(compactions.map(r => r.hookMs), 0.5))}, p95 ${ms(percentile(compactions.map(r => r.hookMs), 0.95))}`,
+  ]
+  if (saved.length > 0) {
+    lines.push(
+      `window: ${withTokens.length} of ${compactions.length} compactions reported tokens; ` +
+        `before p50 ${Math.round(percentile(withTokens.map(t => t.before), 0.5) ?? 0)}, after p50 ${Math.round(percentile(withTokens.map(t => t.after), 0.5) ?? 0)}, ` +
+        `saved p50 ${Math.round(percentile(saved, 0.5) ?? 0)} tokens`,
+    )
+  } else {
+    lines.push('window: no compaction reported token counts')
+  }
+
+  return lines.join('\n')
+}

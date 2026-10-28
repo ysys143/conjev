@@ -2,7 +2,7 @@ import { expect, test } from 'claude-code/testing'
 import { admit, afterCall, EMPTY_BUDGET } from '../hooks/budget'
 import { checkAnswer, parseResponse, probabilityOf, type JevQuestion } from '../hooks/jev'
 import { keyFromDotenv, pickKey } from '../hooks/key'
-import { confusion, kappa, percentile, pointReport, sweep, type ShadowRecord } from '../hooks/report'
+import { compactReport, confusion, kappa, percentile, pointReport, sweep, type ShadowRecord } from '../hooks/report'
 import { COMMAND_CHARS, clip, scrub } from '../hooks/scrub'
 import { PARAGRAPH_CHARS, STOP_QUESTION, announcesByRule, lastParagraph, stopSkipReason } from '../hooks/stop-gate'
 import {
@@ -289,4 +289,43 @@ test('the hash is stable and the risk adds restricted and custom', () => {
   expect(shortHash('a')).toMatch(/^[0-9a-f]{8}$/)
   expect(riskOf({ open: 0.05, standard: 0.05, restricted: 0.6, custom: 0.3 }).toFixed(2)).toBe('0.90')
   expect(riskOf(undefined)).toBe(0)
+})
+
+test('the compaction report says how long the turn was held and what the window lost', () => {
+  const row = (id: string, trigger: string, decision: string, hookMs: number, before?: number, after?: number): ShadowRecord => ({
+    id,
+    ts: 't',
+    sessionId: 's',
+    point: 'compact',
+    mode: 'active',
+    sent: null,
+    hookMs,
+    decision,
+    facts: { trigger, messagesBefore: '10', ...(before === undefined ? {} : { tokensBefore: String(before), tokensAfter: String(after) }) },
+  })
+  const report = compactReport([
+    row('a', 'manual', 'summarized', 11_000, 100_000, 20_000),
+    row('b', 'plugin', 'folded', 40, 50_000, 45_000),
+    row('c', 'plugin', 'folded', 30),
+  ])
+
+  expect(report).toContain('compactions 3 (manual 1, plugin 2)')
+  expect(report).toContain('summaries 1, folds alone 2')
+  // The wait the person felt: one summary of eleven seconds among folds of tens of ms.
+  expect(report).toContain('held the turn: p50 40 ms, p95 11000 ms')
+  // Two of the three reported token counts; the third is left out rather than guessed.
+  expect(report).toContain('2 of 3 compactions reported tokens')
+  expect(report).toContain('saved p50 80000 tokens')
+})
+
+test('with no compaction recorded the report is left out, not shown empty', () => {
+  expect(compactReport([])).toBe(undefined)
+  expect(compactReport([{ id: 'a', ts: 't', sessionId: 's', point: 'stop', mode: 'shadow', sent: null, hookMs: 1 }])).toBe(undefined)
+})
+
+test('a compaction that reported no token counts still says how long it held the turn', () => {
+  const report = compactReport([{ id: 'a', ts: 't', sessionId: 's', point: 'compact', mode: 'active', sent: null, hookMs: 25, decision: 'folded', facts: { trigger: 'manual' } }])
+
+  expect(report).toContain('compactions 1 (manual 1)')
+  expect(report).toContain('no compaction reported token counts')
 })
