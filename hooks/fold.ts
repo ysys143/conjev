@@ -134,6 +134,10 @@ export function anchorNote(files: readonly AnchorFile[], folded: number, due: re
     for (const file of reread) lines.push(`- ${file.path}: ${ROLE_NAMES[file.role]}, last written ${stamp(file.mtimeMs)}`)
     lines.push('A summary or a folded line is never the source; these files are.')
   }
+  const board = files.find(file => file.role === 'phase')
+  if (board !== undefined) {
+    lines.push(`Its "Handoff" section is what a session that picks this up reads first: the branch and worktree, whether the commits are pushed, what is uncommitted, and the command to run before changing anything.`)
+  }
   const episodes = files.find(file => file.role === 'episodes')
   if (episodes !== undefined) lines.push(`Earlier episodes are in ${episodes.path}/ (newest written ${stamp(episodes.mtimeMs)}); read them only when you need one.`)
   if (due.length > 0) {
@@ -147,13 +151,14 @@ export function anchorNote(files: readonly AnchorFile[], folded: number, due: re
 }
 
 /** The note that defers a fold until the status board and the episode log are current. */
-export function dueNote(due: readonly AnchorFile[]): string {
+export function dueNote(due: readonly AnchorFile[], handoffGapText?: string): string {
   const items = due.map(file => `${file.path} (${ROLE_NAMES[file.role]}, last written ${stamp(file.mtimeMs)})`)
 
   return (
     '[context-harness] Before this conversation is folded, consolidate what this stretch of work produced. ' +
     `Not written since the last compaction (or, before the first, the session's start): ${items.join('; ')}. ` +
-    'Run the context-harness:consolidate skill now; context-harness folds the conversation once they are current.'
+    'Run the context-harness:consolidate skill now; context-harness folds the conversation once they are current.' +
+    (handoffGapText === undefined ? '' : ` ${handoffGapText}`)
   )
 }
 

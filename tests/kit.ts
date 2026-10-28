@@ -36,6 +36,8 @@ export type Setup = {
   window?: number
   /** When the session started, in ms; what `since()` counts from before the first compaction. */
   startedAt?: number
+  /** What `git status --porcelain=v2 --branch` answers, as the repository would print it. */
+  gitStatus?: string
   /** What the engine's own compaction beneath answers: a summary, or a skip. */
   compactBelow?: 'summary' | 'skip'
   /** The plugin folder's .env, wherever the plugin root is. */
@@ -130,7 +132,10 @@ export const setup = (on: On, s: Setup = {}) => {
   on('process.run', (_, e) => {
     runs.push([...e.argv])
     disk.push(`run ${e.argv[0]}`)
-    return { value: { exitCode: e.argv[0] === s.failRun ? 1 : 0, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+    const isGit = e.argv[0] === 'git'
+    const stdout = isGit ? (s.gitStatus ?? '') : ''
+    const exitCode = e.argv[0] === s.failRun || (isGit && s.gitStatus === undefined) ? 1 : 0
+    return { value: { exitCode, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
   })
   on('clock.now', () => ({ value: (now += 5) }))
   on('clock.sleep', (_, e) => {

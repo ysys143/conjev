@@ -67,9 +67,18 @@ Rules:
 
 ## Resume notes
 - <half-done steps and how to resume them; traps; what not to touch; resources left running and when to stop them>
+
+## Handoff
+- Workspace: <branch> at <worktree path>; base <commit>
+- Commits: <n> local, <pushed | not pushed>; <PR link or none>
+- Uncommitted: <what is dirty, or "clean">
+- Start here: <the one command to run first>
+- Do not: <what a resuming session must not do, and why>
 ```
 
 Agents and Messages in flight exist only when several agents share the project.
+
+Handoff is what a session that picks this up needs and cannot guess: which branch and worktree, whether the commits are pushed, what is dirty, the one command to run first, and what not to repeat. It is written for that reader, not for the person watching the work, so plain facts and no narrative. A session that resumes reads it before touching anything.
 
 Rules:
 
@@ -77,6 +86,17 @@ Rules:
 - Write it when something happens: a step finishes or is blocked, the person decides, before an expensive or irreversible action, before a handoff, and when context-harness asks. Not on every turn and not on a timer.
 - The evidence of anything in Done is a path, a commit, a message id or a folded pointer, never the agent's recollection.
 - Items of earlier phases leave Done for the episode log (the consolidate skill) instead of growing the board.
+- Keep Handoff true whenever the commit state changes: after a commit, a push, or a change to the working tree that matters. A handoff that names the wrong branch is worse than none, because a resuming session trusts it.
+
+## Starting from a handoff
+
+A session that opens a project with a PHASE.md reads it before anything else, and Handoff first:
+
+1. `git status --short --branch` and compare it with Handoff: the branch, the worktree, and whether the tree is as described.
+2. Read Now, Next, Needs you. Anything under Needs you waits for the person; do not decide it.
+3. Read the canonical files it points at (INTENT.md, then the episode log only if a detail is needed).
+4. Run the Start here command before changing anything: it establishes the state the handoff claims.
+5. Stop and tell the person if Handoff and the repository disagree. Do not reconcile them by guessing.
 
 ## Several agents on one project
 

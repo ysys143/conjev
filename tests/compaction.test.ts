@@ -505,3 +505,63 @@ test('a fold with no summary behind it never says it is summarizing', async ($, 
 
   expect(io.statuses.some(text => text.includes('summarizing'))).toBe(false)
 })
+
+const GIT_UNPUSHED = '# branch.oid abc\n# branch.head work\n# branch.ab +3 -0\n1 M. N... 100644 100644 100644 aaa bbb src/app.ts\n? new.ts\n'
+
+test('a note before a fold names what the board left out: unpushed work', { options: { phaseFile: '/proj/PHASE.md' } }, async ($, on) => {
+  const io = setup(on, {
+    messages: OLD,
+    percent: 90,
+    files: { '/proj/PHASE.md': '# PHASE\n\n## Now\nwork\n' },
+    mtimes: { '/proj/PHASE.md': 1000 },
+    startedAt: 2000,
+    gitStatus: GIT_UNPUSHED,
+  })
+  await $.turn.complete({ answer: '', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+  await settle(() => io.appended.length > 0)
+  console.log('PROBE RUNS', JSON.stringify(io.runs), 'APP', JSON.stringify(io.appended).slice(0, 200), 'LOGS', JSON.stringify(io.logs).slice(0, 300))
+
+  const note = io.appended.join('\n')
+  expect(note).toContain('3 commit(s) not pushed')
+  expect(note).toContain('2 file(s) with uncommitted changes')
+  expect(note).toContain('work')
+  // The board has no Handoff section, and the note says so rather than assuming.
+  // The note is recorded as JSON, so its quotes arrive escaped.
+  expect(note).toContain('no \\"Handoff\\" section')
+})
+
+test('a board whose Handoff section covers the tree draws no remark', { options: { phaseFile: '/proj/PHASE.md' } }, async ($, on) => {
+  const io = setup(on, {
+    messages: OLD,
+    percent: 90,
+    files: { '/proj/PHASE.md': '# PHASE\n\n## Now\nwork\n\n## Handoff\n- Commits: 3 local, not pushed\n' },
+    mtimes: { '/proj/PHASE.md': 1000 },
+    startedAt: 2000,
+    gitStatus: GIT_UNPUSHED,
+  })
+  await $.turn.complete({ answer: '', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+  await settle(() => io.appended.length > 0)
+
+  const note = io.appended.join('\n')
+  // The section exists, so the note points at it rather than reporting a gap.
+  expect(note).toContain('should say so')
+  expect(note).not.toContain('no "Handoff" section')
+})
+
+test('a clean, pushed tree draws no remark at all', { options: { phaseFile: '/proj/PHASE.md' } }, async ($, on) => {
+  const io = setup(on, {
+    messages: OLD,
+    percent: 90,
+    files: { '/proj/PHASE.md': '# PHASE\n\n## Handoff\n- Commits: 0 local\n' },
+    mtimes: { '/proj/PHASE.md': 1000 },
+    startedAt: 2000,
+    gitStatus: '# branch.oid abc\n# branch.head work\n# branch.ab +0 -0\n',
+  })
+  await $.turn.complete({ answer: '', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+  await settle(() => io.appended.length > 0)
+
+  const note = io.appended.join('\n')
+  expect(note).toContain('PHASE.md')
+  expect(note).not.toContain('not pushed')
+  expect(note).not.toContain('Handoff')
+})

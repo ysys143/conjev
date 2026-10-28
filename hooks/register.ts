@@ -1,4 +1,4 @@
-import type { Register } from 'claude-code'
+import type { EngineInterface, Register } from 'claude-code'
 import { DEFAULT_SETTINGS, SETTING_KEYS, dueBeforeFold, dueNote, foldTranscript, makePolicy, messageViewOf, partialCut, pointerMessage, reportFor, settingsFrom, sliceLines, splitForSummary, stillIdle, transcriptChars, type MessageView, type PolicySettings } from './fold'
 import { routeBrowser } from './browser-flow'
 import { BROWSER_BLOCK, BROWSER_POINT } from './browser-route'
@@ -15,6 +15,7 @@ import { judgeDeferred, omcVersionsOf, recordFilter, recordToolUse, stateKeyOf }
 import { clip, scrub } from './scrub'
 import { harnessSettingsFrom, usesJev } from './settings'
 import { newId, runtime, startRuntime } from './state'
+import { boardHasHandoff, handoffGap, repoStateOf } from './repostate'
 import { showStatus } from './status'
 import { PARAGRAPH_CHARS, STOP_MESSAGE, STOP_POINT, STOP_QUESTION, announcesByRule, lastParagraph, stopSkipReason } from './stop-gate'
 import { cleanupRecords, homeOf, legacyArchiveRoot, readArchived, readRecords, stateRoot, writeArchive, writeLabel, writeRecord } from './storage'
@@ -68,6 +69,27 @@ const SETTINGS_SCHEMA = {
     phaseFile: { type: 'string', description: 'The status board the person reads; empty is none' },
     episodeDir: { type: 'string', description: 'The folder of dated episode logs; empty is none' },
   },
+}
+
+/**
+ * What the status board's Handoff section should have said about the tree, or
+ * undefined when there is nothing to report. A top-level declaration on
+ * purpose: a hooks module may pass `$` only to one of these, or to a function
+ * it imports from a file of its own.
+ */
+async function handoffLine($: EngineInterface, phaseFile: string): Promise<string | undefined> {
+  const state = await repoStateOf($)
+  if (state === undefined) return undefined
+  let board: string | undefined
+  if (phaseFile !== '' && (await $.fs.exists(phaseFile))) {
+    try {
+      board = await $.fs.read(phaseFile)
+    } catch {
+      board = undefined
+    }
+  }
+
+  return handoffGap(state, boardHasHandoff(board))
 }
 
 export const register: Register = (on, options) => {
@@ -381,7 +403,7 @@ export const register: Register = (on, options) => {
     const isDeferred = due.length > 0 && state.deferrals < MAX_DEFERRALS
     if (isDeferred) {
       state.deferrals++
-      await note($, dueNote(due))
+      await note($, dueNote(due, await handoffLine($, policySettings.phaseFile)))
     }
 
     const split = cut > 0 && !isDeferred ? splitForSummary(outcome.messages, cut) : undefined
@@ -446,7 +468,7 @@ export const register: Register = (on, options) => {
     const due = dueBeforeFold(await anchorsOf($, policySettings), await since($, state))
     if (due.length > 0 && state.deferrals < MAX_DEFERRALS) {
       state.deferrals++
-      await note($, dueNote(due))
+      await note($, dueNote(due, await handoffLine($, policySettings.phaseFile)))
 
       return done
     }
