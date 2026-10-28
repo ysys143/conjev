@@ -8,7 +8,7 @@
   },
   "homepage": "https://github.com/ysys143/context-harness",
   "repository": "https://github.com/ysys143/context-harness",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "keywords": [
     "context",
     "compaction",

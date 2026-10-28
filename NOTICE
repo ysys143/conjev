@@ -1,0 +1,9 @@
+context-harness
+Copyright 2026 ysys143
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+This product includes a TypeScript translation, with modifications, of
+maskingtape (https://github.com/ChoHyeonChan/maskingtape, commit 2802949),
+Copyright 2026 The maskingtape Authors, licensed under the Apache License,
+Version 2.0. The translated files are in hooks/pii/; its license and notice
+are hooks/pii/LICENSE and hooks/pii/NOTICE.
