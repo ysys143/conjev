@@ -727,3 +727,15 @@ test('fold relevance active: an automatic compaction asks Jev nothing, so nobody
   // The rule alone decided, and it folds the old read.
   expect(folded(out)).toBe(true)
 })
+
+test('one question in two steps: a result kept whole is not asked about again, block by block', { options: { foldJev: 'active', foldBlocks: 'active' } }, async ($, on) => {
+  // Jev says the read is still needed, so it stays whole; the block judgment
+  // works only inside what was folded, so it has nothing to ask.
+  const io = setup(on, { transcript: OLD, env: KEY_ENV, fetch: neededAt(0.9), isTimerStopped: true })
+  const out = await $.session.compact({ trigger: 'manual', messages: OLD } as never)
+  await drain()
+
+  expect(folded(out)).toBe(false)
+  expect(records(io.writes, 'fold').length).toBeGreaterThan(0)
+  expect(records(io.writes, 'fold-blocks')).toEqual([])
+})
