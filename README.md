@@ -1,14 +1,17 @@
 # context-harness
 
-**Fold, don't summarize: long Claude Code sessions keep every tool result one call away.**
+**Long Claude Code sessions, kept exact and kept in step with you: tool results fold instead of vanishing into a summary, and a judgment layer checks the moments an agent most often gets wrong.**
 
 English · [한국어](README.ko.md)
 
-When a Claude Code conversation compacts, the engine replaces it with a summary, and the exact output of every file read and command run leaves with it: the model reads the files again or works from a paraphrase. context-harness folds instead. Each large, older tool result becomes a one-line pointer, the original is kept on disk, and the model reads it back with `read_coordinate`. Your messages, the tool calls and the most recent results stay as they were. In a measured session, one compaction took the context from 137,469 to 36,995 tokens in 30 ms (context-fold 0.0.2, whose folding this plugin carries over; [Measured](#measured)).
+context-harness is a Claude Code plugin, written against Claude Code's mod API (function hooks). It has two halves, built to work as one:
 
-It is a Claude Code plugin, written against Claude Code's mod API (function hooks). Folding needs no setup and no key. **An optional [judgment layer](#judgment-layer-optional) adds gates that use Jev, TypeSafe's decision model; every gate is off by default, and while they are off nothing leaves your machine.**
+- **Folding.** When a conversation compacts, the engine replaces it with a summary, and the exact output of every file read and command run leaves with it. context-harness folds instead: each large, older tool result becomes a one-line pointer, the original is kept on disk, and the model reads it back with `read_coordinate`. Your own prompts, the tool calls and the most recent results stay as they were. Folding needs no setup and no key.
+- **Judgment.** Gates that ask Jev, TypeSafe's decision model, at the points of a turn where an agent goes wrong: a turn that ends by announcing work it has not done, a call that touches a secret file, an instruction that applies only to some requests, an instruction file loaded twice, a result the current request still needs. Each gate is off until you turn it on; while every gate is off, nothing leaves your machine.
 
-[Install](#install) · [Commands](#commands) · [How folding works](#how-folding-works) · [Compared with](#compared-with) · [Project state](#project-state-and-memory) · [Instruction files](#instruction-files) · [Judgment layer](#judgment-layer-optional) · [Data and privacy](#data-and-privacy) · [Measured](#measured) · [Limits](#limits)
+The two halves rest on one rule: **the original stays in the archive, and the context holds only what the work in front of you needs.** Folding decides that per tool result, the kept blocks under a pointer decide it per passage, `read_coordinate` with a `query` decides it again when the model reads an original back, and `web_read` decides it for a web page. Where a judgment is worth the wait, Jev makes it; where it is not, a rule does, and the rule is always the floor.
+
+[Install](#install) · [Commands](#commands) · [How folding works](#how-folding-works) · [Project state](#project-state-and-memory) · [Instruction files](#instruction-files) · [Judgment layer](#judgment-layer) · [Data and privacy](#data-and-privacy) · [Measured](#measured) · [Limits](#limits)
 
 ![Before compaction, two large tool results fill the transcript, each two prompts old. After the fold, the same messages remain and those results are one-line pointers; the originals are in an archive on disk, read_coordinate returns them, and a note sends the model back to INTENT.md and PHASE.md.](docs/fold.svg)
 
@@ -36,6 +39,8 @@ Answer `y` to add the marketplace, then pick a scope. The install may list the s
 
 </details>
 
+Then run **`/install`** in a session. It says whether a Jev key was found and from where (never the key itself), what each gate sends when it is on, and where the settings and the key can live so every Claude Code profile shares them. It sends nothing.
+
 Coming from context-fold or jev-harness: uninstall them first, then see [Upgrading](#upgrading).
 
 **Check that it works.** Have the model read a file of a few hundred lines, send two more prompts so that result is no longer recent, then run `/compact`. The status line shows `folded 1 · −Nk chars`. Ask for a line of that file without opening it again, and the model fetches it with `read_coordinate`.
@@ -44,25 +49,26 @@ Coming from context-fold or jev-harness: uninstall them first, then see [Upgradi
 
 | Command or tool | What it does |
 | --- | --- |
+| `/install` | What the plugin needs, what each gate sends, where the shared settings and key go; sends nothing |
 | `/compact` | Compacts now; the plugin answers by folding |
-| `read_coordinate` | The model's tool (`mcp__context-harness__read_coordinate`): returns a folded original, or a range of its lines |
+| `read_coordinate` | The model's tool (`mcp__context-harness__read_coordinate`): a folded original, a range of its lines (`offset`, `limit`), only the passages that bear on a `query`, or the whole of it (`full`) |
 | `/context-harness:tune-policy` | Measures your session and picks the fold settings with you |
 | `/context-harness:project-state` | Keeps `INTENT.md` and `PHASE.md` |
 | `/context-harness:consolidate` | Turns a stretch of work into memory that lasts |
-| `/jev-report` | What the [judgment layer](#judgment-layer-optional) recorded |
+| `/jev-report` | What the [judgment layer](#judgment-layer) recorded, and what each compaction held and saved |
 | `/jev-mark <id> y\|n` | Labels one of its records yes or no |
 | `/config` | All settings, under context-harness |
-| `/plugin configure context-harness@context-harness` | The Jev key, kept in secure storage |
 
 ## How folding works
 
-A tool result is folded when it is finished and large: older than the last `keepRecentTurns` turns, at least `minFoldChars` long, not an error shorter than `keepErrorsUnder`, and not from a tool in `keepTools`. A result whose pointer would be longer than itself stays.
+A tool result is folded when it is finished and large: older than the last `keepRecentTurns` turns, at least `minFoldChars` long, not an error shorter than `keepErrorsUnder`, and not from a tool in `keepTools`. A result whose pointer would be longer than itself stays, and so does every result in a message that holds an image or a document (see [Limits](#limits)).
 
-1. **At compaction** (`/compact`, the engine's automatic compaction, or step 3), the plugin answers in place of the engine's summary. Each result that qualifies is written to the archive and replaced by its pointer; every other message is handed back untouched.
-2. **If folding is not enough**, the engine's summary runs as before: on the whole transcript when nothing qualifies or the archive cannot be written ([Data and privacy](#data-and-privacy)), and on the folded one when it still fills more than 60% of the window (a fixed share, not `foldAtPercent`, measured on an estimate from the transcript's characters rather than a token count).
-3. **At an idle boundary**, when a turn has ended with the window at least `foldAtPercent` full, the plugin runs `/compact` itself, but only if folding would remove at least `minSavedPercent` of the transcript: each compaction rebuilds the prompt cache once. If the project keeps `PHASE.md` or an episode log ([Project state](#project-state-and-memory)) not written since the last compaction, it first asks the agent to bring them up to date and leaves that turn unfolded; the next turn end checks again, and after two requests it folds without asking.
-4. **After a compaction** that folded something, or in a project that keeps those files, it appends a note: how many results were folded, and which of the project's files to re-read.
-5. **`read_coordinate`** returns an original by the id in its pointer, 400 lines at a time unless `offset` and `limit` say otherwise.
+1. **At compaction** (`/compact`, the engine's automatic compaction, or step 4), the plugin answers in place of the engine's summary. Each result that qualifies is written to the archive and replaced by its pointer; every other message is handed back untouched.
+2. **If folding is not enough**, because the folded transcript still fills more than 60% of the window, the engine summarizes only what is older than the recent window. The recent turns are carried over as they stand, folded where the rule says so. The plugin then puts back two things a summary would lose: every prompt you wrote in the summarized part, in order, and one message listing the pointer of every folded original, so the model keeps a way to each. When nothing qualifies to fold or the archive cannot be written ([Data and privacy](#data-and-privacy)), the engine summarizes the whole transcript. The 60% is a fixed share, not `foldAtPercent`, measured on an estimate from the transcript's characters rather than a token count.
+3. **A summary waits for the status board.** If the project keeps `PHASE.md` or an episode log ([Project state](#project-state-and-memory)) not written since the last compaction, the summary is held back and the agent is asked to bring them up to date; the fold itself goes ahead. A summary replaces what you said with the agent's reading of it, and the board is where that reading lives. After two requests it summarizes without asking.
+4. **At an idle boundary**, when a turn has ended with the window at least `foldAtPercent` full, the plugin starts a compaction itself, but only if folding would remove at least `minSavedPercent` of the transcript: each compaction rebuilds the prompt cache once. It waits 30 seconds first and stands down if you write in that time, so your next request is never queued behind a summary. While a summary runs, the status line says so.
+5. **After a compaction** that folded something, or in a project that keeps those files, it appends a note: how many results were folded, which of the project's files to re-read, and, when there is a status board, that its Handoff section is what a session picking this up reads first.
+6. **`read_coordinate`** returns an original by the id in its pointer, 400 lines at a time unless `offset` and `limit` say otherwise. With a `query` and a Jev key, it returns only the passages that bear on it, quoted, and names by line number the ranges it left out; `full: true` returns the whole original. Without a key, a `query` returns the whole original rather than a fragment nothing chose.
 
 | Setting | Default | Why |
 | --- | --- | --- |
@@ -73,14 +79,17 @@ A tool result is folded when it is finished and large: older than the last `keep
 | `foldAtPercent` | 60 | When to fold by itself after a turn; 0 turns it off |
 | `minSavedPercent` | 20 | Fold by itself only when it saves at least this share |
 | `intentFile` | `INTENT.md` | The agent's reading of what you want; empty turns it off |
-| `phaseFile` | `PHASE.md` | The status board; empty turns it off |
+| `phaseFile` | `PHASE.md` | The status board, and the handoff; empty turns it off |
 | `episodeDir` | `sessions` | The episode log folder; empty turns it off |
+| `imageMaxPx` | 0 | Read images larger than this on their long side as a smaller copy; 0 is off |
 
-`/context-harness:tune-policy` measures your session with the folding code itself (`policy_report`), asks you a few questions, dry-runs the values you chose beside the current ones, and applies them only after you agree (`set_policy`, which writes these nine settings and no other).
+`/context-harness:tune-policy` measures your session with the folding code itself (`policy_report`), asks you a few questions, dry-runs the values you chose beside the current ones, and applies them only after you agree (`set_policy`, which writes the nine fold settings above it and no other).
+
+**Images.** An image costs about width × height / 750 tokens, up to roughly 1,550, and a fold never takes one, so a screenshot read early is paid for on every request until the session ends. With `imageMaxPx` set, a `Read` of a PNG or JPEG larger than that on its long side reads a copy downscaled with `sips` (macOS) or ImageMagick (`identify`, `convert`; Linux) instead; the copy is kept beside the archive and reused. If the size cannot be read or the resize fails, the original is read. A PDF and an image you paste keep their size.
 
 ## Compared with
 
-- **Claude Code's own compaction** replaces the conversation with a summary. context-harness answers the same compaction first and folds; the summary runs only when there is nothing to fold or the folded transcript still fills more than 60% of the window, and then on the folded transcript.
+- **Claude Code's own compaction** replaces the conversation with a summary. context-harness answers the same compaction first and folds; a summary runs only when folding is not enough, then only over what is older than the recent window, with your prompts and the folded pointers put back.
 - **Memory plugins** keep what was learned across sessions, in a store of their own. context-harness works inside a session: exact tool output stays one call away, and what should last is written by the agent into the project's own files (`INTENT.md`, `PHASE.md`, `sessions/`).
 
 ## Project state and memory
@@ -90,10 +99,12 @@ A compaction summary is never the source of truth; files the project keeps are. 
 | File | What it holds | Written when |
 | --- | --- | --- |
 | `INTENT.md` | The agent's reading of what you want: goal, done-when, scope, constraints, open questions, each line citing your own words | You state or change a goal |
-| `PHASE.md` | The status board you read: now, next, what needs you, done with evidence, resume notes; with several agents, who owns what | A step ends or blocks, you decide, before a handoff, when the plugin asks |
+| `PHASE.md` | The status board you read: now, next, what needs you, done with evidence, resume notes; with several agents, who owns what. Its **Handoff** section is for the session that picks the work up: the branch and worktree, whether the commits are pushed, what is uncommitted, the command to run first, and what not to repeat | A step ends or blocks, you decide, the commit state changes, before a handoff, when the plugin asks |
 | `sessions/<date>-<slug>.md` | Episodes: what happened, when, and the evidence (paths, commits, folded `read_coordinate` ids) | Each stretch of work, append-only |
 
-- `/context-harness:project-state` keeps `INTENT.md` and `PHASE.md`, alone or across several agent sessions, with the rules that keep one board consistent.
+- **A project with no status board is offered one.** On the first prompt you write, the plugin asks, in Claude Code's own dialog, whether to create `PHASE.md`; the agent then writes it. Three hours with no answer counts as yes. The question is asked once: a no is remembered, and so is a yes, across sessions. A run with nobody to ask (`claude -p`) is never taken as consent.
+- **The board is checked against the repository.** Before a fold, when the board is due, the request to bring it up to date also names what `git status` shows and the board's Handoff section should say: commits not pushed, files with uncommitted changes, or a board with no Handoff section at all.
+- `/context-harness:project-state` keeps `INTENT.md` and `PHASE.md`, alone or across several agent sessions, with the rules that keep one board consistent and the steps a resuming session follows.
 - `/context-harness:consolidate` turns a stretch of work into memory that lasts: the board, an episode, repeated procedures as project skills, lasting principles into `AGENTS.md` once you agree. A deterministic procedure that keeps repeating is proposed as code: see [just-dag-it](https://github.com/ysys143/just-dag-it).
 
 ## Instruction files
