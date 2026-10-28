@@ -46,7 +46,9 @@ test('defaults: a key in every source, every hook run, nothing sent and no judgm
   await drain()
 
   expect(io.fetches.length).toBe(0)
-  expect(io.writes.filter(w => w.path.includes('/records/'))).toEqual([])
+  // No gate recorded anything. The compaction's own record is not a judgment:
+  // it says what the fold did, and folding is on with no key at all.
+  expect(io.writes.filter(w => w.path.includes('/records/') && !w.path.includes('/compact/'))).toEqual([])
   // The instruction files load as they are, the duplicate included.
   expect(io.loaded[0]).toEqual(files)
   // The modes the engine filled in from the manifest.

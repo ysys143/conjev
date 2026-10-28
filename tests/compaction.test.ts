@@ -462,3 +462,27 @@ test('a prompt records when it arrived, so the fold can tell it came first', asy
   // stands down instead of compacting over the person's turn.
   expect(io.store.get(FOLD_ARMED_KEY)).toBeGreaterThan(0)
 })
+
+test('a compaction records its trigger, its wait and what it saved', async ($, on) => {
+  const io = setup(on, { transcript: OLD, env: KEY_ENV, fetch: everyQuestion, window: 10 })
+  await $.session.compact({ trigger: 'manual', messages: OLD } as never)
+  await drain()
+
+  const [row] = records(io.writes, 'compact')
+  expect(row).toBeDefined()
+  const facts = row?.facts as Record<string, string>
+  expect(facts.trigger).toBe('manual')
+  expect(Number(facts.messagesBefore)).toBe(OLD.length)
+  // Whether a summary ran is what the person's wait turned into.
+  expect(row?.decision).toBe('summarized')
+})
+
+test('a fold-only compaction is recorded as such, with no summary behind it', async ($, on) => {
+  const io = setup(on, { transcript: OLD, env: KEY_ENV, fetch: everyQuestion })
+  await $.session.compact({ trigger: 'manual', messages: OLD } as never)
+  await drain()
+
+  const [row] = records(io.writes, 'compact')
+  expect(row?.decision).toBe('folded')
+  expect((row?.facts as Record<string, string>).trigger).toBe('manual')
+})

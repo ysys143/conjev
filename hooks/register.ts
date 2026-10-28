@@ -49,6 +49,9 @@ const MAX_DEFERRALS = 2
 // moment: long enough to read the answer, short enough to run while they are away.
 const FOLD_IDLE_MS = 30_000
 
+/** One record per compaction: its trigger, its wait, and what it did or did not save. */
+export const COMPACT_POINT = 'compact'
+
 /** Where the armed automatic fold records the moment it began waiting. */
 export const FOLD_ARMED_KEY = 'fold-armed-at'
 
@@ -284,6 +287,28 @@ export const register: Register = (on, options) => {
     if (e.agentId !== undefined || e.trigger === 'precompute') return next(e)
 
     const sessionId = await $.session.id()
+    // What a compaction costs the person is wall-clock time, and what it buys
+    // is fewer tokens. Both are recorded, by trigger: only then can a later
+    // look say whether a summary was worth the wait it caused.
+    const startedAt = await $.clock.now()
+    const recordCompaction = async (isSummarized: boolean, before?: number, after?: number): Promise<void> => {
+      await writeRecord($, {
+        id: newId(startedAt),
+        ts: new Date(startedAt).toISOString(),
+        sessionId,
+        point: COMPACT_POINT,
+        mode: 'active',
+        sent: null,
+        hookMs: (await $.clock.now()) - startedAt,
+        decision: isSummarized ? 'summarized' : 'folded',
+        facts: {
+          trigger: e.trigger,
+          messagesBefore: String(e.messages.length),
+          ...(before === undefined ? {} : { tokensBefore: String(before) }),
+          ...(after === undefined ? {} : { tokensAfter: String(after) }),
+        },
+      }).catch(() => undefined)
+    }
     // Nothing in the types promises the api view here; without it no message
     // can be shown free of media, so nothing folds and the engine summarizes.
     const view = await $.session.messages({ as: 'api' }).then(messageViewOf, () => new Map() as MessageView)
@@ -303,7 +328,10 @@ export const register: Register = (on, options) => {
     const outcome = foldTranscript(e.messages, policy, view)
     if (outcome.archived.length === 0) {
       const summarized = await next(e)
-      if (summarized.skip === undefined) await after(0, [], true)
+      if (summarized.skip === undefined) {
+        await recordCompaction(true, summarized.tokensBefore, summarized.tokensAfter)
+        await after(0, [], true)
+      }
 
       return summarized
     }
@@ -313,7 +341,10 @@ export const register: Register = (on, options) => {
     } catch (error) {
       $.ui.log(`${$.plugin.name}: could not keep folded results, summarizing instead (${String(error)})`)
       const summarized = await next(e)
-      if (summarized.skip === undefined) await after(0, [], true)
+      if (summarized.skip === undefined) {
+        await recordCompaction(true)
+        await after(0, [], true)
+      }
 
       return summarized
     }
@@ -369,6 +400,7 @@ export const register: Register = (on, options) => {
     runtime.folded.results += outcome.archived.length
     runtime.folded.savedChars += outcome.savedChars
     showStatus($)
+    await recordCompaction(isSummarized, below?.tokensBefore, below?.tokensAfter)
     await after(
       outcome.archived.length,
       outcome.archived.map(item => item.id),
