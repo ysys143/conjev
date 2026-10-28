@@ -17,12 +17,15 @@ they should rotate it.
 
 - Answer in the person's language.
 - Before any result, say in a sentence or two what this is about: context-harness
-  folds old tool output on its own, and that needs no key. A few optional
-  checks, the gates, ask Jev, a judging model run by TypeSafe, and only those
-  need a TypeSafe API key. Every gate is off until the person turns it on.
-- Then give the result as what it means for them: a key is set up, so the gates
-  can be turned on; or no key is set up yet, so the gates cannot run and folding
-  works as before. Do not open with a file path, a missing file, or a list of
+  is folding and Jev together. Folding keeps old tool output exact on disk
+  behind one-line pointers; Jev, a judging model run by TypeSafe, decides what
+  to fold and keep and checks the moments an agent most often gets wrong. Jev
+  needs a TypeSafe API key, and setting one up is what this command is for.
+  Folding alone also works without a key, as a reduced mode; do not present
+  the key as an optional extra.
+- Then give the result as what it means for them: a key is set up, so the Jev
+  half can be turned on; or no key is set up yet, so only folding by rule runs
+  for now, and placing a key is the next step. Do not open with a file path, a missing file, or a list of
   what you did not check. When none was found, do not list the places the
   plugin looked either: they are for 4, when a key that was placed still is not
   found.
@@ -67,8 +70,8 @@ set them unasked.
 Ask one plain question: **do you already have a TypeSafe key?**
 
 - **No.** Give the address, https://console.typesafe.ai/home, and say that
-  nothing else can be done until they have one. Folding keeps working; the gates
-  stay off. Then stop.
+  getting one is the next step. Until then the plugin runs folding by rule
+  only, without Jev. Then stop.
 - **Yes.** Offer these ways and let them pick. Do not pick for them.
 
   1. **If the key is already on this machine**, you can place it without ever

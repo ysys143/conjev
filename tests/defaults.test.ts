@@ -124,6 +124,9 @@ test('the command speaks to someone who has never heard of the key', () => {
   expect(COMMAND).toContain('do not list the places the\n  plugin looked')
   expect(COMMAND).toContain('The first time you name a file or a setting, say what it is')
   expect(COMMAND).toContain("Answer in the person's language")
+  // Folding and Jev are one product; without a key is the reduced mode, not the default.
+  expect(COMMAND).toContain('context-harness\n  is folding and Jev together')
+  expect(COMMAND).toContain('do not present\n  the key as an optional extra')
 })
 
 test('the command never tells the agent to read or print a key, or where one person keeps theirs', () => {
