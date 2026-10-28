@@ -9,7 +9,7 @@
 import type { EngineInterface } from 'claude-code'
 import type { Archived } from './fold'
 import type { ShadowRecord } from './report'
-import { moveInto } from './move'
+import { moveInto, type Moved } from './move'
 import { madeDirs } from './state'
 
 export const STATE_DIR = '.conjev/state'
@@ -160,11 +160,11 @@ export async function cleanupRecords($: EngineInterface): Promise<void> {
  * session start, so what a session on the old code wrote since is merged too.
  * Returns whether there was anything to move.
  */
-export async function migrateState($: EngineInterface): Promise<boolean> {
+export async function migrateState($: EngineInterface): Promise<Moved> {
   const home = await homeOf($)
-  if (home === undefined) return false
+  if (home === undefined) return undefined
   const moved = await moveInto($, oldStateRoot(home), stateRoot(home))
-  if (moved) madeDirs.clear()
+  if (moved !== undefined) madeDirs.clear()
 
   return moved
 }

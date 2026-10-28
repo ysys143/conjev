@@ -89,6 +89,7 @@ export const setup = (on: On, s: Setup = {}) => {
   const warned: string[] = []
   const toasts: string[] = []
   const logs: string[] = []
+  const debugLogs: string[] = []
   const appended: string[] = []
   const submitted: { text: string; context?: readonly string[] }[] = []
   // What each engine summary was handed: one entry per call, its messages as text or '-'. 
@@ -233,6 +234,11 @@ export const setup = (on: On, s: Setup = {}) => {
     return { value: undefined }
   })
   on('ui.log', (_, e) => {
+    // Lines sent to the debug log are kept apart: they never reach the screen.
+    if ((e as { to?: string }).to === 'debug') {
+      debugLogs.push(String(e.text))
+      return { value: undefined }
+    }
     logs.push(String(e.text))
     return { value: undefined }
   })
@@ -283,7 +289,7 @@ export const setup = (on: On, s: Setup = {}) => {
     return { result: 'ok' }
   })
 
-  return { env, files, fetches, pageFetches, writes, runs, disk, store, statuses, warned, toasts, logs, appended, submitted, summarizedOver, summarizedWith, configured, order, api, commands, loaded, sleeps, registered }
+  return { env, files, fetches, pageFetches, writes, runs, disk, store, statuses, warned, debugLogs, toasts, logs, appended, submitted, summarizedOver, summarizedWith, configured, order, api, commands, loaded, sleeps, registered }
 }
 
 export const records = (writes: readonly { path: string; text: string }[], point: string) =>

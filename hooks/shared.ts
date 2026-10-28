@@ -15,7 +15,7 @@
 // read is not an error — every value then comes from the older source, which is
 // exactly how the plugin behaved before this existed.
 import type { EngineInterface } from 'claude-code'
-import { moveInto, privateDir } from './move'
+import { moveInto, privateDir, type Moved } from './move'
 
 /** Where the shared settings and key live, under the person's home folder. */
 export const SHARED_DIR = '.conjev'
@@ -83,19 +83,20 @@ const SHARED_FILES = [SHARED_KEY, SHARED_CONSENT, SHARED_ONBOARDING, SHARED_CONF
  * session between releases may have made ~/.conjev/state first. Runs at every
  * session start; returns whether anything moved.
  */
-export async function migrateShared($: EngineInterface, home: string | undefined): Promise<boolean> {
-  if (home === undefined) return false
+export async function migrateShared($: EngineInterface, home: string | undefined): Promise<Moved> {
+  if (home === undefined) return undefined
   const [from, to] = [`${home}/${PREVIOUS_SHARED_DIR}`, sharedDirOf(home)]
-  if (!(await $.fs.exists(from))) return false
+  if (!(await $.fs.exists(from))) return undefined
   await privateDir($, to)
-  let moved = false
+  let moved: Moved
   for (const name of SHARED_FILES) {
     if (!(await $.fs.exists(`${from}/${name}`)) || (await $.fs.exists(`${to}/${name}`))) continue
     const { exitCode } = await $.process.run(['mv', `${from}/${name}`, `${to}/${name}`])
     if (exitCode !== 0) throw new Error(`mv exited ${exitCode}`)
-    moved = true
+    moved = 'moved'
   }
-  if (await moveInto($, `${from}/state`, `${to}/state`)) moved = true
+  const state = await moveInto($, `${from}/state`, `${to}/state`)
+  if (moved === undefined) moved = state
   await $.process.run(['find', from, '-depth', '-type', 'd', '-empty', '-delete'])
 
   return moved

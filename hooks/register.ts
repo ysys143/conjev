@@ -19,6 +19,7 @@ import { harnessSettingsFrom, usesJev, type HarnessSettings } from './settings'
 import { newId, retuneRuntime, runtime, startRuntime } from './state'
 import { OFFER_TIMEOUT_MS, boardHasHandoff, boardOfferStep, handoffGap, offerAccepted, repoStateOf, type BoardOffer } from './repostate'
 import { imageToRead } from './image-size'
+import type { Moved } from './move'
 import { SHARED_CONFIG, SHARED_CONSENT, SHARED_KEY, SHARED_ONBOARDING, migrateShared, readShared, sharedDirOf, writeSharedRecord, type Shared } from './shared'
 import { DEFAULT_RELEVANCE, omittedRanges, selectRelevant } from './relevance'
 import { hintWithStatus, showStatus } from './status'
@@ -205,6 +206,16 @@ async function sharedState(
   return { gates, policy: settingsFrom(merged), shared, key }
 }
 
+/**
+ * The first move is worth a line on screen; the merges after it, of what a
+ * session on an older release wrote since, would say the same at every start,
+ * so they go to the debug log.
+ */
+function announce($: EngineInterface, moved: Moved, text: string): void {
+  if (moved === 'moved') $.ui.log(text)
+  else if (moved === 'merged') $.ui.log(`${text} (merged what an older release wrote since)`, { to: 'debug' })
+}
+
 export const register: Register = (on, options) => {
   let policySettings = settingsFrom(options)
   let policy = makePolicy(policySettings)
@@ -231,7 +242,7 @@ export const register: Register = (on, options) => {
   on('session.start', async ($, e, next) => {
     // Before anything reads it: the folder from before the rename becomes ~/.conjev.
     try {
-      if (await migrateShared($, await homeOf($))) $.ui.log(`moved ~/.context-harness to ~/.conjev`)
+      announce($, await migrateShared($, await homeOf($)), 'moved ~/.context-harness to ~/.conjev')
     } catch (error) {
       $.ui.log(`could not move ~/.context-harness to ~/.conjev (${String(error)})`)
     }
@@ -319,7 +330,7 @@ export const register: Register = (on, options) => {
     }
     // B2: the state moves under ~/.conjev once; the old root stays readable.
     try {
-      if (await migrateState($)) $.ui.log(`moved its records and folded originals to ~/.conjev/state`)
+      announce($, await migrateState($), 'moved its records and folded originals to ~/.conjev/state')
     } catch (error) {
       $.ui.log(`could not move its state, reading it where it is (${String(error)})`)
     }

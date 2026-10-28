@@ -21,16 +21,20 @@ export async function privateDir($: EngineInterface, dir: string): Promise<void>
  * Moves `from` to `to`. With no `to`, one `mv`. With both, the files `to` lacks
  * move into it (one `rsync`, not one process a file: a records folder holds
  * thousands), files both hold stay in `from`, and folders left empty in `from`
- * are removed. Returns whether a file moved.
+ * are removed. Says how: `moved` (the whole folder, the first time), `merged`
+ * (files `to` lacked, as when a session on an older release wrote the old
+ * folder since), or undefined when no file moved.
  */
-export async function moveInto($: EngineInterface, from: string, to: string): Promise<boolean> {
-  if (!(await $.fs.exists(from))) return false
+export type Moved = 'moved' | 'merged' | undefined
+
+export async function moveInto($: EngineInterface, from: string, to: string): Promise<Moved> {
+  if (!(await $.fs.exists(from))) return undefined
   if (!(await $.fs.exists(to))) {
     await privateDir($, to.slice(0, to.lastIndexOf('/')))
     await run($, ['mv', from, to])
     await run($, ['chmod', '700', to])
 
-    return true
+    return 'moved'
   }
   const before = await filesUnder($, from)
   await run($, ['rsync', '-a', '--ignore-existing', '--remove-source-files', `${from}/`, `${to}/`])
@@ -44,7 +48,7 @@ export async function moveInto($: EngineInterface, from: string, to: string): Pr
   }
   await run($, ['find', from, '-depth', '-type', 'd', '-empty', '-delete'])
 
-  return left.length < before.length
+  return left.length < before.length ? 'merged' : undefined
 }
 
 /** The files under `dir`, as paths; one `find`, since there can be thousands. */

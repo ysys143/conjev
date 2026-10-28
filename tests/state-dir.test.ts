@@ -168,3 +168,11 @@ test('a copy with the same contents is removed from the old folder; nothing move
   // Nothing moved, so nothing is said.
   expect(io.logs.filter(line => line.startsWith('moved'))).toEqual([])
 })
+
+test('merging what an older release wrote since goes to the debug log, not the screen', async ($, on) => {
+  const io = setup(on, { files: { [`${OLD}/records/s/stop/1.json`]: '{}', [`${NEW}/records/t/stop/1.json`]: '{}' } })
+  await $.session.start(START)
+  expect(io.files[`${NEW}/records/s/stop/1.json`]).toBe('{}')
+  expect(io.logs.filter(line => line.startsWith('moved'))).toEqual([])
+  expect(io.debugLogs.some(line => line.includes('merged what an older release wrote since'))).toBe(true)
+})
