@@ -486,3 +486,22 @@ test('a fold-only compaction is recorded as such, with no summary behind it', as
   expect(row?.decision).toBe('folded')
   expect((row?.facts as Record<string, string>).trigger).toBe('manual')
 })
+
+test('the status line says a summary is running, and stops saying it after', async ($, on) => {
+  const io = setup(on, { transcript: OLD, env: KEY_ENV, fetch: everyQuestion, window: 10 })
+  await $.session.compact({ trigger: 'manual', messages: OLD } as never)
+  await drain()
+
+  // The line was shown while the summary ran: the one wait that lasts seconds.
+  expect(io.statuses.some(text => text.includes('summarizing'))).toBe(true)
+  // And it is gone once the summary returned.
+  expect(io.statuses.at(-1) ?? '').not.toContain('summarizing')
+})
+
+test('a fold with no summary behind it never says it is summarizing', async ($, on) => {
+  const io = setup(on, { transcript: OLD, env: KEY_ENV, fetch: everyQuestion })
+  await $.session.compact({ trigger: 'manual', messages: OLD } as never)
+  await drain()
+
+  expect(io.statuses.some(text => text.includes('summarizing'))).toBe(false)
+})

@@ -5,6 +5,11 @@ import type { HarnessSettings } from './settings'
 import { usesJev } from './settings'
 import { runtime, type Counts } from './state'
 
+/** While the engine's summary runs: the one wait that lasts seconds. */
+export function summarizingStatus(isSummarizing: boolean | undefined): string | undefined {
+  return isSummarizing === true ? 'summarizing the older turns…' : undefined
+}
+
 /** The fold's part; undefined before the first fold. */
 export function foldStatus(folded: { results: number; savedChars: number }): string | undefined {
   return folded.results === 0 ? undefined : `folded ${folded.results} · −${Math.round(folded.savedChars / 1000)}k chars`
@@ -53,6 +58,7 @@ export function statusLine(parts: readonly (string | undefined)[]): string | und
 export function showStatus($: EngineInterface): void {
   const settings = runtime.settings
   const line = statusLine([
+    summarizingStatus(runtime.isSummarizing),
     foldStatus(runtime.folded),
     settings === undefined ? undefined : jevStatus(settings, runtime.counts, runtime.key === null, runtime.fragments, runtime.filter?.droppedChars),
   ])

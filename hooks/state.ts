@@ -24,6 +24,12 @@ export const runtime: {
   filter?: { stateKey: string; chunks: Chunk[]; drops: Map<string, Chunk>; droppedChars: number; deferred: Chunk[] }
   /** The browser tools found installed, once per process. */
   browsers?: Detected
+  /**
+   * Set while the engine's summary runs, and cleared after. A summary is the
+   * one thing here that takes seconds, and the person is owed a sign that the
+   * wait is the plugin's and not their own doing.
+   */
+  isSummarizing?: boolean
 } = { counts: { judged: 0, failed: 0, floor: 0, toolJudged: 0, attached: 0, foldJudged: 0, webRead: 0, foldBlocks: 0, browserRouted: 0 }, folded: { results: 0, savedChars: 0 }, pending: new Map() }
 
 // Folders already made private in this process.

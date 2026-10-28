@@ -385,7 +385,15 @@ export const register: Register = (on, options) => {
     }
 
     const split = cut > 0 && !isDeferred ? splitForSummary(outcome.messages, cut) : undefined
-    const below = split !== undefined ? await next({ ...e, messages: split.older }) : undefined
+    // A summary is the one step here that lasts seconds: say so while it runs.
+    runtime.isSummarizing = split !== undefined
+    if (runtime.isSummarizing) showStatus($)
+    let below
+    try {
+      below = split !== undefined ? await next({ ...e, messages: split.older }) : undefined
+    } finally {
+      runtime.isSummarizing = false
+    }
     // A summary the engine refused leaves the conversation as it is: the
     // compaction does not stand, so nothing is recorded or counted.
     if (below !== undefined && below.skip !== undefined) return below
