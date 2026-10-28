@@ -209,7 +209,7 @@ test('status keeps the fold part when the judgment layer updates it', { options:
   await settle(() => records(io.writes, 'stop').length > 0)
   const last = io.statuses.at(-1) ?? ''
   expect(last.startsWith('folded 1 · ')).toBe(true)
-  expect(last).toContain(' | jev · stop shadow 0 judged, 1 failed')
+  expect(last).toContain(' | jev 0, 1 failed · shadow: stop')
 })
 
 test('after a fold the model is pointed back at what was folded', async ($, on) => {
@@ -388,7 +388,7 @@ test('status: a gate that recorded something shows the line', { options: { toolG
   await $.session.start(START)
   expect(io.statuses).toEqual([])
   await $.tool.call({ tool: 'Read', file_path: '/proj/.env' })
-  expect(io.statuses.at(-1)).toBe('jev · tool active 1 hits')
+  expect(io.statuses.at(-1)).toBe('jev 0 · floor 1 hit')
 })
 
 test('a crowded window is partly summarized: the engine gets the old part, the recent stays whole', { options: { foldJev: 'shadow' } }, async ($, on) => {

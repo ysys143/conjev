@@ -344,3 +344,18 @@ test('the omitted line ranges are what the kept text does not contain', () => {
   // A block is trimmed as it is parsed, so a line differing only in padding matches.
   expect(omittedRanges('  one  \ntwo', 'one')).toEqual([{ from: 2, to: 2 }])
 })
+
+// Every Jev gate is on by default now; a part per gate ran past a terminal's
+// width and the line was cut. The total stays one short line.
+import { jevStatus } from '../hooks/status'
+import { harnessSettingsFrom } from '../hooks/settings'
+
+test('the status line stays short with every gate on and busy', () => {
+  const all = Object.fromEntries(['stopGate', 'toolGate', 'toolJev', 'instructions', 'foldJev', 'webRead', 'foldBlocks', 'browserRoute', 'instructionFilter'].map(k => [k, 'active']))
+  const busy = { judged: 1234, failed: 56, floor: 78, toolJudged: 9012, attached: 3456, foldJudged: 789, webRead: 1234, foldBlocks: 5678, browserRouted: 901 }
+  const line = jevStatus(harnessSettingsFrom(all), busy, false, 123_456)!
+  expect(line.length <= 60).toBe(true)
+  expect(line).toBe('jev 22304, 56 failed · floor 78 hits · −123.5k dup')
+  // A gate held in shadow is the one thing named, since it is not the default.
+  expect(jevStatus(harnessSettingsFrom({ ...all, stopGate: 'shadow' }), busy, false)).toContain('shadow: stop')
+})

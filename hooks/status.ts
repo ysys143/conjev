@@ -25,7 +25,6 @@ export function jevStatus(
   settings: HarnessSettings,
   counts: Counts,
   hasNoKey: boolean,
-  fragments: { list: readonly unknown[]; hash: string } | undefined,
   filtered = 0,
 ): string | undefined {
   const isJev = usesJev(settings)
@@ -33,21 +32,31 @@ export function jevStatus(
   if (isJev && hasNoKey) return 'jev: no key'
   const recorded = counts.judged + counts.failed + counts.floor + counts.toolJudged + counts.attached + counts.foldJudged + counts.webRead + counts.foldBlocks + counts.browserRouted
   if (recorded === 0 && filtered === 0) return undefined
-  const parts = ['jev']
-  if (settings.stopGate !== 'off') parts.push(`stop ${settings.stopGate} ${counts.judged} judged${counts.failed ? `, ${counts.failed} failed` : ''}`)
-  if (settings.toolGate !== 'off') parts.push(`tool ${settings.toolGate} ${counts.floor} hits`)
-  if (settings.toolJev !== 'off') parts.push(`tool jev ${settings.toolJev} ${counts.toolJudged} judged`)
-  if (settings.instructions !== 'off') {
-    parts.push(`instr ${settings.instructions} ${fragments ? `${fragments.list.length} #${fragments.hash.slice(0, 6)}` : '-'}, ${counts.attached} attached`)
-  }
-  if (settings.foldJev !== 'off') parts.push(`fold ${settings.foldJev} ${counts.foldJudged} judged`)
-  if (settings.webRead !== 'off') parts.push(`web ${settings.webRead} ${counts.webRead} read`)
-  if (settings.foldBlocks !== 'off') parts.push(`fold blocks ${settings.foldBlocks} ${counts.foldBlocks} judged`)
-  if (settings.browserRoute !== 'off') parts.push(`browser ${settings.browserRoute} ${counts.browserRouted} judged`)
-  if (settings.instructionFilter !== 'off') parts.push(`instr filter ${settings.instructionFilter}${filtered ? ` −${Math.round(filtered / 100) / 10}k dup` : ''}`)
+  // One total, not a part per gate: with every Jev gate on by default, a part
+  // each ran past the width of a terminal. Per-gate counts are /jev-report's.
+  // What is not the default still shows: a gate held in shadow, and failures.
+  const judged = counts.judged + counts.toolJudged + counts.attached + counts.foldJudged + counts.webRead + counts.foldBlocks + counts.browserRouted
+  const parts = [`jev ${judged}${counts.failed ? `, ${counts.failed} failed` : ''}`]
+  if (counts.floor > 0) parts.push(`floor ${counts.floor} hit${counts.floor === 1 ? '' : 's'}`)
+  if (filtered > 0) parts.push(`−${Math.round(filtered / 100) / 10}k dup`)
+  const shadowed = SHADOW_NAMES.filter(([key]) => settings[key] === 'shadow').map(([, name]) => name)
+  if (shadowed.length > 0) parts.push(`shadow: ${shadowed.join(', ')}`)
 
   return parts.join(' · ')
 }
+
+/** The short name each Jev gate goes by when it is held in shadow. */
+const SHADOW_NAMES: readonly (readonly [keyof HarnessSettings, string])[] = [
+  ['stopGate', 'stop'],
+  ['toolGate', 'tool'],
+  ['toolJev', 'tool jev'],
+  ['instructions', 'instr'],
+  ['foldJev', 'fold'],
+  ['webRead', 'web'],
+  ['foldBlocks', 'blocks'],
+  ['browserRoute', 'browser'],
+  ['instructionFilter', 'filter'],
+]
 
 export function statusLine(parts: readonly (string | undefined)[]): string | undefined {
   const shown = parts.filter((part): part is string => part !== undefined)
@@ -60,7 +69,7 @@ export function showStatus($: EngineInterface): void {
   const line = statusLine([
     summarizingStatus(runtime.isSummarizing),
     foldStatus(runtime.folded),
-    settings === undefined ? undefined : jevStatus(settings, runtime.counts, runtime.key === null, runtime.fragments, runtime.filter?.droppedChars),
+    settings === undefined ? undefined : jevStatus(settings, runtime.counts, runtime.key === null, runtime.filter?.droppedChars),
   ])
   if (line !== undefined) $.ui.status(line)
 }
