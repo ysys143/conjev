@@ -31,6 +31,15 @@ test('the anchor note points at the canonical files in order and copies nothing 
   expect(text).toContain('- INTENT.md: the person\'s intent, last written 2026-10-21T02:00Z\n- PHASE.md: the status board, last written 2026-10-21T06:00Z')
   expect(text).toContain('Earlier episodes are in sessions/ (newest written 2026-10-21T08:00Z)')
   expect(text).not.toContain('consolidate')
+  // The status board is also the handoff: a session that picks this up reads
+  // its Handoff section before touching anything, and the note says so.
+  expect(text).toContain('"Handoff" section is what a session that picks this up reads first')
+})
+
+test('with no status board the note says nothing about a Handoff section', () => {
+  const withoutBoard = FILES.filter(file => file.role !== 'phase')
+
+  expect(anchorNote(withoutBoard, 3, [])).not.toContain('Handoff')
 })
 
 test('the anchor note names what was not written since the previous compaction', () => {

@@ -44,6 +44,16 @@ export async function repoStateOf($: EngineInterface): Promise<RepoState | undef
 }
 
 /**
+ * What the person's answer to the offer means. The engine hands back the label
+ * they picked, or what they typed under "Other", so the test is on the word
+ * they used rather than on an exact string: "Create it" and "create one, yes"
+ * both count, and anything else does not.
+ */
+export function offerAccepted(answer: string): boolean {
+  return answer.toLowerCase().includes('create')
+}
+
+/**
  * What the handoff section of the status board says, as far as this can tell.
  * A board that mentions no handoff section at all cannot have described the
  * state, so it is reported as missing rather than as empty.

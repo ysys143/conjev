@@ -15,7 +15,7 @@ import { judgeDeferred, omcVersionsOf, recordFilter, recordToolUse, stateKeyOf }
 import { clip, scrub } from './scrub'
 import { harnessSettingsFrom, usesJev } from './settings'
 import { newId, runtime, startRuntime } from './state'
-import { OFFER_TIMEOUT_MS, boardHasHandoff, boardOfferStep, handoffGap, repoStateOf, type BoardOffer } from './repostate'
+import { OFFER_TIMEOUT_MS, boardHasHandoff, boardOfferStep, handoffGap, offerAccepted, repoStateOf, type BoardOffer } from './repostate'
 import { showStatus } from './status'
 import { PARAGRAPH_CHARS, STOP_MESSAGE, STOP_POINT, STOP_QUESTION, announcesByRule, lastParagraph, stopSkipReason } from './stop-gate'
 import { cleanupRecords, homeOf, legacyArchiveRoot, readArchived, readRecords, stateRoot, writeArchive, writeLabel, writeRecord } from './storage'
@@ -135,7 +135,7 @@ async function boardOffer($: EngineInterface, phaseFile: string): Promise<string
   } catch {
     return undefined
   }
-  const wanted = answer.toLowerCase().includes('create')
+  const wanted = offerAccepted(answer)
   await $.store.set(OFFER_KEY, wanted ? 'accepted' : 'declined')
   await $.store.delete(OFFER_ASKED_KEY)
 
@@ -547,7 +547,8 @@ export const register: Register = (on, options) => {
     // that the fold is armed and what it will compare against.
     $.clock.after(FOLD_IDLE_MS, () => {
       // A prompt that arrived while this waited took the moment back.
-      if (!stillIdle(state.promptedAt, at)) {
+      const holds = stillIdle(state.promptedAt, at)
+      if (!holds) {
         isFoldScheduled = false
 
         return

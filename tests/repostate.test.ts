@@ -1,5 +1,5 @@
 import { expect, test } from 'claude-code/testing'
-import { OFFER_TIMEOUT_MS, boardHasHandoff, boardOfferStep, handoffGap } from '../hooks/repostate'
+import { OFFER_TIMEOUT_MS, boardHasHandoff, boardOfferStep, handoffGap, offerAccepted } from '../hooks/repostate'
 test('probe', async () => {
   expect(boardHasHandoff('## Handoff\n- x')).toBe(true)
   expect(boardHasHandoff('## Now\nx')).toBe(false)
@@ -24,4 +24,24 @@ test('an offer to create the status board: ask, wait, then accept the silence', 
   expect(boardOfferStep('accepted', now - OFFER_TIMEOUT_MS * 2, now)).toBe('leave')
   // Nobody heard the question, so silence is not consent.
   expect(boardOfferStep(undefined, undefined, now)).toBe('ask')
+})
+
+test('the answer to the offer is read by the word the person used, not by an exact match', () => {
+  // The engine returns the label they picked, or whatever they typed under
+  // "Other": both may be worded differently from the label.
+  expect(offerAccepted('Create it')).toBe(true)
+  expect(offerAccepted('create one')).toBe(true)
+  expect(offerAccepted('Yes, please create it')).toBe(true)
+  expect(offerAccepted('Not now')).toBe(false)
+  expect(offerAccepted('no')).toBe(false)
+  expect(offerAccepted('')).toBe(false)
+})
+
+test('a settled offer is never asked again, in this session or the next', () => {
+  const now = 1_000_000_000_000
+  // Both settled answers hold, however long ago they were given.
+  expect(boardOfferStep('accepted', undefined, now)).toBe('leave')
+  expect(boardOfferStep('declined', undefined, now)).toBe('leave')
+  // And a settled answer outranks the timeout that would otherwise accept.
+  expect(boardOfferStep('declined', now - OFFER_TIMEOUT_MS * 2, now)).toBe('leave')
 })

@@ -519,7 +519,6 @@ test('a note before a fold names what the board left out: unpushed work', { opti
   })
   await $.turn.complete({ answer: '', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
   await settle(() => io.appended.length > 0)
-  console.log('PROBE RUNS', JSON.stringify(io.runs), 'APP', JSON.stringify(io.appended).slice(0, 200), 'LOGS', JSON.stringify(io.logs).slice(0, 300))
 
   const note = io.appended.join('\n')
   expect(note).toContain('3 commit(s) not pushed')

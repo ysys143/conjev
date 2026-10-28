@@ -38,8 +38,6 @@ export type Setup = {
   startedAt?: number
   /** What `git status --porcelain=v2 --branch` answers, as the repository would print it. */
   gitStatus?: string
-  /** What the person picks in `$.ui.ask`, as the label reads; an Error means it was refused, as in `-p`. */
-  askAnswer?: string | Error
   /** What the engine's own compaction beneath answers: a summary, or a skip. */
   compactBelow?: 'summary' | 'skip'
   /** The plugin folder's .env, wherever the plugin root is. */
