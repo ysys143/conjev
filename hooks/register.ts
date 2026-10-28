@@ -1,5 +1,5 @@
 import type { Register } from 'claude-code'
-import { DEFAULT_SETTINGS, SETTING_KEYS, dueBeforeFold, dueNote, foldTranscript, makePolicy, messageViewOf, partialCut, pointerMessage, reportFor, settingsFrom, sliceLines, splitForSummary, transcriptChars, type MessageView, type PolicySettings } from './fold'
+import { DEFAULT_SETTINGS, SETTING_KEYS, dueBeforeFold, dueNote, foldTranscript, makePolicy, messageViewOf, partialCut, pointerMessage, reportFor, settingsFrom, sliceLines, splitForSummary, stillIdle, transcriptChars, type MessageView, type PolicySettings } from './fold'
 import { routeBrowser } from './browser-flow'
 import { BROWSER_BLOCK, BROWSER_POINT } from './browser-route'
 import { FOLD_BLOCKS_POINT, judgeBlocks, withKeptBlocks } from './fold-blocks'
@@ -44,6 +44,10 @@ const READ_LIMIT = 400
 // How many idle boundaries a fold waits for the status board and the episode
 // log to be brought up to date before it goes ahead anyway.
 const MAX_DEFERRALS = 2
+
+// How long the automatic fold waits for the person to type before it takes the
+// moment: long enough to read the answer, short enough to run while they are away.
+const FOLD_IDLE_MS = 30_000
 
 const SETTINGS_SCHEMA = {
   type: 'object',
@@ -178,6 +182,9 @@ export const register: Register = (on, options) => {
   // E1, conditional fragments: appended to the prompt that first meets their
   // condition, and again only once the conversation no longer carries them.
   on('prompt.submit', async ($, e, nextBelow) => {
+    // The person is here: an automatic fold waiting for a quiet moment will see
+    // this and stand down, so their request is never queued behind a summary.
+    if (!e.isMeta && e.command === undefined) state.promptedAt = await $.clock.now()
     // Browser routing first: a prompt that needs a browser operated gets the tool to use, once
     // while the conversation carries it. Whatever the fragments below decide, the block rides along.
     const origin0 = e.origin
@@ -402,7 +409,18 @@ export const register: Register = (on, options) => {
     }
 
     isFoldScheduled = true
-    $.clock.after(1000, () => {
+    // The fold runs a compaction, and a compaction can run the engine's
+    // summary: seconds, at the moment the person finishes reading an answer.
+    // So it waits for a quiet moment, and stands down if they type first —
+    // their request is never queued behind a summary.
+    const at = await $.clock.now()
+    $.clock.after(FOLD_IDLE_MS, () => {
+      // A prompt that arrived while this waited took the moment back.
+      if (!stillIdle(state.promptedAt, at)) {
+        isFoldScheduled = false
+
+        return
+      }
       // /compact as the person would type it: a compaction this plugin starts
       // with $.session.compact() skips this plugin's own session.compact hook,
       // so it would summarize instead of fold. Queued until the session is idle.

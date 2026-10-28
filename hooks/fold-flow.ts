@@ -19,6 +19,9 @@ export type Continuity = {
   // The turn the compaction itself ends can still read the transcript as it
   // was before it: skip the first idle boundary after one.
   isJustCompacted: boolean
+  // When the person last wrote, in ms. An automatic fold that was waiting for a
+  // quiet moment stands down if this moved past the moment it began waiting.
+  promptedAt?: number
 }
 
 /** The project's canonical files that exist now; the episode folder by its newest file. */

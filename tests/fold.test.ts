@@ -1,6 +1,6 @@
 import type { SessionMessage } from 'claude-code'
 import { expect, test } from 'claude-code/testing'
-import { FOLD_MARK, foldTranscript, partialCut, pointerFor, shouldFold, sliceLines, type FoldCandidate, type FoldPolicy } from '../hooks/fold'
+import { FOLD_MARK, foldTranscript, partialCut, pointerFor, shouldFold, sliceLines, stillIdle, type FoldCandidate, type FoldPolicy } from '../hooks/fold'
 
 const BIG = Array.from({ length: 300 }, (_, i) => `line ${i + 1}`).join('\n')
 
@@ -145,4 +145,15 @@ test('the partial cut never splits a tool_use from its tool_result', () => {
   // The kept window opens with the prompt whose call and answer follow it.
   expect(recent[1]?.toolUses[0]?.tool_use_id).toBe('toolu_new')
   expect(recent[2]?.toolResults?.[0]?.tool_use_id).toBe('toolu_new')
+})
+
+test('an automatic fold stands down when the person writes first', () => {
+  // Nobody wrote while it waited: the moment is still its own.
+  expect(stillIdle(undefined, 1000)).toBe(true)
+  // They wrote before it began waiting: an earlier turn, not this one.
+  expect(stillIdle(900, 1000)).toBe(true)
+  // At the same instant is not after it, so the fold keeps the moment.
+  expect(stillIdle(1000, 1000)).toBe(true)
+  // They wrote while it waited: their turn goes first.
+  expect(stillIdle(1001, 1000)).toBe(false)
 })

@@ -284,6 +284,15 @@ export function turnsAgoOf(messages: readonly SessionMessage[]): number[] {
 }
 
 /**
+ * Whether an automatic fold that began waiting at `waitedFrom` still holds the
+ * moment. The person's request came first if they wrote after it began: their
+ * turn is never queued behind a summary the plugin started.
+ */
+export function stillIdle(promptedAt: number | undefined, waitedFrom: number): boolean {
+  return promptedAt === undefined || promptedAt <= waitedFrom
+}
+
+/**
  * What the engine is handed for a partial summary: everything before `cut`,
  * with the person's own prompts taken out.
  *
