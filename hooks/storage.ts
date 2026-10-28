@@ -9,6 +9,7 @@
 import type { EngineInterface } from 'claude-code'
 import type { Archived } from './fold'
 import type { ShadowRecord } from './report'
+import { moveInto } from './move'
 import { madeDirs } from './state'
 
 export const STATE_DIR = '.conjev/state'
@@ -154,21 +155,16 @@ export async function cleanupRecords($: EngineInterface): Promise<void> {
 }
 
 /**
- * Moves the old state root to the new one, once: only when the old one exists
- * and the new one does not, so a second session, or one that finds both, moves
- * nothing and reads both. Returns whether it moved.
+ * Moves the old state root into the new one: all of it when only the old one
+ * exists, and what the new one lacks when both do (see move.ts). Runs at every
+ * session start, so what a session on the old code wrote since is merged too.
+ * Returns whether there was anything to move.
  */
 export async function migrateState($: EngineInterface): Promise<boolean> {
   const home = await homeOf($)
   if (home === undefined) return false
-  const [from, to] = [oldStateRoot(home), stateRoot(home)]
-  if (!(await $.fs.exists(from)) || (await $.fs.exists(to))) return false
-  const parent = to.slice(0, to.lastIndexOf('/'))
-  for (const argv of [['mkdir', '-p', parent], ['chmod', '700', parent], ['mv', from, to], ['chmod', '700', to]]) {
-    const { exitCode } = await $.process.run(argv)
-    if (exitCode !== 0) throw new Error(`${argv[0]} exited ${exitCode}`)
-  }
-  madeDirs.clear()
+  const moved = await moveInto($, oldStateRoot(home), stateRoot(home))
+  if (moved) madeDirs.clear()
 
-  return true
+  return moved
 }

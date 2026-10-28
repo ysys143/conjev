@@ -15,6 +15,7 @@
 // read is not an error — every value then comes from the older source, which is
 // exactly how the plugin behaved before this existed.
 import type { EngineInterface } from 'claude-code'
+import { moveInto, privateDir } from './move'
 
 /** Where the shared settings and key live, under the person's home folder. */
 export const SHARED_DIR = '.conjev'
@@ -71,22 +72,33 @@ export function sharedDirOf(home: string): string {
 /** The folder's name before the plugin was renamed conjev. */
 export const PREVIOUS_SHARED_DIR = '.context-harness'
 
+/** What the person keeps in the shared folder, besides the state. */
+const SHARED_FILES = [SHARED_KEY, SHARED_CONSENT, SHARED_ONBOARDING, SHARED_CONFIG]
+
 /**
- * Moves the folder from its name before the rename, once: the key, the two
- * answers (consent, onboarding), the settings and the state go together, so a
- * person who set the plugin up is not asked again. Nothing moves when the new
- * folder already exists; the old one is then left as it is.
+ * Brings the folder from its name before the rename into ~/.conjev: the key,
+ * the two answers (consent, onboarding) and the settings, each only where the
+ * new folder has none, and the state merged (see move.ts). It checks item by
+ * item because the new folder can already exist with only part of it: a
+ * session between releases may have made ~/.conjev/state first. Runs at every
+ * session start; returns whether anything moved.
  */
 export async function migrateShared($: EngineInterface, home: string | undefined): Promise<boolean> {
   if (home === undefined) return false
   const [from, to] = [`${home}/${PREVIOUS_SHARED_DIR}`, sharedDirOf(home)]
-  if (!(await $.fs.exists(from)) || (await $.fs.exists(to))) return false
-  for (const argv of [['mv', from, to], ['chmod', '700', to]]) {
-    const { exitCode } = await $.process.run(argv)
-    if (exitCode !== 0) throw new Error(`${argv[0]} exited ${exitCode}`)
+  if (!(await $.fs.exists(from))) return false
+  await privateDir($, to)
+  let moved = false
+  for (const name of SHARED_FILES) {
+    if (!(await $.fs.exists(`${from}/${name}`)) || (await $.fs.exists(`${to}/${name}`))) continue
+    const { exitCode } = await $.process.run(['mv', `${from}/${name}`, `${to}/${name}`])
+    if (exitCode !== 0) throw new Error(`mv exited ${exitCode}`)
+    moved = true
   }
+  if (await moveInto($, `${from}/state`, `${to}/state`)) moved = true
+  await $.process.run(['find', from, '-depth', '-type', 'd', '-empty', '-delete'])
 
-  return true
+  return moved
 }
 
 /**

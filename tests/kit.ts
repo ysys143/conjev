@@ -146,6 +146,18 @@ export const setup = (on: On, s: Setup = {}) => {
     disk.push(`run ${e.argv[0]}`)
     // `mv <from> <to>` moves every file under <from>, so what a migration moved
     // is read from its new place afterwards.
+    // `rsync -a --ignore-existing --remove-source-files <from>/ <to>/` moves
+    // the files <to> lacks and leaves the ones both hold where they were.
+    if (e.argv[0] === 'rsync' && e.argv.includes('--remove-source-files')) {
+      const [from, to] = e.argv.slice(-2).map(p => p.replace(/\/$/, ''))
+      for (const path of Object.keys(files)) {
+        if (!path.startsWith(`${from!}/`)) continue
+        const target = `${to!}${path.slice(from!.length)}`
+        if (target in files) continue
+        files[target] = files[path]!
+        delete files[path]
+      }
+    }
     if (e.argv[0] === 'mv' && e.argv.length === 3) {
       const [from, to] = [e.argv[1]!, e.argv[2]!]
       for (const path of Object.keys(files)) {

@@ -21,10 +21,14 @@ test('a session start moves the old state root to the new one, private', async (
   expect(io.runs.findIndex(r => r[0] === 'mv')).toBeLessThan(io.runs.findIndex(r => r[0] === 'find') === -1 ? Infinity : io.runs.findIndex(r => r[0] === 'find'))
 })
 
-test('nothing moves when the new root exists already, or the old one does not', async ($, on) => {
-  const io = setup(on, { files: { [`${OLD}/archive/s/x.json`]: '{}', [`${NEW}/archive/s/y.json`]: '{}' } })
+test('when the new root exists already, what it lacks is merged in and what both hold is left', async ($, on) => {
+  // A session on the old code may write the old root after the move.
+  const io = setup(on, { files: { [`${OLD}/archive/s/x.json`]: 'old x', [`${OLD}/archive/s/y.json`]: 'old y', [`${NEW}/archive/s/y.json`]: 'new y' } })
   await $.session.start(START)
-  expect(io.runs.some(r => r[0] === 'mv')).toBe(false)
+  expect(io.runs.some(r => r[0] === 'mv' && r[1] === OLD)).toBe(false)
+  expect(io.files[`${NEW}/archive/s/x.json`]).toBe('old x')
+  expect(io.files[`${NEW}/archive/s/y.json`]).toBe('new y')
+  expect(io.files[`${OLD}/archive/s/y.json`]).toBe('old y')
 })
 
 test('nothing moves on a fresh install', async ($, on) => {
@@ -96,7 +100,6 @@ test('the folder from before the rename becomes ~/.conjev, key and answers with 
   })
   await $.session.start(START)
 
-  expect(io.runs).toContainEqual(['mv', PREVIOUS, SHARED])
   expect(io.runs).toContainEqual(['chmod', '700', SHARED])
   // The move comes before the session reads the folder: with the key and the
   // consent found, the gates left at auto are on from the start.
@@ -111,8 +114,31 @@ test('the folder from before the rename becomes ~/.conjev, key and answers with 
   expect(Object.keys(io.files).some(path => path.startsWith(`${PREVIOUS}/`))).toBe(false)
 })
 
-test('nothing moves when ~/.conjev exists already', async ($, on) => {
+test('a ~/.conjev that holds only state still gets the key and the answers', async ($, on) => {
+  // What happened: a session between releases made ~/.conjev/state first, and
+  // a move that waited for ~/.conjev to be missing never brought the key over.
+  const io = setup(on, {
+    files: {
+      [`${PREVIOUS}/key`]: 'ts_old\n',
+      [`${PREVIOUS}/consent.json`]: '{"consent":true,"at":"t"}\n',
+      [`${PREVIOUS}/onboarding.json`]: '{"state":"done","at":"t"}\n',
+      [`${PREVIOUS}/state/records/a/stop/1.json`]: '{}',
+      [`${SHARED}/state/records/b/stop/1.json`]: '{}',
+    },
+  })
+  await $.session.start(START)
+
+  expect(io.files[`${SHARED}/key`]).toBe('ts_old\n')
+  expect(io.files[`${SHARED}/consent.json`]).toContain('"consent":true')
+  expect(io.files[`${SHARED}/state/records/a/stop/1.json`]).toBe('{}')
+  expect(io.files[`${SHARED}/state/records/b/stop/1.json`]).toBe('{}')
+  const report = await $.command.run({ command: 'jev-report', args: '' } as never)
+  expect(report.text).toContain('stop active')
+})
+
+test('a key already in ~/.conjev is kept; the old one is left where it is', async ($, on) => {
   const io = setup(on, { files: { [`${PREVIOUS}/key`]: 'ts_old\n', [`${SHARED}/key`]: 'ts_new\n' } })
   await $.session.start(START)
-  expect(io.runs.some(r => r[0] === 'mv' && r[1] === PREVIOUS)).toBe(false)
+  expect(io.files[`${SHARED}/key`]).toBe('ts_new\n')
+  expect(io.files[`${PREVIOUS}/key`]).toBe('ts_old\n')
 })
