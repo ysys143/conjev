@@ -34,6 +34,8 @@ export type Setup = {
   /** How full the context window is, in percent, and its size in tokens. */
   percent?: number
   window?: number
+  /** When the session started, in ms; what `since()` counts from before the first compaction. */
+  startedAt?: number
   /** What the engine's own compaction beneath answers: a summary, or a skip. */
   compactBelow?: 'summary' | 'skip'
   /** The plugin folder's .env, wherever the plugin root is. */
@@ -155,7 +157,7 @@ export const setup = (on: On, s: Setup = {}) => {
   on('session.id', () => ({ value: 'sess-1' }))
   on('session.cwd', () => (s.cwdFails ? { deny: 'no cwd' } : { value: '/proj' }))
   on('session.messages', (_, e) => (e.as === 'api' && s.apiFails ? { deny: 'no api view' } : { value: (e.as === 'api' ? api : (s.messages ?? [])) as never }))
-  on('session.usage', () => ({ value: { startedAt: 0, context: { window: s.window ?? 200_000, percent: s.percent ?? 10 }, rateLimits: [] } as never }))
+  on('session.usage', () => ({ value: { startedAt: s.startedAt ?? 0, context: { window: s.window ?? 200_000, percent: s.percent ?? 10 }, rateLimits: [] } as never }))
   on('session.append', (_, e, next) => {
     appended.push(JSON.stringify(e.message))
     return next(e)

@@ -331,7 +331,19 @@ export const register: Register = (on, options) => {
     const kept = partialCut(outcome.messages, policySettings.keepRecentTurns)
     const isCrowded = transcriptChars(outcome.messages) > context.window * SUMMARIZE_ABOVE_SHARE * CHARS_PER_TOKEN
     const cut = kept > 0 && isCrowded ? kept : 0
-    const split = cut > 0 ? splitForSummary(outcome.messages, cut) : undefined
+    // A summary replaces what the person said with the agent's reading of it,
+    // and the canonical files are where that reading lives. So before a summary
+    // runs they are asked to be current: an agent that cannot yet say what the
+    // person wants has nothing to put in their words' place. The fold itself
+    // goes ahead either way — only the summary waits.
+    const due = cut > 0 ? dueBeforeFold(await anchorsOf($, policySettings), await since($, state)) : []
+    const isDeferred = due.length > 0 && state.deferrals < MAX_DEFERRALS
+    if (isDeferred) {
+      state.deferrals++
+      await note($, dueNote(due))
+    }
+
+    const split = cut > 0 && !isDeferred ? splitForSummary(outcome.messages, cut) : undefined
     const below = split !== undefined ? await next({ ...e, messages: split.older }) : undefined
     // A summary the engine refused leaves the conversation as it is: the
     // compaction does not stand, so nothing is recorded or counted.

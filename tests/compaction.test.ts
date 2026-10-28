@@ -419,3 +419,22 @@ test('a summary never swallows what the person said: their prompts come back who
   expect(texts).toContain('next')
   expect(texts.indexOf('Look at a.ts')).toBeLessThan(texts.indexOf('and next'))
 })
+
+test('a stale status board holds the summary back: the fold still lands', { options: { foldJev: 'shadow', phaseFile: '/proj/PHASE.md' } }, async ($, on) => {
+  // PHASE.md was last written before the session started, so it is due. The
+  // fold goes ahead either way; only the summary waits for the board.
+  const io = setup(on, { transcript: OLD, env: KEY_ENV, fetch: everyQuestion, window: 10, files: { '/proj/PHASE.md': '# PHASE\n' }, mtimes: { '/proj/PHASE.md': 1000 }, startedAt: 2000 })
+  const out = await $.session.compact({ trigger: 'manual', messages: OLD } as never)
+
+  expect(io.summarizedOver.length).toBe(0)
+  expect(io.appended.some(text => text.includes('PHASE.md'))).toBe(true)
+  expect(out.messages?.some(m => m.toolResults?.some(r => r.text.startsWith('[folded ')))).toBe(true)
+})
+
+test('a current status board lets the summary run', { options: { foldJev: 'shadow', phaseFile: '/proj/PHASE.md' } }, async ($, on) => {
+  // Written after the session started, so nothing is due.
+  const io = setup(on, { transcript: OLD, env: KEY_ENV, fetch: everyQuestion, window: 10, files: { '/proj/PHASE.md': '# PHASE\n' }, mtimes: { '/proj/PHASE.md': 3000 }, startedAt: 2000 })
+  await $.session.compact({ trigger: 'manual', messages: OLD } as never)
+
+  expect(io.summarizedOver.length).toBe(1)
+})
