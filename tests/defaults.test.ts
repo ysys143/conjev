@@ -119,14 +119,21 @@ test('the install command is a prompt the model runs, not a string it prints', (
 test('the command speaks to someone who has never heard of the key', () => {
   // The person meets Jev, TypeSafe and ~/.context-harness/key here first: the
   // reply says what they are for before it reports anything missing.
-  expect(COMMAND).toContain('Before any result, say in a sentence or two what this is about')
+  expect(COMMAND).toContain('it is your source, not your script')
   expect(COMMAND).toContain('Do not open with a file path, a missing file')
   expect(COMMAND).toContain('do not list the places the\n  plugin looked')
   expect(COMMAND).toContain('The first time you name a file or a setting, say what it is')
   expect(COMMAND).toContain("Answer in the person's language")
-  // Folding and Jev are one product; without a key is the reduced mode, not the default.
-  expect(COMMAND).toContain('context-harness\n  is folding and Jev together')
-  expect(COMMAND).toContain('do not present\n  the key as an optional extra')
+  // One concept, the README's: one rule, judged by Jev at every point, a
+  // reduced mode on rules without a key. Facts kept apart from how to speak,
+  // so the model explains rather than recites.
+  expect(COMMAND).toContain('These are facts for you, not text to read out')
+  expect(COMMAND).toContain('**The one rule.** The original stays in the archive')
+  expect(COMMAND).toContain('**Where that judgment is made.**')
+  expect(COMMAND).toContain('a reduced mode in which the originals are still kept')
+  expect(COMMAND).toContain('Describe one\n  system, not a list of features')
+  expect(COMMAND).toContain('Do not open with a definition')
+  for (const split of ['is folding and Jev together', 'Jev half', 'gates set to auto', 'checks Jev makes']) expect(COMMAND).not.toContain(split)
 })
 
 test('the command never tells the agent to read or print a key, or where one person keeps theirs', () => {

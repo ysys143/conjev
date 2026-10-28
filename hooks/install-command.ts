@@ -45,7 +45,7 @@ export function keyNote(source: KeySource | 'shared' | undefined): string {
  * leaves the machine, and in what form.
  */
 export const CONSENT_TEXT =
-  'With your consent, the gates set to auto (the default) send parts of this session to Jev, a judging model run by TypeSafe: ' +
+  'With your consent, Jev, a judging model run by TypeSafe, judges what the work needs at each point, and to do so it is sent parts of this session: ' +
   'your latest prompt, the end of the assistant\'s last paragraph, tool names and targets, the opening lines of large tool results, ' +
   'instruction file text, and the passages of a folded result or web page a question is about. Parts of the original text are included. ' +
   'Before anything leaves, secrets, email addresses, your home folder and Korean personal information (names, phone, resident and card numbers) ' +
@@ -63,19 +63,57 @@ not in a file you write. If the person pastes one into the chat, do not repeat
 it; tell them it is now in the transcript and in any folded archive, and that
 they should rotate it.
 
+## What you need to understand first
+
+These are facts for you, not text to read out. Say them in your own words,
+and only as much as the moment needs.
+
+- **What it is for.** It keeps a long session in step with the work in front
+  of the person: nothing the model saw is lost, and what the model sees and
+  does is what that work needs. Without it, a full conversation is compacted
+  into a summary that takes the exact output of every file read and command
+  run with it, and the agent goes on from a paraphrase.
+- **The one rule.** The original stays in the archive; the context holds only
+  what the current work needs. What it needs is judged by Jev, a small
+  judging model run by TypeSafe. Where Jev is not set up or does not answer
+  in time, a fixed rule decides instead.
+- **Where that judgment is made.** At every point where the session changes
+  what the model sees or does. When the conversation compacts: which tool
+  results and inputs fold to one-line pointers with the original on disk, and
+  which passages stay under them. When the model reads an original back: only
+  the parts that bear on the request. When something comes in: the blocks of a
+  web page that answer the question, and the instruction fragments that apply
+  to this prompt. When the model acts: a turn that ends on a promise instead
+  of a result is sent back to finish, and a call that reaches for a secret
+  file is stopped.
+- **The key and consent.** Without a key every one of those points runs on its
+  rule alone, a reduced mode in which the originals are still kept. With a
+  TypeSafe key and the person's consent, Jev makes the calls. Setting up both
+  is what this command is for.
+- **What leaves the machine, once they consent.** Short, bounded excerpts at
+  each of those moments (the latest prompt, the tail of the last paragraph,
+  tool names and targets, the opening of a large result), with secrets, email
+  addresses, the home folder and Korean personal data replaced by labels
+  first. Nothing is sent before consent, and one switch (\`jev: off\`) stops it.
+
 ## How to talk to them
 
-- Answer in the person's language.
-- Before any result, say in a sentence or two what this is about: context-harness
-  is folding and Jev together. Folding keeps old tool output exact on disk
-  behind one-line pointers; Jev, a judging model run by TypeSafe, decides what
-  to fold and keep and checks the moments an agent most often gets wrong. Jev
-  needs a TypeSafe API key, and setting one up is what this command is for.
-  Folding alone also works without a key, as a reduced mode; do not present
-  the key as an optional extra.
-- Then give the result as what it means for them: a key is set up, so the Jev
-  half can be turned on; or no key is set up yet, so only folding by rule runs
-  for now, and placing a key is the next step. Do not open with a file path, a missing file, or a list of
+- Answer in the person's language. Write it as you would explain it to a
+  colleague sitting next to you: plain words, whole sentences, no labels.
+- Open with two or three sentences built from the facts above, in this order:
+  what goes wrong in a long session, the one rule that keeps it right, and
+  that Jev is what judges what the work needs at each point. Describe one
+  system, not a list of features. Do not open with a definition
+  ("context-harness is a plugin that ..."), and do not translate any sentence
+  of this prompt word for word.
+- Do not use the plugin's internal words unless the person asks: leave out
+  "gates", \`auto\`, \`shadow\` and setting names until they matter.
+- Then say that Jev needs a TypeSafe API key and their consent, that without
+  them the plugin runs in a reduced mode on rules alone, and that this is what
+  you are about to set up together.
+- Then give the result as what it means for them: a key is set up, so Jev can
+  take over the judgment once they consent; or no key is set up yet, so the
+  plugin is in its reduced mode for now, and placing a key is the next step. Do not open with a file path, a missing file, or a list of
   what you did not check. When none was found, do not list the places the
   plugin looked either: they are for 4, when a key that was placed still is not
   found.
@@ -180,7 +218,12 @@ The Jev gates are set to \`auto\` by default: each one turns on by itself once
 there is a key, the \`jev\` switch is on, and the person has said yes. Until
 they say yes, nothing goes to Jev, key or no key, and folding runs by rule.
 
-Tell them what saying yes sends, in their language, from this text:
+Tell them what saying yes sends. The text below is the disclosure the plugin
+itself shows on \`/jev-consent\`; it is your source, not your script. Explain it
+in their language and your own sentences, as you would to a colleague, and
+leave none of its points out or softer than it says: what is sent, that parts
+of the original text are included, what is masked first, that each part is cut
+short, and how to stop it.
 
 > ${CONSENT_TEXT}
 

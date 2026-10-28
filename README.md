@@ -1,15 +1,19 @@
 # context-harness
 
-**Long Claude Code sessions, kept exact and kept in step with you: tool results fold instead of vanishing into a summary, and a judgment layer checks the moments an agent most often gets wrong.**
+**Long Claude Code sessions, kept in step with the work in front of you: nothing the model saw is lost, and what it sees and does is what that work needs.**
 
 English · [한국어](README.ko.md)
 
-context-harness is a Claude Code plugin, written against Claude Code's mod API (function hooks). It has two halves, built to work as one:
+context-harness is a Claude Code plugin, written against Claude Code's mod API (function hooks). It works by one rule: **the original stays in the archive, and the context holds only what the work in front of you needs.** What that work needs is judged by Jev, TypeSafe's decision model; where Jev is not set up or does not answer in time, a fixed rule decides instead, and the rule is always the floor.
 
-- **Folding.** When a conversation compacts, the engine replaces it with a summary, and the exact output of every file read and command run leaves with it. context-harness folds instead: each large, older tool result becomes a one-line pointer, the original is kept on disk, and the model reads it back with `read_coordinate`. Your own prompts, the tool calls and the most recent results stay as they were. Folding needs no setup and no key.
-- **Judgment.** Gates that ask Jev, TypeSafe's decision model, at the points of a turn where an agent goes wrong: a turn that ends by announcing work it has not done, a call that touches a secret file, an instruction that applies only to some requests, an instruction file loaded twice, a result the current request still needs. Every Jev gate is `auto` by default: it turns on once a key is in place and you have consented with `/jev-consent yes`, and until then nothing leaves your machine. `jev: off` switches them all off at once.
+The same judgment is made at every point where a session changes what the model sees or does:
 
-The two halves rest on one rule: **the original stays in the archive, and the context holds only what the work in front of you needs.** Folding decides that per tool result, the kept blocks under a pointer decide it per passage, `read_coordinate` with a `query` decides it again when the model reads an original back, and `web_read` decides it for a web page. Where a judgment is worth the wait, Jev makes it; where it is not, a rule does, and the rule is always the floor.
+- **When the conversation compacts.** Instead of a summary that takes the exact output of every file read and command run with it, each large, older tool result the work no longer needs is folded to a one-line pointer, with the original on disk; large tool inputs fold the same way, and the passages still needed stay under the pointer. Your prompts, the tool calls and the most recent results stay as they were, and conversation a summary replaces is archived too.
+- **When the model reads back.** `read_coordinate` returns the original, or with a `query` (by default your latest request) only the parts that bear on it.
+- **When something comes in.** `web_read` keeps the blocks of a page that answer the question; instruction fragments are attached only to the prompts they apply to, and an instruction file loaded twice is loaded once.
+- **When the model acts.** A turn that ends by announcing work it has not done is sent back to do it, and a call that reaches for a secret file is stopped.
+
+Without a key, every one of these points runs on its rule alone: a reduced mode, in which folding still keeps every original. With a key and your consent (`/jev-consent yes`), Jev makes the calls; until you consent, nothing leaves your machine, and `jev: off` turns Jev off everywhere at once. `/install-context-harness` sets up the key and asks for consent, and starts by itself the first time the plugin runs.
 
 [Install](#install) · [Commands](#commands) · [How folding works](#how-folding-works) · [Project state](#project-state-and-memory) · [Instruction files](#instruction-files) · [Judgment layer](#judgment-layer) · [Data and privacy](#data-and-privacy) · [Measured](#measured) · [Limits](#limits)
 
