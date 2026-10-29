@@ -560,18 +560,6 @@ export const register: Register = (on, options) => {
     }
     // Nothing in the types promises the api view here; without it no message
     // can be shown free of media, so nothing folds and the engine summarizes.
-    // Folding off: the engine's own compaction, as if the plugin were not here.
-    // Only the record is kept, so a compaction still shows in /jev-report.
-    if (settings.fold === 'off') {
-      const below = await next(e)
-      if (below.skip === undefined) {
-        await recordCompaction(true, below.tokensBefore, below.tokensAfter)
-        state.lastCompactAt = await $.clock.now()
-        await forgetAttached($, sessionId).catch(() => undefined)
-      }
-
-      return below
-    }
     const view = await $.session.messages({ as: 'api' }).then(messageViewOf, () => new Map() as MessageView)
     // What follows a compaction that stands. A failure here leaves the
     // compaction as it is: the hook's .catch would otherwise summarize the
@@ -583,7 +571,7 @@ export const register: Register = (on, options) => {
       } catch (error) {
         $.ui.log(`after the compaction (${String(error)})`)
       }
-      if (settings.foldJev === 'shadow') void judgeFold($, e.messages, new Set(archivedIds), view).catch(() => undefined)
+      if (settings.foldJev === 'shadow' && settings.fold === 'on') void judgeFold($, e.messages, new Set(archivedIds), view).catch(() => undefined)
     }
 
     // E3: whatever the person typed after /compact goes first; the plugin's own
@@ -591,7 +579,7 @@ export const register: Register = (on, options) => {
     const instructions = [e.instructions, PRESERVE_INSTRUCTIONS].filter(text => text !== undefined && text.trim() !== '').join('\n\n')
     // E2: what a summary is about to replace is kept first, whole, so the
     // conversation stays readable through read_coordinate after it is gone.
-    const summarize = async (messages: readonly (typeof e.messages)[number][]) => {
+    const summarize = async (messages: readonly (typeof e.messages)[number][], told: string | undefined = instructions) => {
       const kept = conversationArchive(messages, `conversation-${newId(startedAt)}`)
       let isKept = false
       try {
@@ -600,9 +588,23 @@ export const register: Register = (on, options) => {
       } catch (error) {
         $.ui.log(`could not keep the summarized conversation (${String(error)})`)
       }
-      const below = await next({ ...e, messages, instructions })
+      const below = await next({ ...e, messages, instructions: told })
 
       return { below, kept: isKept ? [kept] : [] }
+    }
+
+    // Folding off: the engine's own summary, over the whole transcript and told
+    // only what the person typed after /compact. What the plugin keeps around
+    // it stays: the conversation the summary replaces is archived first and
+    // named in a pointer after it, and the note after the compaction points the
+    // model back at the project's files.
+    if (settings.fold === 'off') {
+      const { below, kept } = await summarize(e.messages, e.instructions)
+      if (below.skip !== undefined) return below
+      await recordCompaction(true, below.tokensBefore, below.tokensAfter)
+      await after(0, [], true)
+
+      return kept.length === 0 ? below : { ...below, messages: [...below.messages, pointerMessage(kept)] }
     }
 
     // Fold relevance, active: Jev decides which results are still needed before

@@ -68,6 +68,7 @@ So B against C did not compare folding with summarizing. It compared conjev's pa
 - The configurations did not start the same way. A and B received part of the checklist and the no-delegation rule mid-run, and C received it all at the start. Some of C's lead may come from that.
 - The task wrote its findings to a file as it went, so little that a compaction removed was needed again. This favors a summary. A task that re-reads earlier tool output, such as debugging, was not tested.
 - The reference facts came from an earlier session's answers and may themselves be wrong in places.
+- C ran with the compaction handed to the engine untouched. Since then, `fold: off` also archives the conversation a summary replaces and writes the note that points back at the project's files. That version has not been measured.
 
 ## The setting
 

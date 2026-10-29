@@ -791,9 +791,15 @@ test('folding off: the engine summarizes the whole transcript, with its own inst
 
   expect(io.summarizedOver).toEqual([OLD.map(m => m.text || (m.toolResults ?? []).length > 0)])
   expect(io.summarizedWith).toEqual(['keep the plan'])
-  expect((out.messages ?? []).map(m => m.text)).toEqual(['summary'])
-  // Nothing folded, kept, judged or noted.
-  expect(io.writes.filter(w => w.path.includes('/archive/'))).toEqual([])
+  // The summary, then the pointer to the conversation it replaced: that is
+  // archived first, whole, and it is the only thing archived.
+  const messages = out.messages ?? []
+  expect(messages.map(m => m.text)[0]).toBe('summary')
+  expect(messages[1]?.text).toContain('read_coordinate("conversation-')
+  const archived = [...archivedIds(io.writes)]
+  expect(archived.length).toBe(1)
+  expect(archived[0]?.startsWith('conversation-')).toBe(true)
+  // Nothing folded or judged; without the project's files there is no note.
   expect(records(io.writes, 'fold')).toEqual([])
   expect(io.fetches.length).toBe(0)
   expect(io.appended.length).toBe(0)
@@ -801,6 +807,14 @@ test('folding off: the engine summarizes the whole transcript, with its own inst
   expect(records(io.writes, 'compact').map(row => row.decision)).toEqual(['summarized'])
   const header = String((await $.command.run({ command: 'jev-report', args: '' } as never)).text).split('\n')[0]
   expect(header).toContain('; folding off')
+})
+
+test('folding off: the note after the compaction still points back at the status board', { options: { fold: 'off', phaseFile: '/proj/PHASE.md' } }, async ($, on) => {
+  const io = setup(on, { transcript: OLD, window: 10, files: { '/proj/PHASE.md': '# PHASE\n' }, mtimes: { '/proj/PHASE.md': 3000 }, startedAt: 2000 })
+  await $.session.compact({ trigger: 'manual', messages: OLD } as never)
+  await settle(() => io.appended.length > 0)
+
+  expect(io.appended.some(text => text.includes('[conjev] This conversation was just compacted.') && text.includes('/proj/PHASE.md'))).toBe(true)
 })
 
 test('folding off: no compaction starts early, however full the window', { options: { fold: 'off' } }, async ($, on) => {

@@ -56,9 +56,11 @@ test('defaults: a key in every source, every hook run, nothing sent and no judgm
   expect(String(report.text).split('\n')[0]).toContain('; folding off')
   // The fragment was not attached: instructions are off.
   expect(io.submitted[0]?.context).toBe(undefined)
-  // Folding is off by default: the engine summarized, so the only thing kept is
-  // nothing at all, not a folded result.
-  expect(io.writes.filter(w => w.path.includes('/archive/'))).toEqual([])
+  // Folding is off by default: the engine summarized, and the one thing kept is
+  // the conversation it replaced, not a folded result.
+  const archived = io.writes.filter(w => w.path.includes('/archive/'))
+  expect(archived.length).toBe(1)
+  expect(archived[0]?.path).toContain('/conversation-')
 })
 
 test('a shared folder under the home directory overrides this profile, and its key is used', async ($, on) => {
