@@ -1,5 +1,6 @@
 import type { HttpResponse, SessionMessage } from 'claude-code'
-import { expect, test } from 'claude-code/testing'
+import { expect } from 'claude-code/testing'
+import { test } from './folding'
 import { DEFAULT_SETTINGS, turnsAgoOf } from '../hooks/fold'
 import { currentRequest, foldCandidates } from '../hooks/fold-judge'
 import { attachedNames, decideFragments, fragmentBlock, fragmentsHash, isFragment, keywordHit, parseFragment, pinnedSection, type Fragment } from '../hooks/instructions'

@@ -788,7 +788,7 @@ export const register: Register = (on, options) => {
     const trust = await trustFor($)
     const fragments = settings.instructions === 'off' ? undefined : await loadFragments($)
     const header = [
-      `conjev: stop ${stopMode()}, tool ${settings.toolGate}, tool jev ${settings.toolJev}, instructions ${settings.instructions}, fold ${settings.foldJev}, instruction filter ${settings.instructionFilter}, web ${settings.webRead}, fold blocks ${settings.foldBlocks}, browser ${settings.browserRoute}${settings.fold === 'off' ? '; folding off, the engine summarizes' : ''}`,
+      `conjev: stop ${stopMode()}, tool ${settings.toolGate}, tool jev ${settings.toolJev}, instructions ${settings.instructions}, fold ${settings.foldJev}, instruction filter ${settings.instructionFilter}, web ${settings.webRead}, fold blocks ${settings.foldBlocks}, browser ${settings.browserRoute}; folding ${settings.fold}`,
       `key ${key ? `from ${key.source}` : 'none'}, provider ${trust.trust} (${trust.why})`,
       ...(fragments
         ? [`fragments: ${fragments.list.length} in ${fragments.dir} (#${fragments.hash.slice(0, 6)})${fragments.problems.length ? `; skipped: ${fragments.problems.join('; ')}` : ''}`]

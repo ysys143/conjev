@@ -1,6 +1,6 @@
 {
   "name": "conjev",
-  "description": "conjev: fold instead of summarize, project state, and Jev judgment gates for Claude Code.",
+  "description": "conjev: Jev judgment gates around Claude Code's compaction, project state, and folding as an option.",
   "owner": { "name": "ysys143" },
   "plugins": [{ "name": "conjev", "source": "./" }]
 }

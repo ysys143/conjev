@@ -1,7 +1,8 @@
 // The merge: the fold and its judgment in one compaction hook, one storage
 // root, one status line, and the gate in front of read_coordinate.
 import type { HttpResponse, SessionMessage } from 'claude-code'
-import { expect, test } from 'claude-code/testing'
+import { expect } from 'claude-code/testing'
+import { test } from './folding'
 import { DEFAULT_SETTINGS, foldTranscript, makePolicy, turnsAgoOf } from '../hooks/fold'
 import { cleanupArgs, dirsBetween } from '../hooks/storage'
 import { HOME, KEY_ENV, drain, drawnStatus, prompt, records, settle, setup, smallRounds } from './kit'
@@ -799,7 +800,7 @@ test('folding off: the engine summarizes the whole transcript, with its own inst
   // The compaction is still recorded, as a summary.
   expect(records(io.writes, 'compact').map(row => row.decision)).toEqual(['summarized'])
   const header = String((await $.command.run({ command: 'jev-report', args: '' } as never)).text).split('\n')[0]
-  expect(header).toContain('folding off')
+  expect(header).toContain('; folding off')
 })
 
 test('folding off: no compaction starts early, however full the window', { options: { fold: 'off' } }, async ($, on) => {
@@ -811,8 +812,8 @@ test('folding off: no compaction starts early, however full the window', { optio
   expect(io.store.has(FOLD_ARMED_KEY)).toBe(false)
 })
 
-test('folding on: the header says nothing about it', async ($, on) => {
+test('folding on: the header says so', async ($, on) => {
   setup(on, { transcript: OLD })
   const header = String((await $.command.run({ command: 'jev-report', args: '' } as never)).text).split('\n')[0]
-  expect(header).not.toContain('folding')
+  expect(header).toContain('; folding on')
 })

@@ -6,7 +6,8 @@
 // (claude-code.d.ts, SessionCompacted.messages). engineAssembles plays that
 // engine: it keeps the handled copy and builds the rest from the rows only.
 import type { SessionMessage } from 'claude-code'
-import { expect, test } from 'claude-code/testing'
+import { expect } from 'claude-code/testing'
+import { test } from './folding'
 import { HOME, apiOf, prompt, setup, smallRounds, type ApiMessage } from './kit'
 
 type Block = ApiMessage['content'][number]

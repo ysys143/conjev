@@ -1,7 +1,7 @@
 {
   "name": "conjev",
   "version": "0.0.3",
-  "description": "Context management for Claude Code: fold completed tool results into one-line pointers at compaction instead of summarizing, keep the project's intent and status files current, and Jev judgment gates for announced-but-undone turns, secret files under other providers, conditional instructions and what to fold. Folding needs no key; the Jev gates are auto by default and turn on once a key is in place and you consent (/jev-consent).",
+  "description": "Context management for Claude Code: Jev judgment gates for announced-but-undone turns, secret files under other providers, conditional instructions, web pages and instruction files, around Claude Code's own compaction; folding completed tool results into one-line pointers instead of summarizing is there with fold: on. Keeps the project's intent and status files current. The Jev gates are auto by default and turn on once a key is in place and you consent (/jev-consent).",
   "author": {
     "name": "ysys143",
     "url": "https://github.com/ysys143"
@@ -75,17 +75,17 @@
     "fold": {
       "type": "string",
       "title": "Folding",
-      "description": "on (default): a compaction folds finished tool results into pointers instead of summarizing them, and starts early at foldAtPercent. off: every compaction is the engine's own summary, untouched, and none starts early; the Jev gates outside the fold still run.",
+      "description": "off (default): every compaction is the engine's own summary, untouched, and none starts early; the Jev gates outside the fold still run. on: a compaction folds finished tool results into pointers instead of summarizing them (read_coordinate returns the originals), and starts early at foldAtPercent.",
       "options": [
         "on",
         "off"
       ],
-      "default": "on"
+      "default": "off"
     },
     "jev": {
       "type": "string",
       "title": "Jev (every judgment gate)",
-      "description": "on (default): the gates send to Jev as each one's mode says. off: nothing is sent to Jev by any gate, whatever its mode; folding runs by rule alone.",
+      "description": "on (default): the gates send to Jev as each one's mode says. off: nothing is sent to Jev by any gate, whatever its mode; folding, when on, runs by rule alone.",
       "options": [
         "on",
         "off"

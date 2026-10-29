@@ -31,7 +31,7 @@ test('auto: a key, jev on and a recorded consent make every Jev gate active; the
   await $.session.start(START)
 
   expect(await header($)).toBe(
-    'conjev: stop active, tool off, tool jev active, instructions active, fold active, instruction filter active, web active, fold blocks active, browser active',
+    'conjev: stop active, tool off, tool jev active, instructions active, fold active, instruction filter active, web active, fold blocks active, browser active; folding off',
   )
   const result = await $.classic.Stop(STOP)
   expect(result.block).toBeDefined()

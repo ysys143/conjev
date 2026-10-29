@@ -1,21 +1,25 @@
 # conjev
 
-**Long Claude Code sessions, kept in step with the work in front of you: nothing the model saw is lost, and what it sees and does is what that work needs.**
+**Long Claude Code sessions, kept in step with the work in front of you: what the model sees and does is what that work needs.**
 
 English · [한국어](README.ko.md)
 
-conjev is a Claude Code plugin, written against Claude Code's mod API (function hooks). It works by one rule: **the original stays in the archive, and the context holds only what the work in front of you needs.** What that work needs is judged by Jev, TypeSafe's decision model; where Jev is not set up or does not answer in time, a fixed rule decides instead, and the rule is always the floor.
+conjev is a Claude Code plugin, written against Claude Code's mod API (function hooks). It works by one rule: **the context holds only what the work in front of you needs, and what is set aside can be read back.** What that work needs is judged by Jev, TypeSafe's decision model; where Jev is not set up or does not answer in time, a fixed rule decides instead, and the rule is always the floor.
 
 The same judgment is made at every point where a session changes what the model sees or does:
 
-- **When the conversation compacts.** Instead of a summary that takes the exact output of every file read and command run with it, each large, older tool result the work no longer needs is folded to a one-line pointer, with the original on disk; large tool inputs fold the same way, and the passages still needed stay under the pointer. Your prompts, the tool calls and the most recent results stay as they were, and conversation a summary replaces is archived too.
+- **When the conversation compacts.** By default Claude Code's own summary runs, untouched, and the gates below keep working around it. With `fold: on`, each large tool result older than the last ten model turns is folded to a one-line pointer instead, with the original on disk; large tool inputs fold the same way, and the passages still needed stay under the pointer.
 - **When the model reads back.** `read_coordinate` returns the original, or with a `query` (by default your latest request) only the parts that bear on it.
 - **When something comes in.** `web_read` keeps the blocks of a page that answer the question; instruction fragments are attached only to the prompts they apply to, and an instruction file loaded twice is loaded once.
 - **When the model acts.** A turn that ends by announcing work it has not done is sent back to do it, and a call that reaches for a secret file is stopped.
 
-Without a key, every one of these points runs on its rule alone: a reduced mode, in which folding still keeps every original. With a key and your consent (`/jev-consent yes`), Jev makes the calls; until you consent, nothing leaves your machine, and `jev: off` turns Jev off everywhere at once. `/conjev:onboard` sets up the key and asks for consent, and starts by itself the first time the plugin runs.
+Without a key, every one of these points runs on its rule alone: a reduced mode. With a key and your consent (`/jev-consent yes`), Jev makes the calls; until you consent, nothing leaves your machine, and `jev: off` turns Jev off everywhere at once. `/conjev:onboard` sets up the key and asks for consent, and starts by itself the first time the plugin runs.
+
+**Recommended: the defaults, `fold: off` with the Jev gates on.** In a field test over a long autonomous task, Claude Code's summary with the gates on wrote the best-scored report of three configurations, at the same cost as folding; folding kept an instruction given mid-conversation best ([the field test](docs/experiment/compaction-field-test.md)).
 
 [Install](#install) · [Commands](#commands) · [How folding works](#how-folding-works) · [Project state](#project-state-and-memory) · [Instruction files](#instruction-files) · [Judgment layer](#judgment-layer) · [Data and privacy](#data-and-privacy) · [Measured](#measured) · [Limits](#limits)
+
+With `fold: on`:
 
 ![Before compaction, two large tool results fill the transcript, each two prompts old. After the fold, the same messages remain and those results are one-line pointers; the originals are in an archive on disk, read_coordinate returns them, and a note sends the model back to INTENT.md and PHASE.md.](docs/fold.svg)
 
@@ -65,6 +69,8 @@ Coming from context-fold or jev-harness: uninstall them first, then see [Upgradi
 | `/config` | All settings, under conjev |
 
 ## How folding works
+
+Folding is off by default (`fold: off`): every compaction is Claude Code's own summary, and none starts early. Everything in this section applies once `fold: on` is set, in `/config` or `~/.conjev/config.json`. [The field test](docs/experiment/compaction-field-test.md) says why it is off.
 
 A tool result is folded when it is finished and large: older than the last `keepRecentTurns` model turns, at least `minFoldChars` long, not an error shorter than `keepErrorsUnder`, and not from a tool in `keepTools`. A result whose pointer would be longer than itself stays, and so does every result in a message that holds an image or a document (see [Limits](#limits)).
 
@@ -143,9 +149,9 @@ Each gate is set on its own to one of four modes:
 - **`shadow`**: the gate judges (Jev, or a rule for the tool gate floor) and records the judgment; nothing changes. Start here.
 - **`active`**: the judgment acts: the model is sent back to work, a call is refused, a fragment is attached. A Jev judgment that acts holds the turn, the call or the prompt while Jev answers: usually 0.2-0.35 s, at most 2 s (`timeoutMs`).
 
-An explicit `off`, `shadow` or `active` stands over `auto`. **`jev: off`** (default `on`), in `/config` or `~/.conjev/config.json`, is the switch over all of them: no gate sends anything to Jev, whatever its mode, and folding runs by rule alone.
+An explicit `off`, `shadow` or `active` stands over `auto`. **`jev: off`** (default `on`), in `/config` or `~/.conjev/config.json`, is the switch over all of them: no gate sends anything to Jev, whatever its mode, and folding, when on, runs by rule alone.
 
-**`fold: off`** (default `on`) is the other switch: every compaction is left to the engine's own summary, untouched, and none starts early at `foldAtPercent`. The gates outside the fold still run as their modes say; fold relevance and kept blocks have nothing to judge. It is there to measure what the fold itself adds, beside the Jev gates.
+**`fold`** (default `off`) is the other switch. Off, every compaction is left to the engine's own summary, untouched, and none starts early at `foldAtPercent`; the gates outside the fold run as their modes say, and fold relevance and kept blocks have nothing to judge. `on` turns folding on ([How folding works](#how-folding-works)). The default and the recommendation come from [the field test](docs/experiment/compaction-field-test.md).
 
 | Gate | Setting | What it does | What leaves the machine |
 | --- | --- | --- | --- |
@@ -482,7 +488,7 @@ The idea of folding completed tool output into addressed one-line pointers, inst
 
 ## Versions
 
-Versions stay at 0.0.x while the plugin is young. 0.0.1 is the first release, joining context-fold 0.0.2 and jev-harness 0.0.3. 0.0.2 adds the instruction filter. 0.0.3 keeps the status line empty until there is something to show. Not yet released: web reading, kept fold blocks and browser routing; Korean personal information in scrubbing; the summary limited to the older part, with your prompts and the folded pointers put back; the automatic fold yielding to you; the status board as a handoff, and the offer to create one; `imageMaxPx`; `read_coordinate` with a `query`; the shared settings folder and `/conjev:onboard`; fold relevance in `active`; the Jev gates at `auto` with consent, the `jev` switch and the first-run setup; state under `~/.conjev/state`; folded tool inputs and summarized conversations; the Stop gate's demotion by its labels; Jev's instruction reading applied in `active`.
+Versions stay at 0.0.x while the plugin is young. 0.0.1 is the first release, joining context-fold 0.0.2 and jev-harness 0.0.3. 0.0.2 adds the instruction filter. 0.0.3 keeps the status line empty until there is something to show. Not yet released: folding off by default (`fold`), and recency counted in model turns; web reading, kept fold blocks and browser routing; Korean personal information in scrubbing; the summary limited to the older part, with your prompts and the folded pointers put back; the automatic fold yielding to you; the status board as a handoff, and the offer to create one; `imageMaxPx`; `read_coordinate` with a `query`; the shared settings folder and `/conjev:onboard`; fold relevance in `active`; the Jev gates at `auto` with consent, the `jev` switch and the first-run setup; state under `~/.conjev/state`; folded tool inputs and summarized conversations; the Stop gate's demotion by its labels; Jev's instruction reading applied in `active`.
 
 ## License
 

@@ -47,16 +47,18 @@ test('defaults: a key in every source, every hook run, nothing sent and no judgm
 
   expect(io.fetches.length).toBe(0)
   // No gate recorded anything. The compaction's own record is not a judgment:
-  // it says what the fold did, and folding is on with no key at all.
+  // it says what the compaction did.
   expect(io.writes.filter(w => w.path.includes('/records/') && !w.path.includes('/compact/'))).toEqual([])
   // The instruction files load as they are, the duplicate included.
   expect(io.loaded[0]).toEqual(files)
   // The modes the engine filled in from the manifest.
   expect(report.text).toContain('conjev: stop off, tool off, tool jev off, instructions off, fold off, instruction filter off')
+  expect(String(report.text).split('\n')[0]).toContain('; folding off')
   // The fragment was not attached: instructions are off.
   expect(io.submitted[0]?.context).toBe(undefined)
-  // Folding needs no key and is on by default.
-  expect(io.writes.some(w => w.path.includes('/archive/'))).toBe(true)
+  // Folding is off by default: the engine summarized, so the only thing kept is
+  // nothing at all, not a folded result.
+  expect(io.writes.filter(w => w.path.includes('/archive/'))).toEqual([])
 })
 
 test('a shared folder under the home directory overrides this profile, and its key is used', async ($, on) => {
@@ -139,9 +141,11 @@ test('the command speaks to someone who has never heard of the key', () => {
   // reduced mode on rules without a key. Facts kept apart from how to speak,
   // so the model explains rather than recites.
   expect(COMMAND).toContain('These are facts for you, not text to read out')
-  expect(COMMAND).toContain('**The one rule.** The original stays in the archive')
+  expect(COMMAND).toContain('**The one rule.** The context holds only what the current work needs')
   expect(COMMAND).toContain('**Where that judgment is made.**')
-  expect(COMMAND).toContain('a reduced mode in which the originals are still kept')
+  expect(COMMAND).toContain('a reduced mode')
+  // Compaction is the engine's summary unless folding is turned on.
+  expect(COMMAND).toContain("Claude Code's\n  own summary runs by default")
   expect(COMMAND).toContain('Describe one\n  system, not a list of features')
   expect(COMMAND).toContain('Do not open with a definition')
   for (const split of ['is folding and Jev together', 'Jev half', 'gates set to auto', 'checks Jev makes']) expect(COMMAND).not.toContain(split)

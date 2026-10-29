@@ -4,7 +4,8 @@
 // the Stop gate during the cleanup a fold asks for (A6), and the excerpt the
 // fold judgment sends (E6/F4).
 import type { HttpResponse, SessionMessage } from 'claude-code'
-import { expect, test } from 'claude-code/testing'
+import { expect } from 'claude-code/testing'
+import { test } from './folding'
 import { DEFAULT_SETTINGS, FOLD_MARK, conversationArchive, foldTranscript, makePolicy } from '../hooks/fold'
 import { EXCERPT_CHARS } from '../hooks/fold-judge'
 import { PRESERVE_INSTRUCTIONS } from '../hooks/register'

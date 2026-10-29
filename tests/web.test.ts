@@ -1,6 +1,7 @@
 // Web reading and kept fold blocks, through the engine's events.
 import type { HttpResponse, SessionMessage } from 'claude-code'
-import { expect, test } from 'claude-code/testing'
+import { expect } from 'claude-code/testing'
+import { test } from './folding'
 import { FOLD_MARK } from '../hooks/fold'
 import { KEPT_MARK } from '../hooks/fold-blocks'
 import { isPrivateHost } from '../hooks/web-flow'

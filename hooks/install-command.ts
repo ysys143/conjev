@@ -69,25 +69,23 @@ These are facts for you, not text to read out. Say them in your own words,
 and only as much as the moment needs.
 
 - **What it is for.** It keeps a long session in step with the work in front
-  of the person: nothing the model saw is lost, and what the model sees and
-  does is what that work needs. Without it, a full conversation is compacted
-  into a summary that takes the exact output of every file read and command
-  run with it, and the agent goes on from a paraphrase.
-- **The one rule.** The original stays in the archive; the context holds only
-  what the current work needs. What it needs is judged by Jev, a small
+  of the person: what the model sees and does is what that work needs.
+- **The one rule.** The context holds only what the current work needs, and
+  what is set aside can be read back. What it needs is judged by Jev, a small
   judging model run by TypeSafe. Where Jev is not set up or does not answer
   in time, a fixed rule decides instead.
 - **Where that judgment is made.** At every point where the session changes
-  what the model sees or does. When the conversation compacts: which tool
-  results and inputs fold to one-line pointers with the original on disk, and
-  which passages stay under them. When the model reads an original back: only
+  what the model sees or does. When the conversation compacts: Claude Code's
+  own summary runs by default; with \`fold: on\`, large older tool results and
+  inputs fold to one-line pointers with the original on disk instead, and the
+  passages still needed stay under them. When the model reads an original back: only
   the parts that bear on the request. When something comes in: the blocks of a
   web page that answer the question, and the instruction fragments that apply
   to this prompt. When the model acts: a turn that ends on a promise instead
   of a result is sent back to finish, and a call that reaches for a secret
   file is stopped.
 - **The key and consent.** Without a key every one of those points runs on its
-  rule alone, a reduced mode in which the originals are still kept. With a
+  rule alone, a reduced mode. With a
   TypeSafe key and the person's consent, Jev makes the calls. Setting up both
   is what this command is for.
 - **What leaves the machine, once they consent.** Short, bounded excerpts at
@@ -245,7 +243,7 @@ Once it says found, go to 5.
 
 The Jev gates are set to \`auto\` by default: each one turns on by itself once
 there is a key, the \`jev\` switch is on, and the person has said yes. Until
-they say yes, nothing goes to Jev, key or no key, and folding runs by rule.
+they say yes, nothing goes to Jev, key or no key, and every gate runs on its rule.
 
 Tell them what saying yes sends. The text below is the disclosure the plugin
 itself shows on \`/jev-consent\`; it is your source, not your script. Explain it
