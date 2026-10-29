@@ -4,30 +4,21 @@
 
 English · [한국어](README.ko.md)
 
-conjev is a Claude Code plugin, written against Claude Code's mod API (function hooks). It works by one rule: **the context holds only what the work in front of you needs, and what is set aside can be read back.** What that work needs is judged by Jev, TypeSafe's decision model; where Jev is not set up or does not answer in time, a fixed rule decides instead, and the rule is always the floor.
+conjev is a Claude Code plugin, written against Claude Code's mod API (function hooks). It works by one rule: **the context holds only what the work in front of you needs.** What that work needs is judged by Jev, TypeSafe's decision model; where Jev is not set up or does not answer in time, a fixed rule decides instead, and the rule is always the floor.
 
 The same judgment is made at every point where a session changes what the model sees or does:
 
-- **When the conversation compacts.** By default Claude Code's own summary runs, untouched, and the gates below keep working around it. With `fold: on`, each large tool result older than the last ten model turns is folded to a one-line pointer instead, with the original on disk; large tool inputs fold the same way, and the passages still needed stay under the pointer.
-- **When the model reads back.** `read_coordinate` returns the original, or with a `query` (by default your latest request) only the parts that bear on it.
-- **When something comes in.** `web_read` keeps the blocks of a page that answer the question; instruction fragments are attached only to the prompts they apply to, and an instruction file loaded twice is loaded once.
 - **When the model acts.** A turn that ends by announcing work it has not done is sent back to do it, and a call that reaches for a secret file is stopped.
+- **When something comes in.** `web_read` keeps the blocks of a page that answer the question; instruction fragments are attached only to the prompts they apply to; an instruction file loaded twice is loaded once; a prompt that needs a browser operated is told which installed tool to use.
+- **When the conversation compacts.** Claude Code's own summary runs. The conversation it replaces is archived first, so `read_coordinate` can still read it, and a note after it sends the model back to the project's own files (`INTENT.md`, `PHASE.md`).
 
 Without a key, every one of these points runs on its rule alone: a reduced mode. With a key and your consent (`/jev-consent yes`), Jev makes the calls; until you consent, nothing leaves your machine, and `jev: off` turns Jev off everywhere at once. `/conjev:onboard` sets up the key and asks for consent, and starts by itself the first time the plugin runs.
 
-**Recommended: the defaults, `fold: off` with the Jev gates on.** In a field test over a long autonomous task, Claude Code's summary with the gates on wrote the best-scored report of three configurations, at the same cost as folding; folding kept an instruction given mid-conversation best ([the field test](docs/experiment/compaction-field-test.md)).
+The defaults are the recommended setting. A field test over a long autonomous task compared them with two other configurations ([the field test](docs/experiment/compaction-field-test.md)). The plugin can also fold old tool results into pointers at compaction instead of summarizing them (`fold: on`, [Folding](#folding)); it is off by default.
 
-[Install](#install) · [Commands](#commands) · [How folding works](#how-folding-works) · [Project state](#project-state-and-memory) · [Instruction files](#instruction-files) · [Judgment layer](#judgment-layer) · [Data and privacy](#data-and-privacy) · [Measured](#measured) · [Limits](#limits)
+[Install](#install) · [Commands](#commands) · [Judgment layer](#judgment-layer) · [Instruction files](#instruction-files) · [Project state](#project-state-and-memory) · [Compaction](#compaction) · [Data and privacy](#data-and-privacy) · [Measured](#measured) · [Limits](#limits)
 
-With `fold: on`:
-
-![Before compaction, two large tool results fill the transcript, each two prompts old. After the fold, the same messages remain and those results are one-line pointers; the originals are in an archive on disk, read_coordinate returns them, and a note sends the model back to INTENT.md and PHASE.md.](docs/fold.svg)
-
-A real pointer, as the model sees it; the id is what `read_coordinate` takes:
-
-```text
-[folded Read · src/billing/invoice.ts · 1201 lines — read_coordinate("toolu_01J7igoRSuY8xw8F8skCSEY3")]
-```
+![Four Claude Code events, each with what the plugin does there: instructions at the prompt, the tool gate at each tool call, the Stop gate when the turn ends, and at compaction the engine's summary, with what it replaces archived and a note pointing back at the project's files.](docs/turn.svg)
 
 ## Install
 
@@ -37,7 +28,7 @@ Requires Claude Code 2.1.306 or later. The mod API it uses is marked early acces
 /plugin install conjev --marketplace ysys143/conjev
 ```
 
-Answer `y` to add the marketplace, then pick a scope. The install may list the settings as not set: the defaults [below](#how-folding-works) apply until you change them in `/config`.
+Answer `y` to add the marketplace, then pick a scope. The install may list the settings as not set: the defaults apply until you change them in `/config`.
 
 <details>
 <summary>From a shell, or the desktop app</summary>
@@ -51,7 +42,7 @@ Answer `y` to add the marketplace, then pick a scope. The install may list the s
 
 Coming from context-fold or jev-harness: uninstall them first, then see [Upgrading](#upgrading).
 
-**Check that it works.** Have the model read a file of a few hundred lines, send two more prompts so that result is no longer recent, then run `/compact`. The status line shows `folded 1 · −Nk chars`. Ask for a line of that file without opening it again, and the model fetches it with `read_coordinate`.
+**Check that it works.** Run `/jev-report`: its first line names every gate's mode and ends with `folding off`. Once a gate has recorded something, the hint line under the prompt ends with `conjev: jev N`.
 
 ## Commands
 
@@ -59,88 +50,16 @@ Coming from context-fold or jev-harness: uninstall them first, then see [Upgradi
 | --- | --- |
 | `/conjev:onboard` | The setup: finds a key, helps place one, says what consenting sends; sends nothing. Runs by itself on the first session |
 | `/jev-consent yes\|no\|later` | Your answer about sending to Jev, kept in `~/.conjev/consent.json`; with no answer it says what is sent |
-| `/compact` | Compacts now; the plugin answers by folding |
-| `read_coordinate` | The model's tool (`mcp__conjev__read_coordinate`): a folded original, a range of its lines (`offset`, `limit`), only the passages that bear on a `query` (your latest request when none is given), or the whole of it (`full`) |
-| `/conjev:tune-policy` | Measures your session and picks the fold settings with you |
-| `/conjev:project-state` | Keeps `INTENT.md` and `PHASE.md` |
-| `/conjev:consolidate` | Turns a stretch of work into memory that lasts |
 | `/jev-report` | What the [judgment layer](#judgment-layer) recorded, and what each compaction held and saved |
 | `/jev-mark <id> y\|n` | Labels one of its records yes or no |
+| `/conjev:project-state` | Keeps `INTENT.md` and `PHASE.md` |
+| `/conjev:consolidate` | Turns a stretch of work into memory that lasts |
+| `read_coordinate` | The model's tool (`mcp__conjev__read_coordinate`): an archived original (a summarized conversation, a page `web_read` kept, a folded result), a range of its lines (`offset`, `limit`), only the passages that bear on a `query` (your latest request when none is given), or the whole of it (`full`) |
+| `/compact` | Compacts now: Claude Code summarizes, the plugin archives what the summary replaces |
+| `/conjev:tune-policy` | With `fold: on`, measures your session and picks the fold settings with you |
 | `/config` | All settings, under conjev |
 
-## How folding works
-
-Folding is off by default (`fold: off`): every compaction is Claude Code's own summary, over the whole transcript and told only what you typed after `/compact`, and none starts early. Two things stay: the conversation the summary replaces is archived first and named in a pointer after it, so `read_coordinate` still reads it, and the note in step 5 still points the model back at the project's files. Everything in this section applies once `fold: on` is set, in `/config` or `~/.conjev/config.json`. [The field test](docs/experiment/compaction-field-test.md) says why it is off.
-
-A tool result is folded when it is finished and large: older than the last `keepRecentTurns` model turns, at least `minFoldChars` long, not an error shorter than `keepErrorsUnder`, and not from a tool in `keepTools`. A result whose pointer would be longer than itself stays, and so does every result in a message that holds an image or a document (see [Limits](#limits)).
-
-1. **At compaction** (`/compact`, the engine's automatic compaction, or step 4), the plugin answers in place of the engine's summary. Each result that qualifies is written to the archive and replaced by its pointer. The large bodies of older tool calls go the same way, by the same rule over the body's text: a `Write`'s content, an `Edit`'s strings, a long `Bash` command become `[folded input · Write · src/a.ts · 4200 chars — read_coordinate("toolu_…:input")]`. Every other message is handed back untouched.
-2. **If folding is not enough**, because the folded transcript still fills more than 60% of the window, the engine summarizes only what is older than the recent window. The recent turns are carried over as they stand, folded where the rule says so. The plugin then puts back two things a summary would lose: every prompt you wrote in the summarized part, in order, and one message listing the pointer of every folded original, so the model keeps a way to each. When nothing qualifies to fold or the archive cannot be written ([Data and privacy](#data-and-privacy)), the engine summarizes the whole transcript. Whatever a summary replaces is archived first, as one `conversation-<id>` item, and the pointer message names it, so the conversation itself stays readable with `read_coordinate`. The summary is told what you typed after `/compact` first, then the plugin's own request: keep your requests and decisions in your words, and keep every `[folded …]` line as it is. The 60% is a fixed share, not `foldAtPercent`, measured on an estimate from the transcript's characters rather than a token count.
-3. **A summary waits for the status board.** If the project keeps `PHASE.md` or an episode log ([Project state](#project-state-and-memory)) not written since the last compaction, the summary is held back and the agent is asked to bring them up to date; the fold itself goes ahead. A summary replaces what you said with the agent's reading of it, and the board is where that reading lives. After two requests it summarizes without asking. The turn that answers such a request is not held by the Stop gate.
-4. **At an idle boundary**, when a turn has ended with the window at least `foldAtPercent` full, the plugin starts a compaction itself, but only if folding would remove at least `minSavedPercent` of the transcript: each compaction rebuilds the prompt cache once. It waits 30 seconds first and stands down if you write in that time, so your next request is never queued behind a summary. While a summary runs, the status line says so.
-5. **After a compaction** that folded something, or in a project that keeps those files, it appends a note: how many results were folded, which of the project's files to re-read, and, when there is a status board, that its Handoff section is what a session picking this up reads first.
-6. **`read_coordinate`** returns an original by the id in its pointer, 400 lines at a time unless `offset` and `limit` say otherwise. With a `query` and a Jev key, it returns only the passages that bear on it, quoted, and names by line number the ranges it left out; with no `query`, `offset`, `limit` or `full`, your latest request is the query. `full: true` returns the whole original. Without a key, a `query` returns the whole original rather than a fragment nothing chose.
-
-| Setting | Default | Why |
-| --- | --- | --- |
-| `keepRecentTurns` | 10 | The work in progress still reads the most recent model turns. A model turn is one response, with its tool calls and their results; counted by your prompts instead, a session you start once and leave to run (`/goal`) would never fold |
-| `minFoldChars` | 1000 | In a measured session, 44% of results held 90% of all tool output |
-| `keepErrorsUnder` | 2000 | Short errors stop the model repeating the same mistake |
-| `keepTools` | `TodoWrite,AskUserQuestion,ExitPlanMode` | Small, and they hold current decisions |
-| `foldAtPercent` | 60 | When to fold by itself after a turn; 0 turns it off |
-| `minSavedPercent` | 20 | Fold by itself only when it saves at least this share |
-| `intentFile` | `INTENT.md` | The agent's reading of what you want; empty turns it off |
-| `phaseFile` | `PHASE.md` | The status board, and the handoff; empty turns it off |
-| `episodeDir` | `sessions` | The episode log folder; empty turns it off |
-| `imageMaxPx` | 0 | Read images larger than this on their long side as a smaller copy; 0 is off |
-
-`/conjev:tune-policy` measures your session with the folding code itself (`policy_report`), asks you a few questions, dry-runs the values you chose beside the current ones, and applies them only after you agree (`set_policy`, which writes the nine fold settings above it and no other).
-
-**Images.** An image costs about width × height / 750 tokens, up to roughly 1,550, and a fold never takes one, so a screenshot read early is paid for on every request until the session ends. With `imageMaxPx` set, a `Read` of a PNG or JPEG larger than that on its long side reads a copy downscaled with `sips` (macOS) or ImageMagick (`identify`, `convert`; Linux) instead; the copy is kept beside the archive and reused. If the size cannot be read or the resize fails, the original is read. A PDF and an image you paste keep their size.
-
-## Compared with
-
-- **Claude Code's own compaction** replaces the conversation with a summary. conjev answers the same compaction first and folds; a summary runs only when folding is not enough, then only over what is older than the recent window, with your prompts and the folded pointers put back.
-- **Memory plugins** keep what was learned across sessions, in a store of their own. conjev works inside a session: exact tool output stays one call away, and what should last is written by the agent into the project's own files (`INTENT.md`, `PHASE.md`, `sessions/`).
-
-## Project state and memory
-
-A compaction summary is never the source of truth; files the project keeps are. The plugin uses three, each only while it exists, and never writes them itself: the agent does, and the plugin checks and points.
-
-| File | What it holds | Written when |
-| --- | --- | --- |
-| `INTENT.md` | The agent's reading of what you want: goal, done-when, scope, constraints, open questions, each line citing your own words | You state or change a goal |
-| `PHASE.md` | The status board you read: now, next, what needs you, done with evidence, resume notes; with several agents, who owns what. Its **Handoff** section is for the session that picks the work up: the branch and worktree, whether the commits are pushed, what is uncommitted, the command to run first, and what not to repeat | A step ends or blocks, you decide, the commit state changes, before a handoff, when the plugin asks |
-| `sessions/<date>-<slug>.md` | Episodes: what happened, when, and the evidence (paths, commits, folded `read_coordinate` ids) | Each stretch of work, append-only |
-
-- **A project with no status board is offered one.** On the first prompt you write, the plugin asks, in Claude Code's own dialog, whether to create `PHASE.md`; the agent then writes it. Three hours with no answer counts as yes. The question is asked once: a no is remembered, and so is a yes, across sessions. A run with nobody to ask (`claude -p`) is never taken as consent.
-- **The board is checked against the repository.** Before a fold, when the board is due, the request to bring it up to date also names what `git status` shows and the board's Handoff section should say: commits not pushed, files with uncommitted changes, or a board with no Handoff section at all.
-- `/conjev:project-state` keeps `INTENT.md` and `PHASE.md`, alone or across several agent sessions, with the rules that keep one board consistent and the steps a resuming session follows.
-- `/conjev:consolidate` turns a stretch of work into memory that lasts: the board, an episode, repeated procedures as project skills, lasting principles into `AGENTS.md` once you agree. A deterministic procedure that keeps repeating is proposed as code: see [just-dag-it](https://github.com/ysys143/just-dag-it).
-
-## Instruction files
-
-Claude Code loads its instruction files whole at the start of a conversation and again after each compaction: the user `CLAUDE.md` of the profile in use, a project's `CLAUDE.md` and `AGENTS.md`, every file they `@`-import, and the `.claude/CLAUDE.md` of every folder above the working folder. That last rule means a session run from inside your home folder also loads `~/.claude/CLAUDE.md` as a project file. If another profile's `CLAUDE.md` (say `~/.claude-3/CLAUDE.md`) is a copy of it, the same text loads twice.
-
-**The fix needs no plugin.** In each profile other than `~/.claude` that keeps its own copy, exclude the shared one:
-
-```json
-{ "claudeMdExcludes": ["/Users/you/.claude/CLAUDE.md"] }
-```
-
-Never put this in `~/.claude/settings.json` itself: there the same file is the profile's own user file, and the profile would lose it. In the author's setup it took the first request from 69,152 to 66,655 tokens (the OMC block, 5.9k characters, loaded once instead of twice).
-
-**`instructionFilter`** (`auto`, `off`, `shadow`, `active`; default `auto`) handles what is left, through the engine's `prompt.context` hook, which hands a plugin the instruction files just before they are sent. It splits them into chunks by heading and by tag block, keeping code fences whole, and then:
-
-- **Loaded twice, byte for byte** (whitespace aside): `active` leaves the later copy out and puts a one-line note where it was (`[conjev: left out "…", loaded from …]`), so the model knows. Of two OMC blocks at different versions, the older one leaves. Organization (`managed`) files and the auto-memory index are never changed.
-- **Jev's reading of the rest, applied in `active` once Jev has answered, recorded only in `shadow`:** after the request has gone, Jev is asked of every chunk whether nearly every request needs it, and of every user-level chunk whether the chunks before it already say all of it. `/jev-report` lists what that would drop or defer, and why. These rules are never dropped or deferred: identity, language, autonomy and approval, answering questions first, shell, git, API keys, browser, any section whose heading contains 중복 or 강조 (how the author marks a deliberate repetition; a heading worded otherwise is judged by Jev), and the OMC block. The Orca section is decided by the environment, not by Jev.
-- **Would-miss:** for every prompt, slash commands included, Jev is asked whether the chunks it would defer apply. Tool uses of their kind (browser, web fetch, `orca`, `claude -p`) are recorded too, and `/jev-report` counts how often that work began with the chunk not yet attached.
-
-In `active`, the chunks Jev reads as covered or needed only for some work (at 0.95) leave from the next load of the same files on, each run replaced by a line that says Jev left it out and why; the first load goes on whole, since Jev answers after the request. To judge whether that is safe for you, watch the would-miss rate in `/jev-report`, or label covered chunks with `/jev-mark`. The reading costs a few hundred milliseconds in the background and nothing on the request path: `prompt.context` itself takes about 30 ms.
-
 ## Judgment layer
-
-![Four Claude Code events, each with the gate that judges it and what it sends to Jev: instructions at the prompt, the tool gate at each tool call, the Stop gate when the turn ends, and fold relevance at compaction.](docs/turn.svg)
 
 Each gate is set on its own to one of four modes:
 
@@ -151,7 +70,7 @@ Each gate is set on its own to one of four modes:
 
 An explicit `off`, `shadow` or `active` stands over `auto`. **`jev: off`** (default `on`), in `/config` or `~/.conjev/config.json`, is the switch over all of them: no gate sends anything to Jev, whatever its mode, and folding, when on, runs by rule alone.
 
-**`fold`** (default `off`) is the other switch. Off, every compaction is left to the engine's own summary and none starts early at `foldAtPercent`; the conversation it replaces is still archived and the note after it still written; the gates outside the fold run as their modes say, and fold relevance and kept blocks have nothing to judge. `on` turns folding on ([How folding works](#how-folding-works)). The default and the recommendation come from [the field test](docs/experiment/compaction-field-test.md).
+The last two gates in the table act on folding, so they have nothing to judge unless `fold: on` ([Folding](#folding)).
 
 | Gate | Setting | What it does | What leaves the machine |
 | --- | --- | --- | --- |
@@ -160,14 +79,14 @@ An explicit `off`, `shadow` or `active` stands over `auto`. **`jev: off`** (defa
 | Tool gate Jev | `toolJev` | When another provider serves the session, classes each call the floor let through as open, standard, restricted or custom from its path or command, and refuses restricted and custom | The tool name and the scrubbed target |
 | Conditional instructions | `instructions` | Attaches an instruction fragment to the prompt that first meets its condition | Your prompt, scrubbed, first 600 characters, and the fragments' conditions (never their bodies) |
 | Instruction filter | `instructionFilter` | Leaves instruction chunks loaded twice out (`active`), and once Jev has read the files, the chunks it reads as repeating earlier ones or needed only for some work, never an always-kept rule; `shadow` records the same and leaves everything in ([Instruction files](#instruction-files)) | With a key: the instruction files' text, scrubbed, when they change; for chunks Jev would defer, each prompt's first 600 characters, scrubbed |
-| Fold relevance | `foldJev` | `shadow` records which of the largest earlier results your request still needs, beside what the fold did. `active` lets that decide the fold, on every compaction, automatic ones included: a result Jev says is still needed (at least `foldThreshold`, 0.3) stays whole, and one it says is done with is folded even inside the recent window. The rule stays the floor: a short error, a tool in `keepTools` or a result under `minFoldChars` is never folded. When Jev does not answer within its timeout or fails, the rule decides those results alone | Your last prompt, scrubbed, first 400 characters, and for each result its tool and target (the path, the start of the command, or the search pattern, URL or description it was called with) and the first 300 characters of its output, scrubbed |
-| Web reading | `webRead` | `active` adds a `web_read` tool that returns only the blocks of a page that answer the question, verbatim, and keeps the whole page for `read_coordinate`; `shadow` measures the same beside each WebFetch call and changes nothing ([Blocks](#blocks-web-reading-and-kept-fold-blocks)) | The page's text and the question, scrubbed |
+| Web reading | `webRead` | `active` adds a `web_read` tool that returns only the blocks of a page that answer the question, verbatim, and keeps the whole page for `read_coordinate`; `shadow` measures the same beside each WebFetch call and changes nothing ([Blocks](#blocks-web-reading)) | The page's text and the question, scrubbed |
 | Browser routing | `browserRoute` | For each prompt you write, decides whether it needs a web browser operated (keywords, else Jev); `active` attaches one instruction naming the installed tool to use, in the order ego-browser, Aside, agent-browser, Playwright, then a CDP tool you name in `browserCdp`. With none installed, the model is told so and you are told once in 14 days | Your prompt, scrubbed, first 600 characters, when no keyword decides |
-| Kept fold blocks | `foldBlocks` | At a compaction, keeps the blocks of the largest folded results that your last prompt still needs, verbatim under the pointer (`active`), or records which it would keep (`shadow`) | Those results' text and your last prompt (first 400 characters), scrubbed |
+| Fold relevance (`fold: on`) | `foldJev` | `shadow` records which of the largest earlier results your request still needs, beside what the fold did. `active` lets that decide the fold, on every compaction, automatic ones included: a result Jev says is still needed (at least `foldThreshold`, 0.3) stays whole, and one it says is done with is folded even inside the recent window. The rule stays the floor: a short error, a tool in `keepTools` or a result under `minFoldChars` is never folded. When Jev does not answer within its timeout or fails, the rule decides those results alone | Your last prompt, scrubbed, first 400 characters, and for each result its tool and target (the path, the start of the command, or the search pattern, URL or description it was called with) and the first 300 characters of its output, scrubbed |
+| Kept fold blocks (`fold: on`) | `foldBlocks` | At a compaction, keeps the blocks of the largest folded results that your last prompt still needs, verbatim under the pointer (`active`), or records which it would keep (`shadow`) | Those results' text and your last prompt (first 400 characters), scrubbed |
 
 Scrubbing removes secret-shaped strings, `NAME=value` secrets, email addresses and your home folder, then replaces Korean personal information with a label such as `[전화번호]`. That second pass is a TypeScript port of [maskingtape](https://github.com/ChoHyeonChan/maskingtape) main at commit 2802949 (Apache-2.0, in `hooks/pii/`), checked against the original on 2,614 inputs; it finds names by rules alone, for which the original reports a recall of 0.966. A text bounded in length is scrubbed first and cut after, never inside a label.
 
-### Blocks: web reading and kept fold blocks
+### Blocks: web reading
 
 Both settings split a text into blocks (paragraphs, list items, table rows, code blocks, runs of up to 40 output lines), each under its heading path, and ask Jev in two stages which blocks answer a question: one request per window of blocks, then each candidate again with the text around it. What they keep goes out quoted, never paraphrased; the whole text stays in the archive, so a block judged wrongly is one `read_coordinate` away. The splitting and the judgment are ported from [jevfetch](https://github.com/a2sys-ai/jevfetch) (MIT, commit 167fe8f), with its questions and thresholds unchanged. They are the two gates that send text itself, not a description of it.
 
@@ -182,7 +101,7 @@ Both settings split a text into blocks (paragraphs, list items, table rows, code
 The 421 (Misdirected Request) status code indicates that the request was directed at a server that is unable or unwilling to produce an authoritative response for the target URI. ...
 ```
 
-A kept fold looks like a pointer with the needed lines under it:
+With `fold: on`, kept fold blocks use the same judgment on a folded result; one looks like a pointer with the needed lines under it:
 
 ```text
 [folded Read · hooks/register.ts · 598 lines — read_coordinate("toolu_…")]
@@ -212,8 +131,7 @@ Blocks are kept only when the judgment found an answer and they come to at most 
            "stopGate": "shadow",
            "toolGate": "shadow",
            "toolJev": "shadow",
-           "instructions": "shadow",
-           "foldJev": "shadow"
+           "instructions": "shadow"
          }
        }
      }
@@ -240,7 +158,7 @@ Without a key, the status line says only `jev: no key` and nothing is sent. The 
 - **Provider trust.** First-party only when every sign agrees: an Anthropic credential, no `HTTPS_PROXY`/`HTTP_PROXY`, no `NODE_EXTRA_CA_CERTS`, no Bedrock/Vertex/Foundry, and an `ANTHROPIC_BASE_URL` that is empty or `https://*.anthropic.com`. A local proxy counts as external unless listed in `trustedProxies`. `providerTrust: external` forces external; nothing forces first-party.
 - **Secret files.** `.env` and `.env.*` (not `.example`, `.sample`, `.template`, `.tpl`, `.dist`), `*.env`, `~/.ssh` (not `*.pub` or `known_hosts`), `~/.aws`, `~/.gnupg`, gcloud, `~/.kube/config`, `~/.docker/config.json`, `~/.config/gh/hosts.yml`, Codex and Claude credential files, `.netrc`, `.npmrc`, `.pypirc`, `.pgpass`, `.git-credentials`, `*.pem`, `*.p12`, `*.pfx`, `*.kdbx`, `*.keystore`, `*.jks`, `id_rsa` and kin, the opencodex proxy's token files under `~/.opencodex`, and `/proc/<pid>/environ`, resolved through `~`, `$HOME`, `..` and symlinks.
 - **Shell.** Every argument of a Bash command is checked, including git pathspecs, `--opt=path` and redirects; `env`, `printenv`, `export -p`, `security … -w` and `gh auth token` count too.
-- **Folded originals.** With the gate on in an external session, `read_coordinate` judges the call that produced a folded result as that call would have been judged, following a path that still exists to what it leads to; reading the archive folders directly is refused the same way. A secret file folded earlier does not come back either way.
+- **Archived originals.** With the gate on in an external session, `read_coordinate` judges the call that produced an archived result as that call would have been judged, following a path that still exists to what it leads to; reading the archive folders directly is refused the same way. A secret file folded earlier does not come back either way.
 - A guard that breaks in `active` refuses the call. `toolJev` asks once per target and session, never about a path the floor names.
 
 </details>
@@ -266,7 +184,7 @@ Lead with the conclusion. One idea per paragraph. Cut filler.
 </details>
 
 <details>
-<summary>Fold relevance in detail</summary>
+<summary>Fold relevance in detail (<code>fold: on</code>)</summary>
 
 At a compaction the prompt cache is rebuilt anyway, so judging what to keep costs no cache there. Jev is asked, for up to 48 of the largest results the fold could act on (at least `minFoldChars`), whether your current request still needs it, shown only as its tool, target and size. Each record holds what the fold did with that result and Jev's probability that it is done with. In `shadow` that is all. In `active`, on a compaction you asked for, the question is asked before the fold, of every result the rule would fold if recency did not count, and the answers decide it. A result Jev gave no answer for is decided by the rule. Kept fold blocks then work only inside what was folded: a result kept whole is not asked about again, block by block.
 
@@ -276,7 +194,7 @@ At a compaction the prompt cache is rebuilt anyway, so judging what to keep cost
 
 - `/jev-report`: per gate, records, skips by reason, coverage, failures by kind, latency (Jev and hook, p50 and p95, and timeouts, per gate), tokens, the rule-versus-Jev table with Cohen's kappa, unlabeled disagreements, and, once labeled, precision and recall at several thresholds.
 - `/jev-mark <id> y|n`: label a record yourself.
-- Every compaction is recorded as well, with or without a key: its trigger, how long it held the turn, whether a summary ran, and, when one did, the window before and after as the engine counted it (a fold alone reports no token counts). `/jev-report` shows them under `compact`, with the prompts, turns and time between one compaction and the next. These are your own sessions' numbers, read off the engine, which is what any change to the fold settings should be judged by.
+- Every compaction is recorded as well, with or without a key: its trigger, how long it held the turn, whether a summary ran, and, when one did, the window before and after as the engine counted it (a fold alone reports no token counts). `/jev-report` shows them under `compact`, with the prompts, turns and time between one compaction and the next. These are your own sessions' numbers, read off the engine, which is what any change to the compaction settings should be judged by.
 
 Before switching the Stop gate to `active`, aim for at least 50 positive and 100 negative labels and a threshold with precision of 0.9 or more on them. The gate checks this itself: once 150 of its judgments are labeled, a precision under 0.9 demotes an `active` Stop gate to `shadow`, with a notice, and the demotion lasts across sessions (`/jev-report` says when and why). No other gate is demoted. Agreement with the rule alone is not evidence: the rule flags about 5% of turn ends, so a gate that always says "no" agrees about 95% of the time.
 
@@ -295,9 +213,9 @@ Jev bills input tokens only, $0.042 per million ([TypeSafe's Models page](https:
 | --- | --- | --- | --- |
 | Stop gate | Each turn end it judges (about 60%; the rest are skipped) | ~400 | $0.017 per 1,000 turn ends |
 | Conditional instructions | Each prompt you write while some fragment is not attached | ~400 with 3 fragments, ~2,000 with 24 | $0.017-0.084 per 1,000 prompts |
-| Fold relevance | Each compaction, one call per 24 results, at most two | up to ~2,500 | $0.21 per 1,000 compactions |
 | Tool gate Jev | Each new target in a session another provider serves | ~455 | $0.019 per 1,000 targets |
 | Instruction filter | Each new set of instruction files (two calls), then each prompt while some chunk would be deferred | ~13,600 per set, ~1,730 per prompt | $0.0006 per set, $0.073 per 1,000 prompts |
+| Fold relevance (`fold: on`) | Each compaction, one call per 24 results, at most two | up to ~2,500 | $0.21 per 1,000 compactions |
 
 The session caps (`stopCap` 200, `instructionCap` 200, `foldCap` 20, `toolCap` 300 calls) bound one session at about 670,000 input tokens: $0.03. The instruction filter draws on `instructionCap` too.
 
@@ -324,6 +242,96 @@ The author's own use, priced as if every gate were on (2026-10-23, counted from 
 
 </details>
 
+## Instruction files
+
+Claude Code loads its instruction files whole at the start of a conversation and again after each compaction: the user `CLAUDE.md` of the profile in use, a project's `CLAUDE.md` and `AGENTS.md`, every file they `@`-import, and the `.claude/CLAUDE.md` of every folder above the working folder. That last rule means a session run from inside your home folder also loads `~/.claude/CLAUDE.md` as a project file. If another profile's `CLAUDE.md` (say `~/.claude-3/CLAUDE.md`) is a copy of it, the same text loads twice.
+
+**The fix needs no plugin.** In each profile other than `~/.claude` that keeps its own copy, exclude the shared one:
+
+```json
+{ "claudeMdExcludes": ["/Users/you/.claude/CLAUDE.md"] }
+```
+
+Never put this in `~/.claude/settings.json` itself: there the same file is the profile's own user file, and the profile would lose it. In the author's setup it took the first request from 69,152 to 66,655 tokens (the OMC block, 5.9k characters, loaded once instead of twice).
+
+**`instructionFilter`** (`auto`, `off`, `shadow`, `active`; default `auto`) handles what is left, through the engine's `prompt.context` hook, which hands a plugin the instruction files just before they are sent. It splits them into chunks by heading and by tag block, keeping code fences whole, and then:
+
+- **Loaded twice, byte for byte** (whitespace aside): `active` leaves the later copy out and puts a one-line note where it was (`[conjev: left out "…", loaded from …]`), so the model knows. Of two OMC blocks at different versions, the older one leaves. Organization (`managed`) files and the auto-memory index are never changed.
+- **Jev's reading of the rest, applied in `active` once Jev has answered, recorded only in `shadow`:** after the request has gone, Jev is asked of every chunk whether nearly every request needs it, and of every user-level chunk whether the chunks before it already say all of it. `/jev-report` lists what that would drop or defer, and why. These rules are never dropped or deferred: identity, language, autonomy and approval, answering questions first, shell, git, API keys, browser, any section whose heading contains 중복 or 강조 (how the author marks a deliberate repetition; a heading worded otherwise is judged by Jev), and the OMC block. The Orca section is decided by the environment, not by Jev.
+- **Would-miss:** for every prompt, slash commands included, Jev is asked whether the chunks it would defer apply. Tool uses of their kind (browser, web fetch, `orca`, `claude -p`) are recorded too, and `/jev-report` counts how often that work began with the chunk not yet attached.
+
+In `active`, the chunks Jev reads as covered or needed only for some work (at 0.95) leave from the next load of the same files on, each run replaced by a line that says Jev left it out and why; the first load goes on whole, since Jev answers after the request. To judge whether that is safe for you, watch the would-miss rate in `/jev-report`, or label covered chunks with `/jev-mark`. The reading costs a few hundred milliseconds in the background and nothing on the request path: `prompt.context` itself takes about 30 ms.
+
+## Project state and memory
+
+A compaction summary is never the source of truth; files the project keeps are. The plugin uses three, each only while it exists, and never writes them itself: the agent does, and the plugin checks and points.
+
+| File | What it holds | Written when |
+| --- | --- | --- |
+| `INTENT.md` | The agent's reading of what you want: goal, done-when, scope, constraints, open questions, each line citing your own words | You state or change a goal |
+| `PHASE.md` | The status board you read: now, next, what needs you, done with evidence, resume notes; with several agents, who owns what. Its **Handoff** section is for the session that picks the work up: the branch and worktree, whether the commits are pushed, what is uncommitted, the command to run first, and what not to repeat | A step ends or blocks, you decide, the commit state changes, before a handoff, when the plugin asks |
+| `sessions/<date>-<slug>.md` | Episodes: what happened, when, and the evidence (paths, commits, `read_coordinate` ids) | Each stretch of work, append-only |
+
+- **A project with no status board is offered one.** On the first prompt you write, the plugin asks, in Claude Code's own dialog, whether to create `PHASE.md`; the agent then writes it. Three hours with no answer counts as yes. The question is asked once: a no is remembered, and so is a yes, across sessions. A run with nobody to ask (`claude -p`) is never taken as consent.
+- **The board is checked against the repository.** Before a compaction, when the board is due, the request to bring it up to date also names what `git status` shows and the board's Handoff section should say: commits not pushed, files with uncommitted changes, or a board with no Handoff section at all.
+- `/conjev:project-state` keeps `INTENT.md` and `PHASE.md`, alone or across several agent sessions, with the rules that keep one board consistent and the steps a resuming session follows.
+- `/conjev:consolidate` turns a stretch of work into memory that lasts: the board, an episode, repeated procedures as project skills, lasting principles into `AGENTS.md` once you agree. A deterministic procedure that keeps repeating is proposed as code: see [just-dag-it](https://github.com/ysys143/just-dag-it).
+
+## Compaction
+
+By default every compaction (`/compact`, or the engine's own when the window fills) is Claude Code's summary, over the whole transcript and told only what you typed after `/compact`. The plugin does three things around it:
+
+1. **Before the summary**, it archives the conversation the summary is about to replace, as one `conversation-<id>` item, and puts one line after the summary naming it, so `read_coordinate` can read what was said.
+2. **After it**, in a project that keeps `INTENT.md`, `PHASE.md` or an episode log ([Project state](#project-state-and-memory)), it appends a note: which of those files to re-read, in order, and, when there is a status board, that its Handoff section is what a session picking this up reads first.
+3. **It records the compaction**: its trigger, how long it held the turn, and the window before and after. `/jev-report` shows them under `compact`.
+4. **`read_coordinate`** returns an archived original by its id, which the line after a summary or a folded pointer names, 400 lines at a time unless `offset` and `limit` say otherwise. With a `query` and a Jev key, it returns only the passages that bear on it, quoted, and names by line number the ranges it left out; with no `query`, `offset`, `limit` or `full`, your latest request is the query. `full: true` returns the whole original. Without a key, a `query` returns the whole original rather than a fragment nothing chose.
+
+| Setting | Default | Why |
+| --- | --- | --- |
+| `intentFile` | `INTENT.md` | The agent's reading of what you want; empty turns it off |
+| `phaseFile` | `PHASE.md` | The status board, and the handoff; empty turns it off |
+| `episodeDir` | `sessions` | The episode log folder; empty turns it off |
+| `imageMaxPx` | 0 | Read images larger than this on their long side as a smaller copy; 0 is off |
+
+**Images.** An image costs about width × height / 750 tokens, up to roughly 1,550, and stays in the transcript until a compaction (a fold never takes one), so a screenshot read early is paid for on every request until then. With `imageMaxPx` set, a `Read` of a PNG or JPEG larger than that on its long side reads a copy downscaled with `sips` (macOS) or ImageMagick (`identify`, `convert`; Linux) instead; the copy is kept beside the archive and reused. If the size cannot be read or the resize fails, the original is read. A PDF and an image you paste keep their size.
+
+### Folding
+
+`fold: on` (in `/config` or `~/.conjev/config.json`) answers a compaction by folding instead: each large, older tool result is written to the archive and replaced by a one-line pointer, and a summary runs only when folding is not enough. It is off by default: in [the field test](docs/experiment/compaction-field-test.md), the summary with the gates on wrote the better-scored report at the same cost, while folding kept an instruction given mid-conversation best.
+
+![Before compaction, two large tool results fill the transcript, both older than the last ten model turns. After the fold, the same messages remain and those results are one-line pointers; the originals are in an archive on disk, read_coordinate returns them, and a note sends the model back to INTENT.md and PHASE.md.](docs/fold.svg)
+
+A real pointer, as the model sees it; the id is what `read_coordinate` takes:
+
+```text
+[folded Read · src/billing/invoice.ts · 1201 lines — read_coordinate("toolu_01J7igoRSuY8xw8F8skCSEY3")]
+```
+
+A tool result is folded when it is finished and large: older than the last `keepRecentTurns` model turns, at least `minFoldChars` long, not an error shorter than `keepErrorsUnder`, and not from a tool in `keepTools`. A result whose pointer would be longer than itself stays, and so does every result in a message that holds an image or a document (see [Limits](#limits)).
+
+1. **At compaction** (`/compact`, the engine's automatic compaction, or step 4), the plugin answers in place of the engine's summary. Each result that qualifies is written to the archive and replaced by its pointer. The large bodies of older tool calls go the same way, by the same rule over the body's text: a `Write`'s content, an `Edit`'s strings, a long `Bash` command become `[folded input · Write · src/a.ts · 4200 chars — read_coordinate("toolu_…:input")]`. Every other message is handed back untouched.
+2. **If folding is not enough**, because the folded transcript still fills more than 60% of the window, the engine summarizes only what is older than the recent window. The recent turns are carried over as they stand, folded where the rule says so. The plugin then puts back two things a summary would lose: every prompt you wrote in the summarized part, in order, and one message listing the pointer of every folded original, so the model keeps a way to each. When nothing qualifies to fold or the archive cannot be written ([Data and privacy](#data-and-privacy)), the engine summarizes the whole transcript. Whatever a summary replaces is archived first, as one `conversation-<id>` item, and the pointer message names it, so the conversation itself stays readable with `read_coordinate`. The summary is told what you typed after `/compact` first, then the plugin's own request: keep your requests and decisions in your words, and keep every `[folded …]` line as it is. The 60% is a fixed share, not `foldAtPercent`, measured on an estimate from the transcript's characters rather than a token count.
+3. **A summary waits for the status board.** If the project keeps `PHASE.md` or an episode log ([Project state](#project-state-and-memory)) not written since the last compaction, the summary is held back and the agent is asked to bring them up to date; the fold itself goes ahead. A summary replaces what you said with the agent's reading of it, and the board is where that reading lives. After two requests it summarizes without asking. The turn that answers such a request is not held by the Stop gate.
+4. **At an idle boundary**, when a turn has ended with the window at least `foldAtPercent` full, the plugin starts a compaction itself, but only if folding would remove at least `minSavedPercent` of the transcript: each compaction rebuilds the prompt cache once. It waits 30 seconds first and stands down if you write in that time, so your next request is never queued behind a summary. While a summary runs, the status line says so.
+5. **After a compaction** that folded something, or in a project that keeps those files, it appends a note: how many results were folded, which of the project's files to re-read, and, when there is a status board, that its Handoff section is what a session picking this up reads first.
+
+| Setting (`fold: on`) | Default | Why |
+| --- | --- | --- |
+| `keepRecentTurns` | 10 | The work in progress still reads the most recent model turns. A model turn is one response, with its tool calls and their results; counted by your prompts instead, a session you start once and leave to run (`/goal`) would never fold |
+| `minFoldChars` | 1000 | In a measured session, 44% of results held 90% of all tool output |
+| `keepErrorsUnder` | 2000 | Short errors stop the model repeating the same mistake |
+| `keepTools` | `TodoWrite,AskUserQuestion,ExitPlanMode` | Small, and they hold current decisions |
+| `foldAtPercent` | 60 | When to fold by itself after a turn; 0 turns it off |
+| `minSavedPercent` | 20 | Fold by itself only when it saves at least this share |
+
+`/conjev:tune-policy` measures your session with the folding code itself (`policy_report`), asks you a few questions, dry-runs the values you chose beside the current ones, and applies them only after you agree (`set_policy`, which writes the fold settings above it and no other).
+
+## Compared with
+
+- **Claude Code's own compaction** replaces the conversation with a summary. conjev keeps that summary, archives what it replaces, and points the model back at the project's files after it; with `fold: on` it folds old tool results first and summarizes only when folding is not enough.
+- **jev-harness**, which this plugin grew out of, had the Stop gate, the tool gate and conditional instructions. conjev adds the instruction filter, web reading, browser routing, consent with a first-run setup, settings shared across profiles, and the archive and note at compaction.
+- **Memory plugins** keep what was learned across sessions, in a store of their own. conjev works inside a session, and what should last is written by the agent into the project's own files (`INTENT.md`, `PHASE.md`, `sessions/`).
+
 ## Data and privacy
 
 Everything the plugin keeps is under one folder only you can open; every folder is made 700 before anything is written in it, and made again the same way if it was removed during a session. When that fails, nothing is written and the engine summarizes:
@@ -335,19 +343,19 @@ Everything the plugin keeps is under one folder only you can open; every folder 
   consent.json                           your /jev-consent answer
   onboarding.json                        the first-run setup finished or declined
   state/
-    archive/<session>/<id>.json          folded originals (tool results, inputs as <id>:input,
-                                         summarized conversations as conversation-<id>), never deleted
+    archive/<session>/<id>.json          archived originals (summarized conversations as conversation-<id>,
+                                         pages as web-<id>, folded results and inputs), never deleted
     records/<session>/<gate>/<id>.json   judgment records, kept 14 days
     records/labels/labels/<id>.json      your labels, kept
     replay/                              replay output
     shrunk-<path>                        downscaled image copies (imageMaxPx), reused
 ```
 
-Before this release the state lived in `~/.local/state/context-harness/`. Every session start moves it to `~/.conjev/state/`: all of it when the new folder does not exist yet, and when both do, the files the new one lacks (one `rsync`), removing from the old folder any file the new one holds with the same contents and leaving one that differs, which is still read (folded originals, records, labels) and still cleaned. So what a session still on an older release writes there is merged at the next start.
+Before this release the state lived in `~/.local/state/context-harness/`. Every session start moves it to `~/.conjev/state/`: all of it when the new folder does not exist yet, and when both do, the files the new one lacks (one `rsync`), removing from the old folder any file the new one holds with the same contents and leaving one that differs, which is still read (archived originals, records, labels) and still cleaned. So what a session still on an older release writes there is merged at the next start.
 
 An archive file holds exactly what the tool returned; `web_read` adds the page it read, as blocks, under `web-<id>`. A record holds what was sent (scrubbed), the verdicts and the timings; for web reading and kept fold blocks, which send text, it keeps the question and the size of the text, not the text.
 
-Folds from before the rename stay at `~/.claude-context-fold/<session>/`; the plugin reads them and never writes or deletes there. Without `HOME`, it folds nothing and lets the engine summarize, rather than write into the project. To remove what it kept:
+Folds from before the rename stay at `~/.claude-context-fold/<session>/`; the plugin reads them and never writes or deletes there. Without `HOME`, it archives nothing and lets the engine summarize, rather than write into the project. To remove what it kept:
 
 ```sh
 rm -rf ~/.conjev/state/archive/<session-id>   # one session's originals
@@ -360,6 +368,7 @@ The plugin uses, and only for this: the network (Jev, only with a key, `jev: on`
 
 | What | Result | Measured with |
 | --- | --- | --- |
+| A long autonomous task, three configurations, judged blind | The engine's summary with the Jev gates on scored highest: 0.946 and 0.958, against 0.925 (no plugin) and 0.889 (folding) ([the field test](docs/experiment/compaction-field-test.md)) | conjev, Claude Code 2.1.312 |
 | One compaction | 137,469 → 36,995 tokens, 30 ms | context-fold 0.0.2 |
 | A folded file, asked for row 777 | Read back with `read_coordinate` (`offset: 777, limit: 1`), answered correctly | context-fold 0.0.2 |
 | Fold and its judgment in one compaction | 2 results folded (−32k characters); each record matches the archive | context-harness 0.0.1 |
@@ -434,31 +443,34 @@ Jev answers a question in one of three shapes: a choice among named options, a s
 
 ## Limits
 
-- Results fold only at compaction: a plugin cannot rewrite a model request turn by turn.
-- Claude Code already saves very large Bash outputs to a file; the largest gains come from tools whose output it keeps whole, such as `Read`.
-- "Turns" are user messages with text; reminders the engine injects count too, so the recent window can be shorter than the setting.
-- Subagent transcripts are not folded, and neither is a compaction the engine precomputes. A folded result is readable only from the session that folded it: not after `/clear` or in a fork.
-- A user message holding an image or a document is never folded, whole or in part: the fold rebuilds a message from its rows, which hold no media, so an image in it would be lost. Every large result in that message stays for the rest of the session, even ones the fold would otherwise take. The plugin reads media from the api view (`$.session.messages({ as: 'api' })`); when that view is unavailable, nothing folds and the engine summarizes.
-- The plugin starts its own folds by running `/compact`, so the command shows in the transcript.
-- A plugin loaded before this one that answers compactions itself takes them; this plugin then neither folds nor judges them.
+- A plugin loaded before this one that answers compactions itself takes them; this plugin then neither archives, folds nor judges them.
 - A changed setting reloads the plugin, which starts its counters and its count of consolidation requests over.
 - In `shadow`, nothing is attached, so what would have been is remembered, and forgotten only when the plugin sees a compaction summarized or the conversation cleared; `active` counts the conversation instead.
 - The instruction filter sees only what loads at the start and after a compaction; a subfolder's `CLAUDE.md` and `.claude/rules` arrive later, as Claude Code reads files, and pass it by.
 - `web_read` reads what the server sends, up to 4 million characters: no JavaScript is run, PDFs and other files are refused, and local and private-network addresses are never fetched (in `shadow`, neither is a WebFetch URL that carries a secret-shaped value). The address is checked as written: a public name that resolves to a private address, or a redirect to one, is fetched, since Claude Code fetches and follows redirects itself. Its HTML reader is written for the plugin, which can load no packages, so a malformed page can split differently from jevfetch; asides marked as notes stay in the page rather than being judged apart. XML is read as text.
 - Token counts in web reading are estimates (about four ASCII characters or one other character per token); the plugin has no tokenizer.
 - Browser routing finds tools by rules only: a command on `PATH` (`which`) or in `~/.local/bin`, `/opt/homebrew/bin`, `/usr/local/bin`, `~/.bun/bin` or `~/.npm-global/bin`; Playwright in the project's `node_modules` or its browser cache. It launches nothing and probes no debugging port, so a CDP tool counts only when `browserCdp` names it. It cannot read your permission rules or other plugins' hooks: list a tool they block in `browserBlocked`, or it may be suggested.
-- Kept fold blocks group output lines by 40, so a kept code block can carry lines around the one that mattered.
-- A summary runs only over what is older than the recent window. When the transcript holds fewer model turns than `keepRecentTurns`, there is no older part, so a folded transcript that still fills more than 60% of the window is not summarized.
-- The 60% check estimates tokens from the transcript's characters. It counts no images, no reasoning blocks and nothing of the system prompt, so it reads lower than the window really is.
-- An automatic fold waits 30 seconds for you; a prompt in that time takes the moment. The check the timer makes when it fires is covered by a unit test, but no test fires the timer itself: the test runtime runs a timer's callback at once, so the order "timer set, you write, timer fires" cannot be staged there.
-- Fold relevance in `active` holds an automatic compaction too, for up to twice `timeoutMs` per batch of 24 results while Jev answers; a Jev that does not answer in time leaves those results to the rule.
-- A folded tool input rebuilds its assistant message from text and tool calls, so the reasoning blocks of those older turns leave with it.
 - The Stop gate's demotion is kept in the plugin's own store and the plugin never undoes it; there is no command to undo it yet.
 - Names in Korean personal information are found by rules alone; the original maskingtape reports a recall of 0.966 for them, and that is accepted here: about 3 names in 100 can reach Jev unmasked.
 - The first-run setup is the session's first prompt (`initialUserMessage`); in a `-p` run that has its own prompt, the engine decides which comes first.
 - `imageMaxPx` needs `sips` (macOS) or ImageMagick; without either, images are read as they are.
 - `read_coordinate` with a `query` needs a Jev key; without one it returns the whole original.
 - Not yet: whether attached fragments make answers better; the Stop gate's accuracy on real announcements; whether recompaction intervals change with the settings (`/jev-report` now records them for that comparison).
+
+With `fold: on`:
+
+- Results fold only at compaction: a plugin cannot rewrite a model request turn by turn.
+- Claude Code already saves very large Bash outputs to a file; the largest gains come from tools whose output it keeps whole, such as `Read`.
+- "Turns" are model turns: the rows of one response count once, and a cut never separates a call from its answer.
+- Subagent transcripts are not folded, and neither is a compaction the engine precomputes; a summarized conversation is archived only for the main one. A folded result is readable only from the session that folded it: not after `/clear` or in a fork.
+- A user message holding an image or a document is never folded, whole or in part: the fold rebuilds a message from its rows, which hold no media, so an image in it would be lost. Every large result in that message stays for the rest of the session, even ones the fold would otherwise take. The plugin reads media from the api view (`$.session.messages({ as: 'api' })`); when that view is unavailable, nothing folds and the engine summarizes.
+- The plugin starts its own folds by running `/compact`, so the command shows in the transcript.
+- Kept fold blocks group output lines by 40, so a kept code block can carry lines around the one that mattered.
+- A summary runs only over what is older than the recent window. When the transcript holds fewer model turns than `keepRecentTurns`, there is no older part, so a folded transcript that still fills more than 60% of the window is not summarized.
+- The 60% check estimates tokens from the transcript's characters. It counts no images, no reasoning blocks and nothing of the system prompt, so it reads lower than the window really is.
+- An automatic fold waits 30 seconds for you; a prompt in that time takes the moment. The check the timer makes when it fires is covered by a unit test, but no test fires the timer itself: the test runtime runs a timer's callback at once, so the order "timer set, you write, timer fires" cannot be staged there.
+- Fold relevance in `active` holds an automatic compaction too, for up to twice `timeoutMs` per batch of 24 results while Jev answers; a Jev that does not answer in time leaves those results to the rule.
+- A folded tool input rebuilds its assistant message from text and tool calls, so the reasoning blocks of those older turns leave with it.
 
 ## Upgrading
 
@@ -468,8 +480,8 @@ conjev joins two plugins that were built apart to test each idea, [context-fold]
 - **Folds made by context-fold** stay readable: `read_coordinate` looks in `~/.claude-context-fold/<session>/` after its own archive, for the same session.
 - **Settings and the key** do not carry over: set them again under conjev: `/config`, or `~/.conjev/config.json` and `~/.conjev/key` to set them once for every profile.
 - **jev-harness records** under `~/.local/state/jev-harness/` are not read; their fold verdicts came from a copy of the rule that this release replaces with the fold itself. Delete that folder when you no longer need it.
-- **Coming from jev-harness alone**, you now also get folding at compaction, an automatic `/compact` once the window is 60% full (`foldAtPercent`, 0 turns it off), originals kept on disk, and a note after each compaction.
-- **Coming from context-fold alone**, you now also get `/jev-report`, `/jev-mark`, a hook on every tool call that passes straight through while the gates are off, and a cleanup of judgment records older than 14 days at each session start.
+- **Coming from jev-harness alone**, you now also get the instruction filter, web reading, browser routing, consent with a first-run setup, the summarized conversation archived and a note after each compaction; folding, with `fold: on`.
+- **Coming from context-fold alone**, note that folding is now off by default (`fold: on` brings it back); you also get `/jev-report`, `/jev-mark`, a hook on every tool call that passes straight through while the gates are off, and a cleanup of judgment records older than 14 days at each session start.
 - **Behaviour that changed:** a fragment already in the conversation is not attached again after a compaction that only folded (jev-harness attached it again); fold judgment records state what the fold did, counting turns as the fold does.
 
 ## Development

@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 586" width="880" height="586" role="img" aria-labelledby="fold-title fold-desc">
-  <title id="fold-title">Fold, don't summarize</title>
-  <desc id="fold-desc">Before compaction, the transcript holds two large tool results, each two prompts old. After the fold, the same messages remain and each of those results is a one-line pointer. The originals are kept in an archive on disk, read_coordinate returns them, and a note sends the model back to the project's INTENT.md and PHASE.md.</desc>
+  <title id="fold-title">Folding, with fold: on</title>
+  <desc id="fold-desc">With fold: on. Before compaction, the transcript holds two large tool results, both older than the last ten model turns. After the fold, the same messages remain and each of those results is a one-line pointer. The originals are kept in an archive on disk, read_coordinate returns them, and a note sends the model back to the project's INTENT.md and PHASE.md.</desc>
   <style>
     text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; fill: #2d3142; }
     .eyebrow { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 10.5px; letter-spacing: 1px; fill: #4f5d75; }
@@ -36,7 +36,7 @@
   <rect x="739" y="411" width="94" height="13" fill="#f5f5f5"/>
   <text x="743" y="421" class="label">re-read first</text>
 
-  <!-- Before: two large results, each two prompts old. -->
+  <!-- Before: two large results, both older than the recent window. -->
   <rect x="32" y="24" width="356" height="372" rx="8" fill="#ffffff" stroke="#c9ced8"/>
   <text x="48" y="48" class="eyebrow">BEFORE COMPACTION</text>
   <rect x="48" y="62" width="324" height="28" rx="4" fill="#eef1f6"/>
@@ -82,8 +82,8 @@
   <!-- On disk. -->
   <rect x="272" y="442" width="230" height="120" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="0.8"/>
   <text x="288" y="470" class="name">Archive</text>
-  <text x="288" y="492" class="mono">~/.local/state/</text>
-  <text x="288" y="508" class="mono">conjev/archive/</text>
+  <text x="288" y="492" class="mono">~/.conjev/state/</text>
+  <text x="288" y="508" class="mono">archive/</text>
   <text x="288" y="534" class="small">the originals, unchanged</text>
 
   <rect x="618" y="442" width="230" height="120" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="0.8"/>
