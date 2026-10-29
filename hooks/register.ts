@@ -106,7 +106,7 @@ export const FOLD_ARMED_KEY = 'fold-armed-at'
 const SETTINGS_SCHEMA = {
   type: 'object',
   properties: {
-    keepRecentTurns: { type: 'number', description: 'Results from this many most recent turns are never folded' },
+    keepRecentTurns: { type: 'number', description: 'Results from this many most recent model turns (one response each) are never folded' },
     minFoldChars: { type: 'number', description: 'Fold only results of at least this many characters' },
     keepErrorsUnder: { type: 'number', description: 'Keep error results shorter than this many characters' },
     keepTools: { type: 'array', items: { type: 'string' }, description: 'Tools whose results are never folded' },

@@ -21,8 +21,8 @@
     "keepRecentTurns": {
       "type": "number",
       "title": "Turns kept verbatim",
-      "description": "Tool results from this many most recent turns are never folded.",
-      "default": 2
+      "description": "Tool results from this many most recent model turns (one assistant message each, a tool call and its answer) are never folded, and a partial summary keeps them whole.",
+      "default": 10
     },
     "minFoldChars": {
       "type": "number",

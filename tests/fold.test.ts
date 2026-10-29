@@ -1,6 +1,6 @@
 import type { SessionMessage } from 'claude-code'
 import { expect, test } from 'claude-code/testing'
-import { DEFAULT_SETTINGS, FOLD_MARK, foldTranscript, partialCut, pointerFor, shouldFold, sliceLines, stillIdle, type FoldCandidate, type FoldPolicy } from '../hooks/fold'
+import { DEFAULT_SETTINGS, FOLD_MARK, foldTranscript, partialCut, turnsAgoOf, pointerFor, shouldFold, sliceLines, splitForSummary, stillIdle, type FoldCandidate, type FoldPolicy } from '../hooks/fold'
 import { judgedPolicy } from '../hooks/fold-judge'
 
 const BIG = Array.from({ length: 300 }, (_, i) => `line ${i + 1}`).join('\n')
@@ -88,16 +88,18 @@ test('a long path keeps its file name in the pointer, a long command its start',
   expect(pointerFor('toolu_c', { ...base, tool: 'Bash', input: { command: `cat ${path}` } })).toContain('Bash · cat /private/tmp/deep/')
 })
 
-test('the policy folds large results from two or more turns ago', () => {
-  const old: FoldCandidate = { tool: 'Bash', input: { command: 'ls' }, text: 'x'.repeat(1000), isError: false, turnsAgo: 2 }
+test('the policy folds large results from ten or more model turns ago', () => {
+  // A model turn is one assistant message, so ten turns is ten more calls or
+  // replies after the result, whoever prompted them.
+  const old: FoldCandidate = { tool: 'Bash', input: { command: 'ls' }, text: 'x'.repeat(1000), isError: false, turnsAgo: 10 }
 
   expect(shouldFold(old)).toBe(true)
-  expect(shouldFold({ ...old, turnsAgo: 1 })).toBe(false)
+  expect(shouldFold({ ...old, turnsAgo: 9 })).toBe(false)
   expect(shouldFold({ ...old, text: 'x'.repeat(999) })).toBe(false)
 })
 
 test('the policy keeps state tools and short errors', () => {
-  const old: FoldCandidate = { tool: 'Bash', input: {}, text: 'x'.repeat(1500), isError: false, turnsAgo: 5 }
+  const old: FoldCandidate = { tool: 'Bash', input: {}, text: 'x'.repeat(1500), isError: false, turnsAgo: 15 }
 
   for (const tool of ['TodoWrite', 'AskUserQuestion', 'ExitPlanMode']) expect(shouldFold({ ...old, tool })).toBe(false)
   expect(shouldFold({ ...old, isError: true })).toBe(false)
@@ -126,10 +128,11 @@ test('read_coordinate answers with the archived lines', async ($, on) => {
   expect(typeof missing.result).toBe('string')
 })
 
-test('the partial cut falls on a prompt, keeping that many turns whole', () => {
-  // Six messages, two prompts: "read the app" and "now the config".
-  expect(partialCut(TRANSCRIPT, 1)).toBe(3)
-  expect(partialCut(TRANSCRIPT, 2)).toBe(0)
+test('the partial cut falls on a model turn, keeping that many turns whole', () => {
+  // Six messages, two model turns: the call that reads the app and the one
+  // that reads the config. The cut is the assistant message itself.
+  expect(partialCut(TRANSCRIPT, 1)).toBe(4)
+  expect(partialCut(TRANSCRIPT, 2)).toBe(1)
   expect(partialCut(TRANSCRIPT, 3)).toBe(0)
   expect(partialCut(TRANSCRIPT, 0)).toBe(0)
 })
@@ -138,14 +141,83 @@ test('the partial cut never splits a tool_use from its tool_result', () => {
   const cut = partialCut(TRANSCRIPT, 1)
   const older = TRANSCRIPT.slice(0, cut)
   const recent = TRANSCRIPT.slice(cut)
+  const usesIn = (part: SessionMessage[]) => new Set(part.flatMap(m => m.toolUses.map(u => u.tool_use_id)))
+  const resultsIn = (part: SessionMessage[]) => new Set(part.flatMap(m => (m.toolResults ?? []).map(r => r.tool_use_id)))
 
-  // The older part ends before the kept window's prompt; every call before the
-  // cut has its answer before it too, so no pair is split.
-  expect(older.at(-1)?.toolResults?.[0]?.tool_use_id).toBe('toolu_old')
-  expect(TRANSCRIPT[cut]?.text).toBe('now the config')
-  // The kept window opens with the prompt whose call and answer follow it.
-  expect(recent[1]?.toolUses[0]?.tool_use_id).toBe('toolu_new')
-  expect(recent[2]?.toolResults?.[0]?.tool_use_id).toBe('toolu_new')
+  // The kept window opens on the turn's own message, which holds the call;
+  // its answer follows it, so both sides of the cut hold whole pairs.
+  expect(TRANSCRIPT[cut]?.toolUses[0]?.tool_use_id).toBe('toolu_new')
+  expect([...usesIn(older)]).toEqual([...resultsIn(older)])
+  expect([...usesIn(recent)]).toEqual([...resultsIn(recent)])
+  expect([...usesIn(recent)]).toEqual(['toolu_new'])
+})
+
+test('a prompt older than the cut is still carried over the summary whole', () => {
+  // The cut keeps only the last model turn, so "now the config" lies before
+  // it even though it asked for that turn. The summary is handed the rest of
+  // the older part; the person's words come back as they wrote them.
+  const { older, keptPrompts } = splitForSummary(TRANSCRIPT, partialCut(TRANSCRIPT, 1))
+
+  expect(keptPrompts.map(m => m.text)).toEqual(['read the app', 'now the config'])
+  expect(older.map(m => m.handle)).toEqual(['h1', 'h2'])
+})
+
+test('a session prompted once still folds: only the last ten model turns stay whole', () => {
+  // The reason turns are model turns: under /goal or a long task the person
+  // writes once and the model runs on. Counted by prompts, every result after
+  // that one prompt would stay recent and nothing would ever fold.
+  const run: SessionMessage[] = [prompt('take the whole refactor to the end', 'p')]
+  for (let i = 0; i < 15; i++) run.push(call(`toolu_${i}`, 'Read', { file_path: `src/f${i}.ts` }, `c${i}`), answer(`toolu_${i}`, BIG, `a${i}`))
+
+  const { archived } = foldTranscript(run, shouldFold)
+  // Under the default of ten, the first five results are ten or more turns old.
+  expect(archived.map(a => a.id)).toEqual(['toolu_0', 'toolu_1', 'toolu_2', 'toolu_3', 'toolu_4'])
+  // A partial summary keeps the same ten turns, opening on the sixth call.
+  expect(run[partialCut(run, DEFAULT_SETTINGS.keepRecentTurns)]?.handle).toBe('c5')
+})
+
+// The engine hands one response over as a row per block: its thinking, its
+// text, each tool_use. Those rows are one model turn, not three or four.
+test('a response handed over as several rows is one model turn', () => {
+  const said = (text: string, handle: string): SessionMessage => ({ role: 'assistant', text, toolUses: [], handle })
+  const rows: SessionMessage[] = [
+    prompt('check both files', 'p'),
+    said('', 'think'),
+    said('Reading both.', 'text'),
+    call('toolu_a', 'Read', { file_path: 'a.ts' }, 'ua'),
+    call('toolu_b', 'Read', { file_path: 'b.ts' }, 'ub'),
+    answer('toolu_a', BIG, 'ra'),
+    answer('toolu_b', BIG, 'rb'),
+    said('Both read.', 'done'),
+  ]
+
+  // Two responses after the prompt: the four rows that read, and the closing line.
+  expect(turnsAgoOf(rows)[0]).toBe(2)
+  expect(turnsAgoOf(rows)[5]).toBe(1)
+  // Keeping one turn cuts before the closing line; keeping two cuts where the
+  // first response starts, never between its rows.
+  expect(rows[partialCut(rows, 1)]?.handle).toBe('done')
+  expect(rows[partialCut(rows, 2)]?.handle).toBe('think')
+})
+
+// A turn can start while an earlier call is still unanswered (a reminder the
+// engine injected between them, say). Cutting there would hand the call to the
+// summary and keep its answer, so the cut moves to an earlier turn.
+test('the partial cut never leaves an answer without its call', () => {
+  const rows: SessionMessage[] = [
+    prompt('go', 'p'),
+    call('toolu_a', 'Read', { file_path: 'a.ts' }, 'ua'),
+    prompt('<system-reminder>context</system-reminder>', 'inj'),
+    call('toolu_b', 'Read', { file_path: 'b.ts' }, 'ub'),
+    answer('toolu_a', BIG, 'ra'),
+    answer('toolu_b', BIG, 'rb'),
+  ]
+
+  expect(partialCut(rows, 1)).toBe(1)
+  const cut = partialCut(rows, 1)
+  const used = new Set(rows.slice(0, cut).flatMap(m => m.toolUses.map(u => u.tool_use_id)))
+  const answeredLater = rows.slice(cut).flatMap(m => (m.toolResults ?? []).map(r => r.tool_use_id))
+  expect(answeredLater.filter(id => used.has(id))).toEqual([])
 })
 
 test('an automatic fold stands down when the person writes first', () => {

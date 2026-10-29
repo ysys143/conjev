@@ -4,12 +4,13 @@ import type { HttpResponse, SessionMessage } from 'claude-code'
 import { expect, test } from 'claude-code/testing'
 import { DEFAULT_SETTINGS, foldTranscript, makePolicy, turnsAgoOf } from '../hooks/fold'
 import { cleanupArgs, dirsBetween } from '../hooks/storage'
-import { HOME, KEY_ENV, drain, drawnStatus, prompt, records, settle, setup } from './kit'
+import { HOME, KEY_ENV, drain, drawnStatus, prompt, records, settle, setup, smallRounds } from './kit'
 import { FOLD_ARMED_KEY } from '../hooks/register'
 import { EXCERPT_CHARS } from '../hooks/fold-judge'
 
 const call = (id: string, tool: string, input: Record<string, unknown>): SessionMessage => ({ role: 'assistant', text: '', toolUses: [{ tool_use_id: id, tool, input }] })
 const answer = (id: string, text: string, isError = false): SessionMessage => ({ role: 'user', text: '', toolUses: [], toolResults: [{ tool_use_id: id, text, isError }] })
+const reply = (text: string): SessionMessage => ({ role: 'assistant', text, toolUses: [] })
 
 const ROOT = `${HOME}/.conjev/state`
 const ARCHIVE = `${ROOT}/archive/sess-1`
@@ -33,7 +34,7 @@ const archivedIds = (writes: readonly { path: string }[]): Set<string> =>
 
 // Sixty results of growing size whose text and an unshown input field carry a
 // marker, an error under keepErrorsUnder, an injected reminder, a /command and
-// a result one prompt old.
+// a result one model turn old: the reply that follows it.
 const MARK = 'CANARY-7f3a'
 const BUSY: SessionMessage[] = [prompt('Refactor the parser')]
 for (let i = 0; i < 60; i++) {
@@ -42,7 +43,7 @@ for (let i = 0; i < 60; i++) {
 }
 BUSY.push(call('err', 'Bash', { command: 'npm test' }), answer('err', 'E'.repeat(1500), true))
 BUSY.push(prompt('<system-reminder>context</system-reminder>'), prompt('/cmd arg'))
-BUSY.push(call('late', 'Read', { file_path: '/proj/late.ts' }), answer('late', 'z'.repeat(900)))
+BUSY.push(call('late', 'Read', { file_path: '/proj/late.ts' }), answer('late', 'z'.repeat(900)), reply('Read it.'))
 BUSY.push(prompt('Now fix the parser test'))
 
 const NON_DEFAULT = { keepRecentTurns: 1, minFoldChars: 500, foldJev: 'shadow' }
@@ -68,14 +69,15 @@ test('every fold record states what the fold did, under a policy that is not the
   expect(byId.get('err')).toBe(undefined)
   expect(archived.has('err')).toBe(false)
   expect(byId.get('late')?.heuristic).toBe(true)
-  // Every age is the fold's count, the reminder and the /command included.
+  // Every age is the fold's count: model turns only, so the reminder and the
+  // /command add nothing to it.
   const ages = turnsAgoOf(BUSY)
   for (const row of rows) {
     const at = BUSY.findIndex(m => m.toolResults?.[0]?.tool_use_id === row.joinKey)
     expect((row.facts as Record<string, string>).turnsAgo).toBe(String(ages[at]))
   }
   // The 900-character result folds under keepRecentTurns 1, and its age is the
-  // fold's count: the prompt that follows it.
+  // fold's count: the one reply that follows it.
   expect((byId.get('late')?.facts as Record<string, string>).turnsAgo).toBe('1')
 })
 
@@ -120,7 +122,7 @@ test('the fold judgment scrubs a tool call line before it cuts it', { options: N
   // used because a path key would be shown instead, and a path is scrubbed as
   // a path, not as free text.
   const input = { pattern: `${'p'.repeat(110)} 010-1234-5678` }
-  const messages = [prompt('Refactor'), call('t0', 'Grep', input), answer('t0', 'y'.repeat(2000)), prompt('next'), prompt('and next')]
+  const messages = [prompt('Refactor'), call('t0', 'Grep', input), answer('t0', 'y'.repeat(2000)), reply('Found it.'), prompt('next'), prompt('and next')]
   const io = setup(on, { transcript: messages, env: KEY_ENV, fetch: everyQuestion })
   await $.session.compact({ trigger: 'manual', messages } as never)
   await settle(() => records(io.writes, 'fold').length > 0)
@@ -163,7 +165,10 @@ test('the fold judgment reads the same api view as the fold: a result beside med
 
 const BIG = 'x\n'.repeat(1500)
 const RECENT: SessionMessage[] = [prompt('Look at a.ts'), call('a', 'Read', { file_path: '/proj/a.ts' }), answer('a', BIG)]
-const OLD: SessionMessage[] = [...RECENT, prompt('next'), prompt('and next')]
+// The Read, then ten small rounds of work the policy leaves alone: the Read is
+// ten model turns back, old enough to fold under the default, and the middle
+// prompt lies before the ten turns a partial summary keeps.
+const OLD: SessionMessage[] = [...RECENT, prompt('next'), ...smallRounds(10), prompt('and next')]
 
 test('nothing folded: the engine summarizes, and nothing is judged either', { options: { foldJev: 'shadow' } }, async ($, on) => {
   const io = setup(on, { transcript: RECENT, env: KEY_ENV, fetch: everyQuestion })
@@ -727,8 +732,8 @@ test('fold relevance active: a result Jev says is done with is folded', { option
   expect(records(io.writes, 'fold')[0]?.decision).toBe('fold')
 })
 
-test('fold relevance active: a finished result still inside the recent window is folded', { options: { foldJev: 'active', keepRecentTurns: 5 } }, async ($, on) => {
-  // keepRecentTurns 5 keeps everything for the rule; Jev says the read is done with.
+test('fold relevance active: a finished result still inside the recent window is folded', { options: { foldJev: 'active', keepRecentTurns: 20 } }, async ($, on) => {
+  // keepRecentTurns 20 keeps everything for the rule; Jev says the read is done with.
   const io = setup(on, { transcript: OLD, env: KEY_ENV, fetch: neededAt(0.05) })
   const out = await $.session.compact({ trigger: 'manual', messages: OLD } as never)
 

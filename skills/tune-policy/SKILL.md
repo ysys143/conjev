@@ -9,7 +9,7 @@ The policy decides which completed tool results conjev folds into one-line point
 
 | Value | Default | What it changes |
 | --- | --- | --- |
-| `keepRecentTurns` | 2 | Results from this many most recent turns are never folded |
+| `keepRecentTurns` | 10 | Results from this many most recent model turns (one response each, with its tool calls) are never folded |
 | `minFoldChars` | 1000 | Smaller results are never folded |
 | `keepErrorsUnder` | 2000 | Errors shorter than this are never folded |
 | `keepTools` | TodoWrite, AskUserQuestion, ExitPlanMode | These tools' results are never folded |
@@ -38,7 +38,7 @@ In a few lines, before asking anything:
 
 One `AskUserQuestion` call with up to four questions. Mark the option that follows from the measurement `(Recommended)` and say why in its description.
 
-- **How far back they go** (`keepRecentTurns`): "How often do you or the model need a result from several turns ago?" Options 1, 2 and 4 turns. When `inRecentTurns` for 1 turn is above 50%, single turns are long and 1 still keeps most work in view.
+- **How far back they go** (`keepRecentTurns`): "How often does the model need a result from several responses ago?" Options 5, 10 and 30 model turns. When `inRecentTurns` for 5 turns is above 50%, the session reads few, large results and 5 still keeps most work in view.
 - **Savings against re-reads** (`minFoldChars`): options 500, 1000 and 3000 characters. Recommend the size whose `bySize.charsPercent` is at least 85% with the fewest results.
 - **Folding by itself** (`foldAtPercent`): options 50, 60, 75, and off (0).
 - **Tools never folded** (`keepTools`, multiSelect): the current keep list plus the tools in `byTool` whose results the person may want to stay whole.

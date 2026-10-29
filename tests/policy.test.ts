@@ -15,7 +15,10 @@ const answer = (id: string, text: string): SessionMessage => ({
   toolResults: [{ tool_use_id: id, text, isError: false }],
 })
 
-// Three turns: a large Read and a small Grep, then a large Bash, then the turn in view.
+const reply = (text: string): SessionMessage => ({ role: 'assistant', text, toolUses: [] })
+
+// Four model turns: a large Read, a small Grep, a large Bash, then the reply
+// that closes it. The Read is three turns back, the Grep two, the Bash one.
 const TRANSCRIPT: SessionMessage[] = [
   prompt('one'),
   call('a', 'Read'),
@@ -25,8 +28,13 @@ const TRANSCRIPT: SessionMessage[] = [
   prompt('two'),
   call('c', 'Bash'),
   answer('c', BIG),
+  reply('done'),
   prompt('three'),
 ]
+
+// The default keeps ten turns, more than this transcript holds; two leaves
+// something on each side of the line.
+const TWO_TURNS = { ...DEFAULT_SETTINGS, keepRecentTurns: 2 }
 
 test('settings fill missing or invalid values from the base and clamp the rest', () => {
   expect(settingsFrom({})).toEqual(DEFAULT_SETTINGS)
@@ -50,20 +58,22 @@ test('a policy follows its settings', () => {
 })
 
 test('the report measures tools, sizes and recent turns, and what the policy would fold', () => {
-  const report = reportFor(TRANSCRIPT, DEFAULT_SETTINGS)
+  const report = reportFor(TRANSCRIPT, TWO_TURNS)
 
   expect(report.results).toBe(3)
   expect(report.resultChars).toBe(10_600)
   expect(report.byTool.map(row => row.tool)).toEqual(['Read', 'Bash', 'Grep'])
   expect(report.bySize.find(row => row.atLeast === 1000)).toEqual({ atLeast: 1000, resultsPercent: 66.7, charsPercent: 94.3 })
   expect(report.inRecentTurns.find(row => row.turns === 2)?.charsPercent).toBe(47.2)
-  // Only the Read is two turns back and large enough.
+  // Only the Read is two or more turns back and large enough.
   expect(report.folds.results).toBe(1)
+  // Under the default nothing here is old enough to fold.
+  expect(reportFor(TRANSCRIPT, DEFAULT_SETTINGS).folds.results).toBe(0)
 
   expect(reportFor(TRANSCRIPT, { ...DEFAULT_SETTINGS, keepRecentTurns: 1, minFoldChars: 500 }).folds.results).toBe(3)
 })
 
-test('policy_report reports the current policy and a dry-run candidate', async ($, on) => {
+test('policy_report reports the current policy and a dry-run candidate', { options: { keepRecentTurns: 2 } }, async ($, on) => {
   // The report reads the api view too, to see which messages hold media; here
   // it is the rows in Messages API form, holding none.
   on('session.messages', (_, e) => ({ value: (e.as === 'api' ? TRANSCRIPT.map(apiOf) : TRANSCRIPT) as never }))

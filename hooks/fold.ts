@@ -60,7 +60,7 @@ export type PolicySettings = {
 }
 
 export const DEFAULT_SETTINGS: PolicySettings = {
-  keepRecentTurns: 2,
+  keepRecentTurns: 10,
   minFoldChars: 1000,
   keepErrorsUnder: 2000,
   keepTools: ['TodoWrite', 'AskUserQuestion', 'ExitPlanMode'],
@@ -222,19 +222,18 @@ export function pointerMessage(archived: readonly Archived[]): SessionMessage {
   return { role: 'user', text, toolUses: [] }
 }
 
-// A turn boundary: a user message with text and no tool results. Reminders
-// the engine injects as user text count too, so the recent window can span
-// fewer of the person's own prompts than keepRecentTurns says.
-const isPrompt = (message: SessionMessage): boolean =>
-  message.role === 'user' && (message.toolResults ?? []).length === 0 && message.text.trim() !== ''
+// A turn is one model turn: one response, which the engine hands over as a run
+// of assistant rows, one per block (its thinking, its text, each tool_use).
+// Counted this way, a session the person started once and left to run (a
+// /goal, a long task) still has turns behind it, so its older results fold;
+// counted by prompts, everything after the person's last one would stay recent.
+const startsTurn = (messages: readonly SessionMessage[], i: number): boolean =>
+  messages[i]!.role === 'assistant' && messages[i - 1]?.role !== 'assistant'
 
 /**
  * A prompt the person wrote: not a tool result, an injected `<tag>` block, a
- * `/command`, or one of this plugin's own notes.
- *
- * The partial cut turns on this rather than on `isPrompt`: a reminder the
- * engine injected counts as a turn for the fold's own counting, but it is not
- * something the person said, so it does not have to be carried over a summary.
+ * `/command`, or one of this plugin's own notes. These are carried over a
+ * summary whole, wherever the cut falls.
  */
 export const isPersonsPrompt = (message: SessionMessage): boolean => {
   const text = message.text.trimStart()
@@ -261,30 +260,44 @@ const toolUses = (messages: readonly SessionMessage[]): Map<string, ToolUseSumma
  * message the recent window keeps whole, or 0 when there is nothing to
  * summarize.
  *
- * The cut falls on a prompt the person wrote, never inside a tool_use and its
- * tool_result: the engine is handed everything before it and keeps the rest as
- * it stands, so a pair is never split across the boundary. `keepTurns` counts
- * prompts backwards from the end; 0 or fewer means nothing is kept.
+ * The cut falls where a model turn starts, and only where every tool_use
+ * before it has its tool_result before it too: the engine is handed
+ * everything before the cut, so a call and its answer always land on the same
+ * side, however the response's rows and its results are interleaved.
+ * `keepTurns` counts model turns backwards from the end; when the turn it
+ * reaches cannot be cut cleanly, the next earlier one is taken. 0 or fewer
+ * means nothing is kept.
  */
 export function partialCut(messages: readonly SessionMessage[], keepTurns: number): number {
   if (keepTurns <= 0) return 0
+  const usedAt = new Map<string, number>()
+  messages.forEach((message, i) => {
+    for (const use of message.toolUses) usedAt.set(use.tool_use_id, i)
+  })
+  // The earliest call answered at or after each index: a cut there must not be past it.
+  const earliestOpen: number[] = []
+  let earliest = Infinity
+  for (let i = messages.length - 1; i >= 0; i--) {
+    for (const result of messages[i]!.toolResults ?? []) earliest = Math.min(earliest, usedAt.get(result.tool_use_id) ?? Infinity)
+    earliestOpen[i] = earliest
+  }
   let seen = 0
   for (let i = messages.length - 1; i >= 0; i--) {
-    if (!isPrompt(messages[i]!)) continue
+    if (!startsTurn(messages, i)) continue
     seen++
-    if (seen === keepTurns) return i
+    if (seen >= keepTurns && earliestOpen[i]! >= i) return i
   }
 
   return 0
 }
 
-/** For each message, how many prompts come after it. */
+/** For each message, how many model turns start after it. */
 export function turnsAgoOf(messages: readonly SessionMessage[]): number[] {
   const turnsAgoAt: number[] = []
-  let prompts = 0
+  let turns = 0
   for (let i = messages.length - 1; i >= 0; i--) {
-    turnsAgoAt[i] = prompts
-    if (isPrompt(messages[i]!)) prompts++
+    turnsAgoAt[i] = turns
+    if (startsTurn(messages, i)) turns++
   }
 
   return turnsAgoAt
@@ -582,7 +595,7 @@ export function reportFor(messages: readonly SessionMessage[], settings: PolicyS
 
       return { atLeast, resultsPercent: percent(big.length, rows.length), charsPercent: percent(chars, resultChars) }
     }),
-    inRecentTurns: [1, 2, 3, 5].map(turns => ({
+    inRecentTurns: [1, 2, 5, 10, 30].map(turns => ({
       turns,
       charsPercent: percent(rows.filter(row => row.turnsAgo < turns).reduce((sum, row) => sum + row.chars, 0), resultChars),
     })),

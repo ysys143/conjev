@@ -9,7 +9,7 @@ import { DEFAULT_SETTINGS, FOLD_MARK, conversationArchive, foldTranscript, makeP
 import { EXCERPT_CHARS } from '../hooks/fold-judge'
 import { PRESERVE_INSTRUCTIONS } from '../hooks/register'
 import { compactReport, type ShadowRecord } from '../hooks/report'
-import { HOME, KEY_ENV, drain, prompt, records, settle, setup } from './kit'
+import { HOME, KEY_ENV, drain, prompt, records, settle, setup, smallRounds } from './kit'
 
 const call = (id: string, tool: string, input: Record<string, unknown>): SessionMessage => ({ role: 'assistant', text: '', toolUses: [{ tool_use_id: id, tool, input }] })
 const answer = (id: string, text: string): SessionMessage => ({ role: 'user', text: '', toolUses: [], toolResults: [{ tool_use_id: id, text, isError: false }] })
@@ -17,7 +17,8 @@ const ARCHIVE = `${HOME}/.conjev/state/archive/sess-1`
 const BODY = 'export const a = 1\n'.repeat(200)
 const START = { cwd: '/proj', surface: 'terminal', isInteractive: true } as never
 
-// D4
+// D4. Ten small rounds between the two Writes put the first one twelve model
+// turns back and leave the second in the turn in view.
 const WRITES: SessionMessage[] = [
   prompt('Write the module'),
   call('w', 'Write', { file_path: '/proj/a.ts', content: BODY }),
@@ -25,6 +26,7 @@ const WRITES: SessionMessage[] = [
   call('e', 'Edit', { file_path: '/proj/b.ts', old_string: 'x', new_string: 'y' }),
   answer('e', 'ok'),
   prompt('next'),
+  ...smallRounds(10, 'l'),
   prompt('and next'),
   call('w2', 'Write', { file_path: '/proj/c.ts', content: BODY }),
   answer('w2', 'File written'),
@@ -39,7 +41,7 @@ test('an older Write body leaves the window as a pointer; a small edit and a rec
   expect(old.file_path).toBe('/proj/a.ts')
   // Too small to be worth a pointer, and too recent: both whole.
   expect(out.messages[3]).toBe(WRITES[3])
-  expect(out.messages[7]).toBe(WRITES[7])
+  expect(out.messages.at(-2)).toBe(WRITES.at(-2))
   expect(out.archived.map(a => a.id)).toEqual(['w:input'])
   expect(out.archived[0]!.text).toBe(`--- content ---\n${BODY}`)
   expect(out.savedChars).toBeGreaterThan(BODY.length - 200)
@@ -47,7 +49,7 @@ test('an older Write body leaves the window as a pointer; a small edit and a rec
 
 test('a long Bash command folds too, and a folded input is not folded again', () => {
   const command = `python3 - <<'EOF'\n${'print(1)\n'.repeat(200)}EOF`
-  const messages = [prompt('run it'), call('b', 'Bash', { command, description: 'run' }), answer('b', 'ok'), prompt('next'), prompt('and next')]
+  const messages = [prompt('run it'), call('b', 'Bash', { command, description: 'run' }), answer('b', 'ok'), ...smallRounds(10), prompt('next'), prompt('and next')]
   const once = foldTranscript(messages, makePolicy(DEFAULT_SETTINGS))
   const input = once.messages[1]!.toolUses[0]!.input as Record<string, unknown>
 
@@ -67,8 +69,8 @@ test('a compaction keeps a folded body, and read_coordinate returns it', async (
   expect(String(read.result)).toContain('export const a = 1')
 })
 
-// E2 and E3
-const OLD: SessionMessage[] = [prompt('Look at a.ts'), call('a', 'Read', { file_path: '/proj/a.ts' }), answer('a', 'x\n'.repeat(1500)), prompt('next'), prompt('and next')]
+// E2 and E3. The Read is ten model turns back, so it folds under the default.
+const OLD: SessionMessage[] = [prompt('Look at a.ts'), call('a', 'Read', { file_path: '/proj/a.ts' }), answer('a', 'x\n'.repeat(1500)), prompt('next'), ...smallRounds(10), prompt('and next')]
 const SMALL: SessionMessage[] = [prompt('What does the parser do?'), { role: 'assistant', text: 'It splits the input into tokens.', toolUses: [] }]
 
 test('a summary over nothing foldable keeps the conversation it replaces first, and points to it', async ($, on) => {
@@ -174,7 +176,7 @@ test('the turn that answers the fold\'s request to update the status board is no
 // E6/F4
 test('the fold judgment sends the opening of each result, personal information masked and cut to the limit', { options: { foldJev: 'shadow' } }, async ($, on) => {
   const text = `연락처 010-1234-5678, 담당 a@b.co\n${'y'.repeat(5000)}`
-  const messages = [prompt('Look at it'), call('r', 'Read', { file_path: '/proj/r.txt' }), answer('r', text), prompt('next'), prompt('and next')]
+  const messages = [prompt('Look at it'), call('r', 'Read', { file_path: '/proj/r.txt' }), answer('r', text), ...smallRounds(10), prompt('next'), prompt('and next')]
   const io = setup(on, { transcript: messages, env: KEY_ENV, fetch: () => ({ status: 500, ok: false, headers: {}, text: '' }) })
   await $.session.compact({ trigger: 'manual', messages } as never)
   await settle(() => records(io.writes, 'fold').length > 0)

@@ -74,6 +74,17 @@ export const apiOf = (message: SessionMessage): ApiMessage => ({
 
 export const prompt = (text: string): SessionMessage => ({ role: 'user', text, toolUses: [] })
 
+/**
+ * `count` model turns of small work: a short Bash call and its short answer,
+ * each under any size floor, so nothing in them folds. A fold's age is counted
+ * in model turns, so these put whatever comes before them that many turns back.
+ */
+export const smallRounds = (count: number, prefix = 'w'): SessionMessage[] =>
+  Array.from({ length: count }, (_, i): SessionMessage[] => [
+    { role: 'assistant', text: '', toolUses: [{ tool_use_id: `${prefix}${i}`, tool: 'Bash', input: { command: `ls ${i}` } }] },
+    { role: 'user', text: '', toolUses: [], toolResults: [{ tool_use_id: `${prefix}${i}`, text: 'ok', isError: false }] },
+  ]).flat()
+
 export const setup = (on: On, s: Setup = {}) => {
   const env: Record<string, string> = { HOME, ...s.env }
   const files: Record<string, string> = { ...s.files }

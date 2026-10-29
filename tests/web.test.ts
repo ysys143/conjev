@@ -4,7 +4,7 @@ import { expect, test } from 'claude-code/testing'
 import { FOLD_MARK } from '../hooks/fold'
 import { KEPT_MARK } from '../hooks/fold-blocks'
 import { isPrivateHost } from '../hooks/web-flow'
-import { HOME, KEY_ENV, drain, prompt, records, settle, setup } from './kit'
+import { HOME, KEY_ENV, drain, prompt, records, settle, setup, smallRounds } from './kit'
 
 const URL = 'https://docs.example.org/rfc.html'
 const filler = (i: number): string => `Paragraph ${i} is about something else entirely, ${'filler words '.repeat(30)}`
@@ -98,7 +98,8 @@ test('active: a page that does not load is a fetch error, and Jev is not asked',
   expect(io.fetches.length).toBe(0)
 })
 
-// A transcript with one large old Read whose lines hold an answer, and a recent prompt.
+// A transcript with one large Read whose lines hold an answer, ten small rounds
+// of work that make it old enough to fold, and a recent prompt.
 const call = (id: string, tool: string, input: Record<string, unknown>): SessionMessage => ({ role: 'assistant', text: '', toolUses: [{ tool_use_id: id, tool, input }] })
 const answer = (id: string, text: string): SessionMessage => ({ role: 'user', text: '', toolUses: [], toolResults: [{ tool_use_id: id, text, isError: false }] })
 const FILE = Array.from({ length: 400 }, (_, i) => (i === 250 ? `${i + 1}\tconst limit = 421 // ANSWER owner a@b.co` : `${i + 1}\tline ${i + 1} ${'x'.repeat(40)}`)).join('\n')
@@ -106,6 +107,7 @@ const TRANSCRIPT: SessionMessage[] = [
   prompt('read the server'),
   call('big', 'Read', { file_path: '/proj/server.ts' }),
   answer('big', FILE),
+  ...smallRounds(10),
   prompt('ok'),
   prompt('what is the limit in the server?'),
 ]
@@ -133,7 +135,7 @@ test('fold blocks: the request is scrubbed before it is cut at 400', { options: 
   // that fragment, so it would reach Jev. Scrubbing first leaves a label the
   // cut then drops whole.
   const ask = `${'가 나 '.repeat(200).slice(0, 393)} 010-9876-5432`
-  const messages = [prompt('read the server'), call('big', 'Read', { file_path: '/proj/server.ts' }), answer('big', FILE), prompt('ok'), prompt(ask)]
+  const messages = [prompt('read the server'), call('big', 'Read', { file_path: '/proj/server.ts' }), answer('big', FILE), ...smallRounds(10), prompt('ok'), prompt(ask)]
   const io = setup(on, { transcript: messages, env: KEY_ENV, fetch: jev, isTimerStopped: true })
   await $.session.compact({ trigger: 'manual', messages } as never)
   await settle(() => records(io.writes, 'fold-blocks').length > 0)

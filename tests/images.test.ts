@@ -7,7 +7,7 @@
 // engine: it keeps the handled copy and builds the rest from the rows only.
 import type { SessionMessage } from 'claude-code'
 import { expect, test } from 'claude-code/testing'
-import { HOME, apiOf, prompt, setup, type ApiMessage } from './kit'
+import { HOME, apiOf, prompt, setup, smallRounds, type ApiMessage } from './kit'
 
 type Block = ApiMessage['content'][number]
 
@@ -32,7 +32,8 @@ const useOf = (id: string, tool: string, input: Record<string, unknown>) => ({ t
 const resultOf = (id: string, content: Block[]): Block => ({ type: 'tool_result', tool_use_id: id, content })
 
 // An old Read that folds, so the compaction hands back the folded transcript
-// rather than the engine's summary; then the message under test, two turns old.
+// rather than the engine's summary; then the message under test, and ten small
+// rounds of work after it, so it is old enough for the policy to fold.
 const OLD_READ: [SessionMessage, ApiMessage][] = [
   [{ ...prompt('Read the old file'), handle: 'q0' }, { role: 'user', content: [{ type: 'text', text: 'Read the old file' }] }],
   [
@@ -45,6 +46,7 @@ const OLD_READ: [SessionMessage, ApiMessage][] = [
   ],
 ]
 const LOOK = 'Look at the screen and the build log'
+const WORK: [SessionMessage, ApiMessage][] = smallRounds(10).map((row, i) => [{ ...row, handle: `r${i}` }, apiOf(row)])
 const TAIL: [SessionMessage, ApiMessage][] = ['and the test', 'and the diff'].map((text, i) => [
   { ...prompt(text), handle: `p${i + 1}` },
   { role: 'user', content: [{ type: 'text', text }] },
@@ -52,7 +54,7 @@ const TAIL: [SessionMessage, ApiMessage][] = ['and the test', 'and the diff'].ma
 
 /** The rows handed to the compaction, the api view, and the engine's copies by handle. */
 const conversation = (middle: [SessionMessage, ApiMessage][]) => {
-  const pairs = [...OLD_READ, [{ ...prompt(LOOK), handle: 'p0' }, { role: 'user', content: [{ type: 'text', text: LOOK }] }] as [SessionMessage, ApiMessage], ...middle, ...TAIL]
+  const pairs = [...OLD_READ, [{ ...prompt(LOOK), handle: 'p0' }, { role: 'user', content: [{ type: 'text', text: LOOK }] }] as [SessionMessage, ApiMessage], ...middle, ...WORK, ...TAIL]
 
   return {
     messages: pairs.map(([row]) => row),
@@ -97,10 +99,13 @@ test('a large text result beside a Read of a PNG is not folded: the message keep
   expect(io.writes.some(w => w.path === `${ARCHIVE}/toolu_log.json`)).toBe(false)
 })
 
-test('control: the same message one turn old stays whole and keeps the PNG', async ($, on) => {
+// The old Read is eleven model turns back and the message under test ten:
+// 'Checked.' and the first small round that follows it are one response, so
+// one turn. A window of eleven folds the one and keeps the other.
+test('control: the same message inside the recent window stays whole and keeps the PNG', { options: { keepRecentTurns: 11 } }, async ($, on) => {
   const { messages, api, copies } = conversation(LOG_AND_PNG)
-  setup(on, { api: api.slice(0, -1) })
-  const handed = await compact($, messages.slice(0, -1))
+  setup(on, { api })
+  const handed = await compact($, messages)
 
   expect(handed[2]!.toolResults?.[0]?.text.startsWith('[folded ')).toBe(true)
   expect(handed[5]!.handle).toBe('u1')

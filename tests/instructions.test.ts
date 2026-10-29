@@ -3,7 +3,7 @@ import { expect, test } from 'claude-code/testing'
 import { DEFAULT_SETTINGS, turnsAgoOf } from '../hooks/fold'
 import { currentRequest, foldCandidates } from '../hooks/fold-judge'
 import { attachedNames, decideFragments, fragmentBlock, fragmentsHash, isFragment, keywordHit, parseFragment, pinnedSection, type Fragment } from '../hooks/instructions'
-import { HOME, KEY_ENV, drain, records, settle, setup as kitSetup, type On, type Setup } from './kit'
+import { HOME, KEY_ENV, drain, records, settle, setup as kitSetup, smallRounds, type On, type Setup } from './kit'
 
 const DIR = `${HOME}/.agents/fragments`
 
@@ -65,21 +65,23 @@ const TRANSCRIPT: SessionMessage[] = [
   prompt('Fix the rounding bug in invoice totals'),
   call('d', 'Read', { file_path: '/proj/README.md' }),
   answer('d', '[folded Read · ./README.md · 60 lines]'),
+  ...smallRounds(10),
   prompt('/compact'),
 ]
 
 test('fold candidates come from the fold policy itself: its turn count, its size floor, its verdict', () => {
   // A /command is not the request.
   expect(currentRequest(TRANSCRIPT)).toBe('Fix the rounding bug in invoice totals')
-  // The fold counts every user text as a turn boundary, injected reminders and /commands included.
-  expect(turnsAgoOf(TRANSCRIPT)[2]).toBe(4)
+  // The fold counts model turns only: the reminder and the /command add
+  // nothing, the calls after the read and the ten small rounds at the end do.
+  expect(turnsAgoOf(TRANSCRIPT)[2]).toBe(13)
   expect(foldCandidates(TRANSCRIPT, DEFAULT_SETTINGS, HOME, '/proj', 48).map(c => [c.id, c.call, c.turnsAgo, c.ruleFolds])).toEqual([
-    ['c', 'Bash npm test (3001 lines)', 2, true],
-    ['a', 'Read ./src/billing/invoice.ts (1501 lines)', 4, true],
+    ['c', 'Bash npm test (3001 lines)', 11, true],
+    ['a', 'Read ./src/billing/invoice.ts (1501 lines)', 13, true],
   ])
   // A lower size floor brings the 800-character result in; a wider recent window
   // keeps c, so the policy does not fold it and the judgment is not asked about it.
-  const wider = foldCandidates(TRANSCRIPT, { ...DEFAULT_SETTINGS, minFoldChars: 500, keepRecentTurns: 3 }, HOME, '/proj', 48)
+  const wider = foldCandidates(TRANSCRIPT, { ...DEFAULT_SETTINGS, minFoldChars: 500, keepRecentTurns: 12 }, HOME, '/proj', 48)
   expect(wider.map(c => [c.id, c.ruleFolds])).toEqual([
     ['a', true],
     ['b', true],
@@ -184,7 +186,7 @@ test('after a compaction the engine summarized, a fragment is attached again', A
 })
 
 test('after a compaction that only folded, a fragment still in the conversation is not attached again', ACTIVE, async ($, on) => {
-  const transcript = [prompt('Publish the release'), call('x', 'Read', { file_path: '/proj/big.txt' }), answer('x', BIG), prompt('next'), prompt('and next')]
+  const transcript = [prompt('Publish the release'), call('x', 'Read', { file_path: '/proj/big.txt' }), answer('x', BIG), ...smallRounds(10), prompt('next'), prompt('and next')]
   const io = setup(on, { transcript, files: FILES, fetch: DEPLOY_APPLIES })
   await $.prompt.submit(typed('Publish the release'))
   const compacted = await $.session.compact({ trigger: 'manual', messages: transcript } as never)
@@ -262,7 +264,7 @@ const wouldAttachDeploy = (writes: readonly { path: string; text: string }[]) =>
   records(writes, 'instructions').filter(r => r.decision === 'would-attach' && (r.facts as Record<string, string>).fragment === 'deploy').length
 
 test('shadow: after a compaction that only folded, it would not attach again', SHADOW, async ($, on) => {
-  const transcript = [prompt('Publish the release'), call('x', 'Read', { file_path: '/proj/big.txt' }), answer('x', BIG), prompt('next'), prompt('and next')]
+  const transcript = [prompt('Publish the release'), call('x', 'Read', { file_path: '/proj/big.txt' }), answer('x', BIG), ...smallRounds(10), prompt('next'), prompt('and next')]
   const io = setup(on, { transcript, files: FILES, fetch: DEPLOY_APPLIES })
   await $.prompt.submit(typed('Publish the release'))
   await settle(() => wouldAttachDeploy(io.writes) === 1)
