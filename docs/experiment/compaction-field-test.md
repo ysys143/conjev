@@ -2,7 +2,7 @@
 
 English · [한국어](compaction-field-test.ko.md)
 
-**Result: with the Jev gates on, Claude Code's own summary at compaction (`fold: off`) produced the best document of the three configurations. Folding is therefore off by default, and `fold: off` with the gates on is the recommended setting.** The cost of the plugin came from the gates, not from folding, and folding kept an instruction given mid-conversation best. Each configuration ran once, so the gaps below are one sample each.
+**Result: folding did not write a better report than Claude Code's own summary and cost as much, so it is off by default. Beyond that, the runs could not rank the configurations: a second run of the default scored below both others, where the first had scored above them.** Every report was accurate; the scores differed mostly by how much each covered, and that varied as much between two runs of one setting as between settings. Folding kept an instruction given mid-conversation best.
 
 ## The task
 
@@ -56,15 +56,36 @@ Under one long `/goal`, folding barely ran:
 
 So B against C did not compare folding with summarizing. It compared conjev's partial summary, with B's own detours, against the engine's summary. Recency is now counted in model turns, with one response's rows counted once and the last 10 kept. In the stopped fourth run, the first compaction folded 133 results. Whether folding, working as intended, beats the summary on this kind of task has not been measured.
 
+## A second run of the default
+
+After the first three runs, `fold: off` was changed to also archive the conversation a summary replaces and to write the note that points back at the project's files. That version (**C2**) ran once on the same task, with the same checklist given at the start as C.
+
+| | C | C2 |
+| --- | --- | --- |
+| Tokens processed | 263 M | 186 M |
+| Compactions | 3 | 2 |
+| Report length | 186 k chars | 77 k chars |
+| Citations that resolve | 99.5% | 99.3% |
+| Dated URLs, any date | 39 of 43 (91%) | 17 of 25 (68%) |
+
+| Pair | Scores | Judges differ by |
+| --- | --- | --- |
+| C and C2 | C 0.921, C2 0.896 | 0.09, 0.07 |
+| A and C2 | A 0.908, C2 0.871 | 0.08, 0.08 |
+
+C2 had no contradicted fact; it lost on coverage. The note never fired, since C2's project had no status board (C had made one during its run), so the only difference in configuration was the archive and its pointer. Two runs of nearly one setting wrote 186 k and 77 k characters: the run, not the setting, decided most of the score. In this pairing the judges also differed more than before (0.07 to 0.09), and C's own score moved from 0.946 and 0.958 to 0.921.
+
+C2, like B, stopped on the two recall checks (it had reopened the task file, so it could not recall without it) and needed one closing instruction from the person.
+
 ## Where the differences came from
 
-- **Cost.** B and C cost the same, both about 1.5 times A. The extra is the gates, mostly `web_read` returning page passages verbatim. Folding added nothing measurable.
+- **Cost.** B and C cost the same, both about 1.5 times A, and folding added nothing measurable. C2, with the same gates, cost about as much as A. The difference follows how much each run read and fetched: C called `web_read` 39 times, C2 six. The gates' own cost is small; what a run chooses to do is not.
 - **Length.** The reports differ almost entirely in their appendices, the logs of the full reads. The bodies are within 20 to 28 k characters of each other. B received half its checklist and a no-delegation rule mid-run, delegated work, and redid it. C received everything at the start.
 - **The mid-run instruction.** B kept it everywhere, C mostly, A least. This is the one place where the plugin's compaction path showed a clear advantage.
 
 ## Limits
 
-- One run per configuration. A second run can move a 0.02 gap either way.
+- One run per configuration, and a second run of the default moved its score by more than any gap between configurations.
 - The configurations did not start the same way. A and B received part of the checklist and the no-delegation rule mid-run, and C received it all at the start. Some of C's lead may come from that.
 - The task wrote its findings to a file as it went, so little that a compaction removed was needed again. This favors a summary. A task that re-reads earlier tool output, such as debugging, was not tested.
 - The reference facts came from an earlier session's answers and may themselves be wrong in places.
@@ -74,5 +95,5 @@ So B against C did not compare folding with summarizing. It compared conjev's pa
 
 | | Default | When |
 | --- | --- | --- |
-| `fold` | `off` | `on` to try folding, for sessions that read earlier tool output again. Recency now counts model turns (`keepRecentTurns`, 10). |
+| `fold` | `off` | `on` to try folding, for sessions that read earlier tool output again. Recency now counts model turns (`keepRecentTurns`, 10). Not measured on this task in that form. |
 | Jev gates | `auto` | Active once a key is in place and you consent. They are what C ran with. |
