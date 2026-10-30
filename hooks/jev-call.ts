@@ -3,12 +3,12 @@
 import type { EngineInterface } from 'claude-code'
 import { admit, afterCall, readBudget } from './budget'
 import { JEV_ENDPOINT, parseResponse, requestBody, type JevFailure, type JevQuestion, type JevResult } from './jev'
-import { pickKey } from './key'
+import { pickKey, type KeySource } from './key'
 import { runtime, settingsOf } from './state'
 import { decideTrust, type Trust } from './tool-gate'
 
 /** The key from the first source that has one: sensitive setting, the plugin's .env, the environment. */
-export async function resolveKey($: EngineInterface, configured: unknown): Promise<{ key: string; source: string } | undefined> {
+export async function resolveKey($: EngineInterface, configured: unknown): Promise<{ key: string; source: KeySource } | undefined> {
   const dotenvPath = `${$.plugin.root}/.env`
   const dotenv = (await $.fs.exists(dotenvPath)) ? await $.fs.read(dotenvPath) : undefined
 
@@ -36,6 +36,8 @@ export async function resolveTrust($: EngineInterface, override: 'auto' | 'exter
 }
 
 export async function keyFor($: EngineInterface): Promise<{ key: string; source: string } | undefined> {
+  // The switch: with `jev: off` no gate has a key, so none sends anything.
+  if (settingsOf().jev === 'off') return undefined
   if (runtime.key === undefined) runtime.key = (await resolveKey($, settingsOf().apiKey)) ?? null
 
   return runtime.key ?? undefined
@@ -90,13 +92,36 @@ export async function judge(
   timeoutMs: number,
 ): Promise<JevResult> {
   const storeKey = `budget:${budget.sessionId}:${budget.point}`
-  const before = readBudget(await $.store.get(storeKey))
-  const gate = admit(before, budget.cap, await $.clock.now())
+  // The call is counted before it goes out, under the point's lock, so calls
+  // running at once (a page's windows) each see the others.
+  const gate = await locked(storeKey, async () => {
+    const before = readBudget(await $.store.get(storeKey))
+    const admitted = admit(before, budget.cap, await $.clock.now())
+    if (admitted === 'ok') await $.store.set(storeKey, { ...before, calls: before.calls + 1 })
+
+    return admitted
+  })
   if (gate !== 'ok') return { ok: false, kind: gate, ms: 0 }
   const result = await askJev($, key, state, questions, timeoutMs)
-  await $.store.set(storeKey, afterCall(before, result.ok, await $.clock.now()))
+  await locked(storeKey, async () => {
+    const counted = readBudget(await $.store.get(storeKey))
+    await $.store.set(storeKey, afterCall({ ...counted, calls: Math.max(0, counted.calls - 1) }, result.ok, await $.clock.now()))
+  })
 
   return result
+}
+
+const locks = new Map<string, Promise<unknown>>()
+
+/** Runs `fn` after every earlier `fn` under the same key has settled. */
+function locked<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  const run = (locks.get(key) ?? Promise.resolve()).then(fn, fn)
+  locks.set(
+    key,
+    run.catch(() => undefined),
+  )
+
+  return run
 }
 
 /** A failed call as a record stores it. */

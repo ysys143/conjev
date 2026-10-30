@@ -2,9 +2,10 @@ import { expect, test } from 'claude-code/testing'
 import { admit, afterCall, EMPTY_BUDGET } from '../hooks/budget'
 import { checkAnswer, parseResponse, probabilityOf, type JevQuestion } from '../hooks/jev'
 import { keyFromDotenv, pickKey } from '../hooks/key'
-import { confusion, kappa, percentile, pointReport, sweep, type ShadowRecord } from '../hooks/report'
-import { scrub } from '../hooks/scrub'
-import { STOP_QUESTION, announcesByRule, lastParagraph, stopSkipReason } from '../hooks/stop-gate'
+import { compactReport, confusion, kappa, percentile, pointReport, sweep, type ShadowRecord } from '../hooks/report'
+import { omittedRanges } from '../hooks/relevance'
+import { COMMAND_CHARS, clip, scrub } from '../hooks/scrub'
+import { PARAGRAPH_CHARS, STOP_QUESTION, announcesByRule, lastParagraph, stopSkipReason } from '../hooks/stop-gate'
 import {
   canWrite,
   decideTrust,
@@ -90,6 +91,25 @@ test('scrub removes secrets, addresses and the home folder', () => {
   expect(scrub(`changed ${path}`, HOME)).toBe(`changed ${path}`)
 })
 
+test('clip never cuts through a mark scrubbing left, from either end', () => {
+  const text = scrub('연락처 010-1234-5678 확인', HOME)
+  expect(text).toBe('연락처 [전화번호] 확인')
+  expect(clip(text, 7)).toBe('연락처 ')
+  expect(clip(text, 10)).toBe('연락처 [전화번호]')
+  expect(clip(text, 6, 'tail')).toBe(' 확인')
+  expect(clip('key <secret> here', 7)).toBe('key ')
+  expect(clip('a [b] c', 4)).toBe('a [b')
+  expect(clip(text, 100)).toBe(text)
+})
+
+test('scrub sends Korean personal information as labels', () => {
+  expect(scrub('고객 홍길동님 연락처 010-9876-5432, 주민번호 800101-1234560, 생년월일 1990-03-15', HOME)).toBe(
+    '고객 [이름]님 연락처 [전화번호], 주민번호 [주민등록번호], 생년월일 [생년월일]',
+  )
+  // Positions count UTF-16 units: an astral character before the number does not shift the label.
+  expect(scrub('\u{1F600} 담당 김민수 대리 010-1234-5678', HOME)).toBe('\u{1F600} 담당 [이름] 대리 [전화번호]')
+})
+
 test('the budget stops at the cap and opens the circuit after three failures in a row', () => {
   expect(admit({ ...EMPTY_BUDGET, calls: 2 }, 2, 0)).toBe('cap')
   let state = EMPTY_BUDGET
@@ -101,10 +121,11 @@ test('the budget stops at the cap and opens the circuit after three failures in 
   expect(afterCall({ calls: 1, failures: 2, openUntil: 0 }, true, 0)).toEqual({ calls: 2, failures: 0, openUntil: 0 })
 })
 
-test('the last paragraph skips code blocks and tables and keeps its end', () => {
+test('the last paragraph skips code blocks and tables, and its end is what is kept', () => {
   const message = 'Intro.\n\nI changed the parser.\n\n```ts\nconst a = 1\n```\n\n| a | b |\n|---|---|\n| 1 | 2 |'
   expect(lastParagraph(message)).toBe('I changed the parser.')
-  expect(lastParagraph(`a\n\n${'x'.repeat(700)}`).length).toBe(600)
+  // The bound is applied after scrubbing, by the caller.
+  expect(clip(lastParagraph(`a\n\n${'x'.repeat(700)}`), PARAGRAPH_CHARS, 'tail').length).toBe(600)
   expect(lastParagraph(undefined)).toBe('')
 })
 
@@ -162,7 +183,7 @@ test('the floor names real secret stores and leaves look-alikes alone', () => {
   const r = (p: string) => restrictedReason(p, HOME)
   expect(r('/p/.env')).toBe('env file')
   expect(r('/p/.ENV.production')).toBe('env file')
-  expect(r(`${HOME}/.oh-my-zsh/custom/apikey.env`)).toBe('env file')
+  expect(r(`${HOME}/.config/secrets/keys.env`)).toBe('env file')
   expect(r('/p/.env.example')).toBe(undefined)
   expect(r('/p/.env.tpl')).toBe(undefined)
   expect(r(`${HOME}/.ssh/id_ed25519`)).toBe('ssh')
@@ -208,8 +229,8 @@ test('writes are told apart from reads', () => {
 })
 
 test('the plugin, its logs and Claude settings are protected from the agent', () => {
-  const roots = ['/plugins/context-harness', `${HOME}/.local/state/context-harness`]
-  expect(selfProtectReason('/plugins/context-harness/hooks/register.ts', roots)).toBe('context-harness files')
+  const roots = ['/plugins/conjev', `${HOME}/.local/state/context-harness`]
+  expect(selfProtectReason('/plugins/conjev/hooks/register.ts', roots)).toBe('conjev files')
   expect(selfProtectReason(`${HOME}/.claude-3/settings.json`, roots)).toBe('claude settings')
   expect(selfProtectReason('/p/src/settings.json', roots)).toBe(undefined)
 })
@@ -259,7 +280,8 @@ test('tool targets: the working folder becomes ./, other folders under home a ha
   expect(targetOfPath(`${HOME}/notes.md`, HOME, cwd)).toBe('~/notes.md')
   expect(targetOfPath('/etc/hosts', HOME, cwd)).toBe('/etc/hosts')
   expect(targetOfCommand(`cat ${cwd}/config/settings.py && ls ${cwd}`, HOME, cwd)).toBe('cat ./config/settings.py && ls .')
-  expect(targetOfCommand('x'.repeat(300), HOME, cwd).length).toBe(200)
+  // The length is bounded after scrubbing, by the caller.
+  expect(clip(targetOfCommand('x'.repeat(300), HOME, cwd), COMMAND_CHARS).length).toBe(200)
 })
 
 test('the hash is stable and the risk adds restricted and custom', () => {
@@ -268,4 +290,72 @@ test('the hash is stable and the risk adds restricted and custom', () => {
   expect(shortHash('a')).toMatch(/^[0-9a-f]{8}$/)
   expect(riskOf({ open: 0.05, standard: 0.05, restricted: 0.6, custom: 0.3 }).toFixed(2)).toBe('0.90')
   expect(riskOf(undefined)).toBe(0)
+})
+
+test('the compaction report says how long the turn was held and what the window lost', () => {
+  const row = (id: string, trigger: string, decision: string, hookMs: number, before?: number, after?: number): ShadowRecord => ({
+    id,
+    ts: 't',
+    sessionId: 's',
+    point: 'compact',
+    mode: 'active',
+    sent: null,
+    hookMs,
+    decision,
+    facts: { trigger, messagesBefore: '10', ...(before === undefined ? {} : { tokensBefore: String(before), tokensAfter: String(after) }) },
+  })
+  const report = compactReport([
+    row('a', 'manual', 'summarized', 11_000, 100_000, 20_000),
+    row('b', 'plugin', 'folded', 40, 50_000, 45_000),
+    row('c', 'plugin', 'folded', 30),
+  ])
+
+  expect(report).toContain('compactions 3 (manual 1, plugin 2)')
+  expect(report).toContain('summaries 1, folds alone 2')
+  // The wait the person felt: one summary of eleven seconds among folds of tens of ms.
+  expect(report).toContain('held the turn: p50 40 ms, p95 11000 ms')
+  // Two of the three reported token counts; the third is left out rather than guessed.
+  expect(report).toContain('2 of 3 compactions reported tokens')
+  expect(report).toContain('saved p50 80000 tokens')
+})
+
+test('with no compaction recorded the report is left out, not shown empty', () => {
+  expect(compactReport([])).toBe(undefined)
+  expect(compactReport([{ id: 'a', ts: 't', sessionId: 's', point: 'stop', mode: 'shadow', sent: null, hookMs: 1 }])).toBe(undefined)
+})
+
+test('a compaction that reported no token counts still says how long it held the turn', () => {
+  const report = compactReport([{ id: 'a', ts: 't', sessionId: 's', point: 'compact', mode: 'active', sent: null, hookMs: 25, decision: 'folded', facts: { trigger: 'manual' } }])
+
+  expect(report).toContain('compactions 1 (manual 1)')
+  expect(report).toContain('no compaction reported token counts')
+})
+
+test('the omitted line ranges are what the kept text does not contain', () => {
+  const original = 'one\ntwo\nthree\nfour\nfive'
+  // Lines 2 and 4 were left out; the kept text is the rest, in order.
+  expect(omittedRanges(original, 'one\nthree\nfive')).toEqual([{ from: 2, to: 2 }, { from: 4, to: 4 }])
+  // A run of left-out lines comes back as one range.
+  expect(omittedRanges(original, 'one\nfive')).toEqual([{ from: 2, to: 4 }])
+  // Nothing left out.
+  expect(omittedRanges(original, original)).toEqual([])
+  // Nothing kept: the whole thing is left out.
+  expect(omittedRanges(original, '')).toEqual([{ from: 1, to: 5 }])
+  // A block is trimmed as it is parsed, so a line differing only in padding matches.
+  expect(omittedRanges('  one  \ntwo', 'one')).toEqual([{ from: 2, to: 2 }])
+})
+
+// Every Jev gate is on by default now; a part per gate ran past a terminal's
+// width and the line was cut. The total stays one short line.
+import { jevStatus } from '../hooks/status'
+import { harnessSettingsFrom } from '../hooks/settings'
+
+test('the status line stays short with every gate on and busy', () => {
+  const all = Object.fromEntries(['stopGate', 'toolGate', 'toolJev', 'instructions', 'foldJev', 'webRead', 'foldBlocks', 'browserRoute', 'instructionFilter'].map(k => [k, 'active']))
+  const busy = { judged: 1234, failed: 56, floor: 78, toolJudged: 9012, attached: 3456, foldJudged: 789, webRead: 1234, foldBlocks: 5678, browserRouted: 901 }
+  const line = jevStatus(harnessSettingsFrom(all), busy, false, 123_456)!
+  expect(line.length <= 60).toBe(true)
+  expect(line).toBe('jev 22304, 56 failed · floor 78 hits · −123.5k dup')
+  // A gate held in shadow is the one thing named, since it is not the default.
+  expect(jevStatus(harnessSettingsFrom({ ...all, stopGate: 'shadow' }), busy, false)).toContain('shadow: stop')
 })

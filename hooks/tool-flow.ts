@@ -1,7 +1,7 @@
 // Jev's judgment of a tool call the floor let through.
 import type { Args, EngineInterface, EventResult, Next } from 'claude-code'
 import { errorOf, judge, keyFor, trustFor } from './jev-call'
-import { scrub } from './scrub'
+import { COMMAND_CHARS, clip, scrub } from './scrub'
 import { newId, runtime, settingsOf, toolVerdicts } from './state'
 import { showStatus } from './status'
 import { writeRecord } from './storage'
@@ -36,7 +36,9 @@ export async function judgeTool(
   if (key === undefined || shown === undefined) return next(e)
 
   const sessionId = await $.session.id()
-  const sent = { tool: facts.tool, target: scrub(shown, facts.home) }
+  // Scrubbed first, then bounded: a cut before the scrub could split a value
+  // the scrub would have replaced, leaving part of it in the text.
+  const sent = { tool: facts.tool, target: clip(scrub(shown, facts.home), COMMAND_CHARS) }
   const cacheKey = `${sessionId}\n${sent.tool}\n${sent.target}`
   const hookMs = (await $.clock.now()) - facts.t0
   const base = { id: newId(facts.t0), ts: new Date(facts.t0).toISOString(), sessionId, joinKey: e.tool_use_id, point: TOOL_POINT, mode }
@@ -79,7 +81,7 @@ export async function judgeTool(
   if (verdict !== undefined && verdict.risk >= settings.toolThreshold) {
     return {
       deny:
-        `context-harness: Jev judged ${sent.target} as ${verdict.choice} data (${verdict.risk.toFixed(2)}), and this session is ` +
+        `conjev: Jev judged ${sent.target} as ${verdict.choice} data (${verdict.risk.toFixed(2)}), and this session is ` +
         `served by a provider other than Anthropic (${trust.why}). Do it from a first-party session instead.`,
     }
   }

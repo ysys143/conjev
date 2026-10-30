@@ -236,7 +236,7 @@ export function withoutChunks<F extends DocFile>(files: readonly F[], chunks: re
       const names = run.slice(0, 3).map(c => `"${label(c).replace(/^#+\s*/, '')}"`)
       const more = run.length > 3 ? ` and ${run.length - 3} more` : ''
       out += file.content.slice(at, run[0]!.start)
-      out += `[context-harness: left out ${names.join(', ')}${more}, loaded from ${keptIn}]\n\n`
+      out += `[conjev: left out ${names.join(', ')}${more}, loaded from ${keptIn}]\n\n`
       at = run[run.length - 1]!.end
     }
     out += file.content.slice(at)

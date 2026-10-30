@@ -1,6 +1,7 @@
 import type { SessionMessage } from 'claude-code'
 import { expect, test } from 'claude-code/testing'
 import { DEFAULT_SETTINGS, makePolicy, reportFor, settingsFrom, type FoldCandidate } from '../hooks/fold'
+import { apiOf } from './kit'
 
 const BIG = 'x'.repeat(5000)
 const SMALL = 'y'.repeat(600)
@@ -14,7 +15,10 @@ const answer = (id: string, text: string): SessionMessage => ({
   toolResults: [{ tool_use_id: id, text, isError: false }],
 })
 
-// Three turns: a large Read and a small Grep, then a large Bash, then the turn in view.
+const reply = (text: string): SessionMessage => ({ role: 'assistant', text, toolUses: [] })
+
+// Four model turns: a large Read, a small Grep, a large Bash, then the reply
+// that closes it. The Read is three turns back, the Grep two, the Bash one.
 const TRANSCRIPT: SessionMessage[] = [
   prompt('one'),
   call('a', 'Read'),
@@ -24,8 +28,13 @@ const TRANSCRIPT: SessionMessage[] = [
   prompt('two'),
   call('c', 'Bash'),
   answer('c', BIG),
+  reply('done'),
   prompt('three'),
 ]
+
+// The default keeps ten turns, more than this transcript holds; two leaves
+// something on each side of the line.
+const TWO_TURNS = { ...DEFAULT_SETTINGS, keepRecentTurns: 2 }
 
 test('settings fill missing or invalid values from the base and clamp the rest', () => {
   expect(settingsFrom({})).toEqual(DEFAULT_SETTINGS)
@@ -49,39 +58,66 @@ test('a policy follows its settings', () => {
 })
 
 test('the report measures tools, sizes and recent turns, and what the policy would fold', () => {
-  const report = reportFor(TRANSCRIPT, DEFAULT_SETTINGS)
+  const report = reportFor(TRANSCRIPT, TWO_TURNS)
 
   expect(report.results).toBe(3)
   expect(report.resultChars).toBe(10_600)
   expect(report.byTool.map(row => row.tool)).toEqual(['Read', 'Bash', 'Grep'])
   expect(report.bySize.find(row => row.atLeast === 1000)).toEqual({ atLeast: 1000, resultsPercent: 66.7, charsPercent: 94.3 })
   expect(report.inRecentTurns.find(row => row.turns === 2)?.charsPercent).toBe(47.2)
-  // Only the Read is two turns back and large enough.
+  // Only the Read is two or more turns back and large enough.
   expect(report.folds.results).toBe(1)
+  // Under the default nothing here is old enough to fold.
+  expect(reportFor(TRANSCRIPT, DEFAULT_SETTINGS).folds.results).toBe(0)
 
   expect(reportFor(TRANSCRIPT, { ...DEFAULT_SETTINGS, keepRecentTurns: 1, minFoldChars: 500 }).folds.results).toBe(3)
 })
 
-test('policy_report reports the current policy and a dry-run candidate', async ($, on) => {
-  on('session.messages', () => ({ value: TRANSCRIPT }))
+test('policy_report reports the current policy and a dry-run candidate', { options: { keepRecentTurns: 2 } }, async ($, on) => {
+  // The report reads the api view too, to see which messages hold media; here
+  // it is the rows in Messages API form, holding none.
+  on('session.messages', (_, e) => ({ value: (e.as === 'api' ? TRANSCRIPT.map(apiOf) : TRANSCRIPT) as never }))
   on('fs.exists', () => ({ value: false }))
 
-  const plain = await $.tool.call({ tool: 'mcp__context-harness__policy_report' })
+  const plain = await $.tool.call({ tool: 'mcp__conjev__policy_report' })
   const report = JSON.parse(String(plain.result)) as { current: { folds: { results: number } }; candidate?: unknown }
   expect(report.current.folds.results).toBe(1)
   expect(report.candidate).toBe(undefined)
 
-  const dry = await $.tool.call({ tool: 'mcp__context-harness__policy_report', keepRecentTurns: 1, minFoldChars: 500 })
+  const dry = await $.tool.call({ tool: 'mcp__conjev__policy_report', keepRecentTurns: 1, minFoldChars: 500 })
   const both = JSON.parse(String(dry.result)) as { candidate: { folds: { results: number }; settings: { keepRecentTurns: number } } }
   expect(both.candidate.folds.results).toBe(3)
   expect(both.candidate.settings.keepRecentTurns).toBe(1)
 })
 
-test('the plugin reads its policy from its options', { options: { keepRecentTurns: 1, minFoldChars: 500 } }, async ($, on) => {
-  on('session.messages', () => ({ value: TRANSCRIPT }))
+test('the dry run folds what a real compaction would: a message holding media is left out', async ($, on) => {
+  // The same transcript, with a screenshot result in the message the Bash
+  // result sits in. The report must not count that message's results.
+  const withShot: SessionMessage[] = TRANSCRIPT.map(message =>
+    message.toolResults?.some(r => r.tool_use_id === 'c')
+      ? { ...message, toolResults: [...message.toolResults, { tool_use_id: 'c2', text: BIG, isError: false }] }
+      : message,
+  )
+  const shotApi = withShot.map((message, i) =>
+    i === 7
+      ? { role: 'user' as const, content: [{ type: 'tool_result', tool_use_id: 'c', content: [{ type: 'text', text: BIG }] }, { type: 'tool_result', tool_use_id: 'c2', content: [{ type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'iVBORw0KGgo=' } }] }] }
+      : apiOf(message),
+  )
+  on('session.messages', (_, e) => ({ value: (e.as === 'api' ? shotApi : withShot) as never }))
   on('fs.exists', () => ({ value: false }))
 
-  const plain = await $.tool.call({ tool: 'mcp__context-harness__policy_report' })
+  const plain = await $.tool.call({ tool: 'mcp__conjev__policy_report', keepRecentTurns: 1, minFoldChars: 500 })
+  const report = JSON.parse(String(plain.result)) as { candidate: { folds: { results: number } } }
+  // Both results in that message are held back, so the count is the Read and
+  // the Grep only: without the view it would also count the Bash result.
+  expect(report.candidate.folds.results).toBe(2)
+})
+
+test('the plugin reads its policy from its options', { options: { keepRecentTurns: 1, minFoldChars: 500 } }, async ($, on) => {
+  on('session.messages', (_, e) => ({ value: (e.as === 'api' ? TRANSCRIPT.map(apiOf) : TRANSCRIPT) as never }))
+  on('fs.exists', () => ({ value: false }))
+
+  const plain = await $.tool.call({ tool: 'mcp__conjev__policy_report' })
   const report = JSON.parse(String(plain.result)) as { current: { settings: { keepRecentTurns: number }; folds: { results: number } } }
   expect(report.current.settings.keepRecentTurns).toBe(1)
   expect(report.current.folds.results).toBe(3)
@@ -95,20 +131,20 @@ test('set_policy writes only the given values through the settings menu', async 
     return { value: e.value }
   })
 
-  const set = await $.tool.call({ tool: 'mcp__context-harness__set_policy', minFoldChars: 3000, keepTools: ['TodoWrite', 'Read'] })
+  const set = await $.tool.call({ tool: 'mcp__conjev__set_policy', minFoldChars: 3000, keepTools: ['TodoWrite', 'Read'] })
   expect(written).toEqual([
-    ['context-harness.minFoldChars', 3000],
-    ['context-harness.keepTools', 'TodoWrite,Read'],
+    ['conjev.minFoldChars', 3000],
+    ['conjev.keepTools', 'TodoWrite,Read'],
   ])
   expect(set.result).toBe('minFoldChars = 3000\nkeepTools = "TodoWrite,Read"')
 
-  const none = await $.tool.call({ tool: 'mcp__context-harness__set_policy' })
+  const none = await $.tool.call({ tool: 'mcp__conjev__set_policy' })
   expect(none.result).toBe('No policy value was given.')
 })
 
 test('set_policy reports a refused value', async ($, on) => {
   on('config.set', () => ({ deny: 'locked by policy' }))
 
-  const set = await $.tool.call({ tool: 'mcp__context-harness__set_policy', foldAtPercent: 0 })
+  const set = await $.tool.call({ tool: 'mcp__conjev__set_policy', foldAtPercent: 0 })
   expect(set.result).toBe('foldAtPercent refused: locked by policy')
 })

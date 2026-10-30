@@ -23,7 +23,7 @@ import {
 } from './instruction-docs'
 import { probabilityOf } from './jev'
 import { errorOf, judge, keyFor } from './jev-call'
-import { scrub } from './scrub'
+import { clip, scrub } from './scrub'
 import { newId, runtime, settingsOf } from './state'
 import { showStatus } from './status'
 import { homeOf, writeRecord } from './storage'
@@ -76,6 +76,35 @@ export function scrubInstruction(text: string, home: string | undefined): string
 }
 
 type Judged = { scope: Record<string, number>; covered: Record<string, number> }
+
+/** Whether a decision rests on Jev's reading, not on a rule: what active applies. */
+export const isJevDecision = (would: { decision: string; reason: string }): boolean =>
+  (would.decision === 'drop' || would.decision === 'defer') && /^(conditional|covered) /.test(would.reason)
+
+/**
+ * The chunks Jev's stored reading leaves out in active: those it says only some
+ * work needs, and those earlier chunks already say. The always-kept list, the
+ * trivial chunks and the tiers wouldApply protects are never among them, and
+ * nothing is left out before Jev has answered for this set of files. Each maps
+ * to a stand-in for "where it is kept", which the left-out line names.
+ */
+export async function jevDropsOf($: EngineInterface, chunks: readonly Chunk[], skip: ReadonlyMap<string, Chunk>): Promise<Map<string, Chunk>> {
+  const drops = new Map<string, Chunk>()
+  const stored = await $.store.get(stateKeyOf(chunks))
+  if (stored === undefined || typeof stored !== 'object' || stored === null) return drops
+  const judged = stored as Judged
+  const home = await homeOf($)
+  const inOrca = await inOrcaOf($)
+  for (const chunk of chunks) {
+    if (skip.has(chunk.id)) continue
+    const would = wouldApply(chunk, { conditional: judged.scope?.[chunk.id], covered: judged.covered?.[chunk.id] }, { inOrca, threshold: THRESHOLD })
+    if (!isJevDecision(would)) continue
+    const where = would.decision === 'drop' ? 'the instructions before it (Jev: said there already)' : `${tilde(chunk.file, home)}, when the work calls for it (Jev: needed only for some work)`
+    drops.set(chunk.id, { ...chunk, file: where })
+  }
+
+  return drops
+}
 
 /** One record per Jev call: the scrubbed state it carried, kept beside the per-chunk records. */
 async function recordSent($: EngineInterface, stateKey: string, question: string, sent: Record<string, unknown>, result: import('./jev').JevResult): Promise<void> {
@@ -193,6 +222,8 @@ export async function recordFilter(
       ? { decision: 'drop' as const, reason: `loaded twice; kept in ${tilde(kept.file, home)}` }
       : wouldApply(chunk, { conditional: judged?.scope[chunk.id], covered: judged?.covered[chunk.id] }, { inOrca, threshold: THRESHOLD })
     if (!kept && would.decision === 'defer') deferred.push(chunk)
+    // Active applies Jev's reading; shadow only says what it would do.
+    const isApplied = !kept && mode === 'active' && isJevDecision(would)
     await writeRecord($, {
       id: newId(t0),
       ts: new Date(t0).toISOString(),
@@ -204,7 +235,7 @@ export async function recordFilter(
       sent: null,
       jev: judged?.covered[chunk.id] ?? judged?.scope[chunk.id],
       hookMs,
-      decision: kept ? (mode === 'active' ? 'drop' : 'would-drop') : `would-${would.decision}`,
+      decision: kept ? (mode === 'active' ? 'drop' : 'would-drop') : isApplied ? would.decision : `would-${would.decision}`,
       facts: {
         state: stateKey,
         file: tilde(chunk.file, home),
@@ -238,8 +269,8 @@ export async function judgeDeferred($: EngineInterface, text: string, origin: st
   const sessionId = await $.session.id()
   const settings = settingsOf()
   const t0 = await $.clock.now()
-  const sent = { request: scrubInstruction(text, home).slice(0, 600) }
-  const questions = Object.fromEntries(deferred.map((chunk, i) => [`d${i}`, conditionQuestion(`The request calls for this instruction: ${scrubInstruction(chunk.text, home).slice(0, 1200)}`)]))
+  const sent = { request: clip(scrubInstruction(text, home), 600) }
+  const questions = Object.fromEntries(deferred.map((chunk, i) => [`d${i}`, conditionQuestion(`The request calls for this instruction: ${clip(scrubInstruction(chunk.text, home), 1200)}`)]))
   const result = await judge($, { sessionId, point: DEFER_POINT, cap: settings.instructionCap }, key.key, sent, questions, BACKGROUND_TIMEOUT_MS)
   for (const [i, chunk] of deferred.entries()) {
     const answer = result.ok ? result.answers[`d${i}`] : undefined

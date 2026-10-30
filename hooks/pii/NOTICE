@@ -1,0 +1,18 @@
+The files in this folder are a TypeScript translation, with modifications, of
+maskingtape, a Korean personal information detector, at commit 2802949 of its
+main branch (2026-10-25; release 0.4.0 plus later fixes to name and birth date
+detection):
+
+  https://github.com/ChoHyeonChan/maskingtape (commit 2802949)
+  Copyright 2026 The maskingtape Authors
+  Licensed under the Apache License, Version 2.0 (see LICENSE in this folder).
+
+Translated: the rule pipeline (pipeline.py), the eleven rule detectors, the
+input tidying (normalize.py), overlap merging (overlaps.py) and the mask and
+label strategies. Not translated: the local LLM name detector (name_llm.py),
+the command line (cli.py) and the pseudonym strategy (pseudonym.py).
+
+Modifications: Python's re and str behaviour is rebuilt on JavaScript regular
+expressions (regex.ts); conditional groups are rewritten as alternatives;
+positions are reported in UTF-16 units; NameDetector's min_confidence option
+and has_name_candidate are left out.

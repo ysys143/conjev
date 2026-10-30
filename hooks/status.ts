@@ -5,6 +5,11 @@ import type { HarnessSettings } from './settings'
 import { usesJev } from './settings'
 import { runtime, type Counts } from './state'
 
+/** While the engine's summary runs: the one wait that lasts seconds. */
+export function summarizingStatus(isSummarizing: boolean | undefined): string | undefined {
+  return isSummarizing === true ? 'summarizing the older turns…' : undefined
+}
+
 /** The fold's part; undefined before the first fold. */
 export function foldStatus(folded: { results: number; savedChars: number }): string | undefined {
   return folded.results === 0 ? undefined : `folded ${folded.results} · −${Math.round(folded.savedChars / 1000)}k chars`
@@ -20,26 +25,38 @@ export function jevStatus(
   settings: HarnessSettings,
   counts: Counts,
   hasNoKey: boolean,
-  fragments: { list: readonly unknown[]; hash: string } | undefined,
   filtered = 0,
 ): string | undefined {
   const isJev = usesJev(settings)
   if (!isJev && settings.toolGate === 'off') return undefined
   if (isJev && hasNoKey) return 'jev: no key'
-  const recorded = counts.judged + counts.failed + counts.floor + counts.toolJudged + counts.attached + counts.foldJudged
+  const recorded = counts.judged + counts.failed + counts.floor + counts.toolJudged + counts.attached + counts.foldJudged + counts.webRead + counts.foldBlocks + counts.browserRouted
   if (recorded === 0 && filtered === 0) return undefined
-  const parts = ['jev']
-  if (settings.stopGate !== 'off') parts.push(`stop ${settings.stopGate} ${counts.judged} judged${counts.failed ? `, ${counts.failed} failed` : ''}`)
-  if (settings.toolGate !== 'off') parts.push(`tool ${settings.toolGate} ${counts.floor} hits`)
-  if (settings.toolJev !== 'off') parts.push(`tool jev ${settings.toolJev} ${counts.toolJudged} judged`)
-  if (settings.instructions !== 'off') {
-    parts.push(`instr ${settings.instructions} ${fragments ? `${fragments.list.length} #${fragments.hash.slice(0, 6)}` : '-'}, ${counts.attached} attached`)
-  }
-  if (settings.foldJev !== 'off') parts.push(`fold ${settings.foldJev} ${counts.foldJudged} judged`)
-  if (settings.instructionFilter !== 'off') parts.push(`instr filter ${settings.instructionFilter}${filtered ? ` −${Math.round(filtered / 100) / 10}k dup` : ''}`)
+  // One total, not a part per gate: with every Jev gate on by default, a part
+  // each ran past the width of a terminal. Per-gate counts are /jev-report's.
+  // What is not the default still shows: a gate held in shadow, and failures.
+  const judged = counts.judged + counts.toolJudged + counts.attached + counts.foldJudged + counts.webRead + counts.foldBlocks + counts.browserRouted
+  const parts = [`jev ${judged}${counts.failed ? `, ${counts.failed} failed` : ''}`]
+  if (counts.floor > 0) parts.push(`floor ${counts.floor} hit${counts.floor === 1 ? '' : 's'}`)
+  if (filtered > 0) parts.push(`−${Math.round(filtered / 100) / 10}k dup`)
+  const shadowed = SHADOW_NAMES.filter(([key]) => settings[key] === 'shadow').map(([, name]) => name)
+  if (shadowed.length > 0) parts.push(`shadow: ${shadowed.join(', ')}`)
 
   return parts.join(' · ')
 }
+
+/** The short name each Jev gate goes by when it is held in shadow. */
+const SHADOW_NAMES: readonly (readonly [keyof HarnessSettings, string])[] = [
+  ['stopGate', 'stop'],
+  ['toolGate', 'tool'],
+  ['toolJev', 'tool jev'],
+  ['instructions', 'instr'],
+  ['foldJev', 'fold'],
+  ['webRead', 'web'],
+  ['foldBlocks', 'blocks'],
+  ['browserRoute', 'browser'],
+  ['instructionFilter', 'filter'],
+]
 
 export function statusLine(parts: readonly (string | undefined)[]): string | undefined {
   const shown = parts.filter((part): part is string => part !== undefined)
@@ -50,8 +67,31 @@ export function statusLine(parts: readonly (string | undefined)[]): string | und
 export function showStatus($: EngineInterface): void {
   const settings = runtime.settings
   const line = statusLine([
+    summarizingStatus(runtime.isSummarizing),
     foldStatus(runtime.folded),
-    settings === undefined ? undefined : jevStatus(settings, runtime.counts, runtime.key === null, runtime.fragments, runtime.filter?.droppedChars),
+    settings === undefined ? undefined : jevStatus(settings, runtime.counts, runtime.key === null, runtime.filter?.droppedChars),
   ])
-  if (line !== undefined) $.ui.status(line)
+  if (line === undefined) return
+  runtime.statusLine = line
+  // Drawn after the prompt's hint, not with $.ui.status: Claude Code marks
+  // every plugin status line with a warning sign, which the plugin cannot
+  // change, and a running count is not a warning. Asking for a redraw brings
+  // the hint hook (hintWithStatus) back with the new line.
+  $.ui.invalidate('ui.render')
+}
+
+/** Prefixed so the dim text at the end of the hint says whose it is. */
+export const HINT_PREFIX = 'conjev: '
+
+/**
+ * The prompt hint with the status added. The terminal draws `tail` dim after
+ * the engine's own line, its pills still live; a surface that does not draw
+ * `tail` gets it appended to the hint instead, so it is not lost there.
+ */
+export function hintWithStatus<E extends { surface: string; props: { hint: string; tail?: string } }>(e: E, line: string | undefined): E {
+  if (line === undefined) return e
+  const text = `${HINT_PREFIX}${line}`
+  if (e.surface === 'terminal') return { ...e, props: { ...e.props, tail: e.props.tail === undefined ? text : `${e.props.tail} · ${text}` } }
+
+  return { ...e, props: { ...e.props, hint: e.props.hint === '' ? text : `${e.props.hint} · ${text}` } }
 }

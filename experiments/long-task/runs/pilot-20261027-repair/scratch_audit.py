@@ -10,8 +10,8 @@ import sys
 import tempfile
 from pathlib import Path
 
-REPO = Path('/Users/jaesolshin/Documents/GitHub/context-harness')
-HERE = REPO / 'experiments/long-task'
+HERE = Path(__file__).resolve().parents[2]
+REPO = HERE.parents[1]
 sys.path.insert(0, str(HERE))
 from contamination import Scope, audit, captured_calls
 from grading import digest, file_digest, load, write_new

@@ -1,6 +1,7 @@
 // One stub of everything the plugin asks the engine, shared by the hook tests.
 import type { HttpResponse, SessionMessage } from 'claude-code'
 import type { TestBody } from 'claude-code/testing'
+import { JEV_ENDPOINT } from '../hooks/jev'
 
 export type On = Parameters<TestBody>[1]
 // The test runtime has timers; the type library the mod is checked with does not declare them.
@@ -24,12 +25,27 @@ export type Setup = {
   stopBelow?: { block?: string }
   /** The transcript $.session.messages() returns. */
   messages?: SessionMessage[]
+  /** Rows the api view holds from the start, as Messages API blocks, beside its prompts; `messages` when absent. */
+  transcript?: SessionMessage[]
+  /** The api view from the start, blocks as given, in place of `transcript`. */
+  api?: ApiMessage[]
+  /** $.session.messages({ as: 'api' }) is refused. */
+  apiFails?: boolean
   /** How full the context window is, in percent, and its size in tokens. */
   percent?: number
   window?: number
+  /** When the session started, in ms; what `since()` counts from before the first compaction. */
   startedAt?: number
+  /** What `git status --porcelain=v2 --branch` answers, as the repository would print it. */
+  gitStatus?: string
+  /** What an image-size command answers (`sips -g pixelWidth -g pixelHeight`), as it would print it. */
+  imageSize?: string
+  /** Exit code for the resize command, when a test wants it to fail. */
+  resizeFails?: boolean
   /** What the engine's own compaction beneath answers: a summary, or a skip. */
   compactBelow?: 'summary' | 'skip'
+  /** Runs while the engine's summary beneath is running. */
+  duringSummary?: () => Promise<void> | void
   /** The plugin folder's .env, wherever the plugin root is. */
   dotenv?: string
   /** A command that exits 1 when run, by its first word. */
@@ -40,35 +56,68 @@ export type Setup = {
   failList?: string
   /** Prompts are queued behind a running turn: not in the conversation yet when the next one is judged. */
   isQueued?: boolean
+  /** Web pages by URL; any other URL but Jev's answers 404. */
+  pages?: Record<string, HttpResponse>
 }
 
-type ApiMessage = { role: 'user' | 'assistant'; content: { type: string; text?: string }[] }
+export type ApiMessage = { role: 'user' | 'assistant'; content: { type: string; [field: string]: unknown }[] }
+
+/** A row as the engine holds it in Messages API form: its text, tool uses and tool results. */
+export const apiOf = (message: SessionMessage): ApiMessage => ({
+  role: message.role,
+  content: [
+    ...(message.toolResults ?? []).map(r => ({ type: 'tool_result', tool_use_id: r.tool_use_id, content: [{ type: 'text', text: r.text }] })),
+    ...(message.text === '' ? [] : [{ type: 'text', text: message.text }]),
+    ...message.toolUses.map(use => ({ type: 'tool_use', id: use.tool_use_id, name: use.tool, input: use.input })),
+  ],
+})
 
 export const prompt = (text: string): SessionMessage => ({ role: 'user', text, toolUses: [] })
+
+/**
+ * `count` model turns of small work: a short Bash call and its short answer,
+ * each under any size floor, so nothing in them folds. A fold's age is counted
+ * in model turns, so these put whatever comes before them that many turns back.
+ */
+export const smallRounds = (count: number, prefix = 'w'): SessionMessage[] =>
+  Array.from({ length: count }, (_, i): SessionMessage[] => [
+    { role: 'assistant', text: '', toolUses: [{ tool_use_id: `${prefix}${i}`, tool: 'Bash', input: { command: `ls ${i}` } }] },
+    { role: 'user', text: '', toolUses: [], toolResults: [{ tool_use_id: `${prefix}${i}`, text: 'ok', isError: false }] },
+  ]).flat()
 
 export const setup = (on: On, s: Setup = {}) => {
   const env: Record<string, string> = { HOME, ...s.env }
   const files: Record<string, string> = { ...s.files }
   const fetches: { headers: Record<string, string>; body: Record<string, unknown> }[] = []
+  const summarizedInputs: SessionMessage[][] = []
   const writes: { path: string; text: string }[] = []
+  const pageFetches: string[] = []
   const runs: string[][] = []
   // What touched the disk, in order: `run <argv0>` and `write <path>`.
   const disk: string[] = []
   const store = new Map<string, unknown>()
   const statuses: string[] = []
+  /** Lines put up with $.ui.status, which Claude Code marks with a warning sign. */
+  const warned: string[] = []
   const toasts: string[] = []
   const logs: string[] = []
+  const debugLogs: string[] = []
   const appended: string[] = []
   const submitted: { text: string; context?: readonly string[] }[] = []
+  // What each engine summary was handed: one entry per call, its messages as text or '-'. 
+  const summarizedOver: (string | boolean)[][] = []
+  // What each engine summary was told to keep: the instructions it was handed.
+  const summarizedWith: (string | undefined)[] = []
   const configured: [string, unknown][] = []
   const order: string[] = []
   const commands: string[] = []
-  const summarizedInputs: SessionMessage[][] = []
+  /** Every name the plugin registered for the slash list, whether or not it was run. */
+  const registered: string[] = []
   // What the engine would load after the plugin answered prompt.context, and every timer the plugin waited on.
   const loaded: { path: string; kind: string; content: string }[][] = []
   const sleeps: number[] = []
   // The messages the next request is built from: what $.session.messages({ as: 'api' }) answers.
-  const api: ApiMessage[] = []
+  const api: ApiMessage[] = s.api ? [...s.api] : (s.transcript ?? s.messages ?? []).map(apiOf)
   let now = 1_700_000_000_000
   const under = (dir: string): string[] => [...Object.keys(files), ...writes.map(w => w.path)].filter(p => p.startsWith(`${dir}/`))
 
@@ -108,7 +157,43 @@ export const setup = (on: On, s: Setup = {}) => {
   on('process.run', (_, e) => {
     runs.push([...e.argv])
     disk.push(`run ${e.argv[0]}`)
-    return { value: { exitCode: e.argv[0] === s.failRun ? 1 : 0, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+    // `mv <from> <to>` moves every file under <from>, so what a migration moved
+    // is read from its new place afterwards.
+    // `rsync -a --ignore-existing --remove-source-files <from>/ <to>/` moves
+    // the files <to> lacks and leaves the ones both hold where they were.
+    if (e.argv[0] === 'rsync' && e.argv.includes('--remove-source-files')) {
+      const [from, to] = e.argv.slice(-2).map(p => p.replace(/\/$/, ''))
+      for (const path of Object.keys(files)) {
+        if (!path.startsWith(`${from!}/`)) continue
+        const target = `${to!}${path.slice(from!.length)}`
+        if (target in files) continue
+        files[target] = files[path]!
+        delete files[path]
+      }
+    }
+    if (e.argv[0] === 'mv' && e.argv.length === 3) {
+      const [from, to] = [e.argv[1]!, e.argv[2]!]
+      for (const path of Object.keys(files)) {
+        if (path !== from && !path.startsWith(`${from}/`)) continue
+        files[`${to}${path.slice(from.length)}`] = files[path]!
+        delete files[path]
+      }
+    }
+    // `find <dir> -type f` lists the files under <dir>; `rm <path>` removes one.
+    if (e.argv[0] === 'rm' && e.argv.length === 2) delete files[e.argv[1]!]
+    if (e.argv[0] === 'find' && e.argv[2] === '-type' && e.argv[3] === 'f' && e.argv.length === 4) {
+      const listed = Object.keys(files).filter(path => path.startsWith(`${e.argv[1]!}/`)).join('\n')
+      return { value: { exitCode: 0, stdout: listed, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+    }
+    const isGit = e.argv[0] === 'git'
+    const isMeasure = e.argv.includes('-g') || e.argv[0] === 'identify'
+    const isResize = e.argv.includes('-Z') || e.argv.includes('-resize')
+    const stdout = isGit ? (s.gitStatus ?? '') : isMeasure ? (s.imageSize ?? '') : ''
+    const exitCode =
+      e.argv[0] === s.failRun || (isGit && s.gitStatus === undefined) || (isMeasure && s.imageSize === undefined) || (isResize && s.resizeFails === true)
+        ? 1
+        : 0
+    return { value: { exitCode, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
   })
   on('clock.now', () => ({ value: (now += 5) }))
   on('clock.sleep', (_, e) => {
@@ -117,12 +202,20 @@ export const setup = (on: On, s: Setup = {}) => {
   })
   on('clock.after', () => ({ value: undefined }))
   on('http.fetch', async (_, e) => {
+    if (e.url !== JEV_ENDPOINT) {
+      pageFetches.push(e.url)
+      return { value: s.pages?.[e.url] ?? { status: 404, ok: false, headers: {}, text: '' } }
+    }
     const body = JSON.parse(e.init?.body ?? '{}') as Record<string, unknown>
     fetches.push({ headers: { ...e.init?.headers }, body })
     order.push('jev')
     return { value: await (s.fetch ?? (() => ({ status: 500, ok: false, headers: {}, text: '' })))(body) }
   })
   on('store.get', (_, e) => ({ value: store.get(e.key) }))
+  on('store.delete', (_, e) => {
+    store.delete(e.key)
+    return { value: undefined }
+  })
   on('store.set', (_, e) => {
     store.set(e.key, e.value)
     return { value: undefined }
@@ -130,14 +223,22 @@ export const setup = (on: On, s: Setup = {}) => {
   on('session.authorize', () => ({ value: s.isAuthorized === false ? null : { handle: 'h', kind: 'bearer' as const } }))
   on('session.id', () => ({ value: 'sess-1' }))
   on('session.cwd', () => (s.cwdFails ? { deny: 'no cwd' } : { value: '/proj' }))
-  on('session.messages', (_, e) => ({ value: (e.as === 'api' ? api : (s.messages ?? [])) as never }))
+  on('session.messages', (_, e) => (e.as === 'api' && s.apiFails ? { deny: 'no api view' } : { value: (e.as === 'api' ? api : (s.messages ?? [])) as never }))
   on('session.usage', () => ({ value: { startedAt: s.startedAt ?? 0, context: { window: s.window ?? 200_000, percent: s.percent ?? 10 }, rateLimits: [] } as never }))
   on('session.append', (_, e, next) => {
     appended.push(JSON.stringify(e.message))
     return next(e)
   })
+  // The status is drawn after the prompt's hint. A redraw request is only
+  // acknowledged; what the hint shows is read by rendering it (drawnStatus).
+  on('ui.invalidate', () => ({ value: undefined }))
+  on('ui.render', { component: 'PromptHint' }, (_, e) => {
+    const tail = (e.props as { tail?: string }).tail
+    if (tail !== undefined) statuses.push(tail.replace(/^conjev: /, ''))
+    return { type: 'Text', children: [(e.props as { hint: string }).hint, tail ?? ''] } as never
+  })
   on('ui.status', (_, e) => {
-    if (e.text !== undefined) statuses.push(e.text)
+    if (e.text !== undefined) warned.push(e.text)
     return { value: undefined }
   })
   on('ui.toast', (_, e) => {
@@ -145,11 +246,19 @@ export const setup = (on: On, s: Setup = {}) => {
     return { value: undefined }
   })
   on('ui.log', (_, e) => {
+    // Lines sent to the debug log are kept apart: they never reach the screen.
+    if ((e as { to?: string }).to === 'debug') {
+      debugLogs.push(String(e.text))
+      return { value: undefined }
+    }
     logs.push(String(e.text))
     return { value: undefined }
   })
   on('tool.register', (_, e) => ({ value: { tool: e.name } }))
-  on('command.register', (_, e) => ({ value: { command: e.name } }))
+  on('command.register', (_, e) => {
+    registered.push(String(e.name))
+    return { value: { command: e.name } }
+  })
   on('command.run', (_, e) => {
     commands.push(e.command)
     return { value: undefined } as never
@@ -171,8 +280,12 @@ export const setup = (on: On, s: Setup = {}) => {
     return { blocks: e.blocks, instructionFiles: e.instructionFiles }
   })
   // A summary replaces what the next request is built from; a compaction the plugin answers never gets here.
-  on('session.compact', (_, e) => {
+  // `summarizedOver` records the messages the engine was handed, so a test can check what a partial summary covers.
+  on('session.compact', async (_, e) => {
     summarizedInputs.push([...e.messages])
+    summarizedOver.push(e.messages.map(m => m.text || (m.toolResults ?? []).length > 0))
+    summarizedWith.push(e.instructions)
+    await s.duringSummary?.()
     if (s.compactBelow === 'skip') return { skip: 'skipped below' } as never
     api.length = 0
     api.push({ role: 'user', content: [{ type: 'text', text: 'summary' }] })
@@ -180,14 +293,16 @@ export const setup = (on: On, s: Setup = {}) => {
   })
   on('classic.PostCompact', () => ({}))
   on('classic.SessionStart', () => ({}))
+  on('classic.FileChanged', () => ({}))
   on('classic.Stop', () => s.stopBelow ?? {})
+  on('classic.UserPromptExpansion', () => ({}))
   on('turn.complete', () => ({ text: '' }))
   on('tool.call', () => {
     order.push('tool')
     return { result: 'ok' }
   })
 
-  return { env, files, fetches, writes, runs, disk, store, statuses, toasts, logs, appended, submitted, configured, order, api, commands, summarizedInputs, loaded, sleeps }
+  return { env, files, fetches, pageFetches, writes, runs, disk, store, statuses, warned, debugLogs, toasts, logs, appended, submitted, summarizedOver, summarizedWith, summarizedInputs, configured, order, api, commands, loaded, sleeps, registered }
 }
 
 export const records = (writes: readonly { path: string; text: string }[], point: string) =>
@@ -200,4 +315,12 @@ export const settle = async (check: () => boolean): Promise<void> => {
 /** Lets fire-and-forget work run to its end. */
 export const drain = async (): Promise<void> => {
   for (let i = 0; i < 20; i++) await new Promise<void>(resolve => setTimeout(() => resolve(), 1))
+}
+
+/** What the prompt's hint shows of this plugin's status now, its prefix taken off; undefined when nothing. */
+export const drawnStatus = async ($: { ui: { render: (input: never) => Promise<unknown> } }): Promise<string | undefined> => {
+  const drawn = JSON.stringify(await $.ui.render({ component: 'PromptHint', surface: 'terminal', requestId: 'hint', props: { isDraft: false, isWorking: false, hint: '? for shortcuts' } } as never))
+  const match = /conjev: ([^"]*)/.exec(drawn)
+
+  return match === null ? undefined : match[1]
 }

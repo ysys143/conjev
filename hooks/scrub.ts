@@ -1,5 +1,8 @@
 // What leaves the machine for Jev is scrubbed first: secret-shaped strings,
-// email addresses and the home folder never go out.
+// email addresses and the home folder never go out, and Korean personal
+// information (names, phone, resident and card numbers, ...) goes as labels.
+import { DEFAULT_LABELS } from './pii/label'
+import { anonymize } from './pii/pipeline'
 
 const SECRET_PATTERNS: readonly RegExp[] = [
   /\bBearer\s+[A-Za-z0-9._~+/=-]{8,}/gi,
@@ -33,5 +36,33 @@ export function scrub(text: string, home?: string): string {
   out = out.replace(NAMED_SECRET, (_, name: string, sep: string) => `${name}${sep}<secret>`)
   for (const pattern of SECRET_PATTERNS) out = out.replace(pattern, '<secret>')
 
-  return out.replace(EMAIL, '<email>')
+  out = out.replace(EMAIL, '<email>')
+
+  return anonymize(out, 'label').text
+}
+
+// The marks scrubbing leaves in place of what it took out. Cutting before
+// scrubbing would leave part of a value unrecognized; cutting after could
+// leave half a mark, so a cut never falls inside one.
+const MARK = new RegExp(`<(?:secret|email|user)>|\\[(?:${Object.values(DEFAULT_LABELS).join('|')})\\d*\\]`, 'g')
+
+/** How long a scrubbed tool-call line may be when it goes to Jev. */
+export const CALL_CHARS = 200
+
+/** How long a scrubbed command may be when it goes to Jev. */
+export const COMMAND_CHARS = 200
+
+/** How much of a scrubbed request goes to Jev, from its start. */
+export const REQUEST_CHARS = 400
+
+/** At most `max` characters of scrubbed text, from its start or its end, ending short of a mark the cut would split. */
+export function clip(text: string, max: number, keep: 'head' | 'tail' = 'head'): string {
+  if (text.length <= max) return text
+  const at = keep === 'head' ? max : text.length - max
+  for (const mark of text.matchAll(MARK)) {
+    const end = mark.index + mark[0].length
+    if (mark.index < at && at < end) return keep === 'head' ? text.slice(0, mark.index) : text.slice(end)
+  }
+
+  return keep === 'head' ? text.slice(0, max) : text.slice(at)
 }

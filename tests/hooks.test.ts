@@ -1,7 +1,7 @@
 import type { HttpResponse } from 'claude-code'
 import { expect, test } from 'claude-code/testing'
 import { STOP_MESSAGE } from '../hooks/stop-gate'
-import { HOME, KEY_ENV, records, settle, setup as kitSetup, type On, type Setup } from './kit'
+import { HOME, KEY_ENV, drawnStatus, records, settle, setup as kitSetup, type On, type Setup } from './kit'
 
 const ANNOUNCE = (p: number): HttpResponse => ({
   status: 200,
@@ -36,6 +36,20 @@ test('off by default: a key alone sends nothing', async ($, on) => {
   expect(result.block).toBe(undefined)
   expect(io.fetches.length).toBe(0)
   expect(io.writes.length).toBe(0)
+})
+
+test('the last paragraph is scrubbed before it is cut to its tail', { options: { stopGate: 'shadow' } }, async ($, on) => {
+  // The paragraph is longer than the 600 kept, and a phone number opens it, so
+  // the tail's cut falls inside the number: cutting first would send its
+  // second half, while scrubbing first leaves a label the cut then drops whole.
+  const filler = `010-1234-5678 ${'가 나 '.repeat(400).slice(0, 594)}`
+  const io = setup(on, { env: KEY_ENV, isTimerStopped: true, fetch: () => ANNOUNCE(0.99) })
+  await $.classic.Stop({ stop_hook_active: false, last_assistant_message: filler })
+  await settle(() => records(io.writes, 'stop').length > 0)
+
+  const sentText = JSON.stringify(records(io.writes, 'stop')[0]?.sent)
+  expect(sentText).not.toContain('1234')
+  expect(sentText).not.toContain('5678')
 })
 
 test('shadow: the turn ends at once and the judgment is recorded afterwards, scrubbed', { options: { stopGate: 'shadow' } }, async ($, on) => {
@@ -98,7 +112,7 @@ test('without a key nothing is sent and the status says so', { options: { stopGa
   await settle(() => records(io.writes, 'stop').length > 0)
   expect(io.fetches.length).toBe(0)
   expect(records(io.writes, 'stop')[0]?.error).toBe('no-key')
-  expect(io.statuses).toContain('jev: no key')
+  expect(await drawnStatus($)).toBe('jev: no key')
 })
 
 test('the sensitive setting outranks the plugin .env, which outranks the environment', { options: { stopGate: 'active', apiKey: 'tk-config' } }, async ($, on) => {
@@ -125,7 +139,7 @@ test('three failed calls open the circuit', { options: { stopGate: 'active' } },
 test('tool gate, external provider: secret files and secret-printing commands are refused', { options: { toolGate: 'active', providerTrust: 'external' } }, async ($, on) => {
   const io = setup(on)
   expect((await $.tool.call({ tool: 'Read', file_path: '/proj/.env' })).deny).toContain('env file')
-  expect((await $.tool.call({ tool: 'Read', file_path: '~/.oh-my-zsh/custom/apikey.env' })).deny).toContain('env file')
+  expect((await $.tool.call({ tool: 'Read', file_path: '~/.config/secrets/keys.env' })).deny).toContain('env file')
   expect((await $.tool.call({ tool: 'Bash', command: 'git diff --no-index /dev/null .ENV' })).deny).toContain('env file')
   expect((await $.tool.call({ tool: 'Bash', command: 'printenv | sort' })).deny).toContain('printenv')
   expect((await $.tool.call({ tool: 'Read', file_path: '/proj/README.md' })).deny).toBe(undefined)
@@ -157,7 +171,7 @@ test('tool gate shadow only records what it would refuse', { options: { toolGate
 test('the agent may not rewrite the plugin or the Claude settings, even first-party', { options: { toolGate: 'active' } }, async ($, on) => {
   setup(on)
   expect((await $.tool.call({ tool: 'Write', file_path: `${HOME}/.claude-3/settings.json`, content: '{}' })).deny).toContain('claude settings')
-  expect((await $.tool.call({ tool: 'Bash', command: `echo x > ${HOME}/.local/state/context-harness/a.json` })).deny).toContain('context-harness files')
+  expect((await $.tool.call({ tool: 'Bash', command: `echo x > ${HOME}/.local/state/context-harness/a.json` })).deny).toContain('conjev files')
 })
 
 test('an active tool guard that breaks refuses the call', { options: { toolGate: 'active' } }, async ($, on) => {
@@ -172,7 +186,7 @@ test('a shadow tool guard that breaks lets the call through', { options: { toolG
 
 test('/jev-mark writes a label and /jev-report reads records and labels', { options: { stopGate: 'shadow' } }, async ($, on) => {
   const io = setup(on, { env: KEY_ENV })
-  const root = `${HOME}/.local/state/context-harness/records`
+  const root = `${HOME}/.conjev/state/records`
   await $.session.start({ cwd: '/proj', surface: 'terminal', isInteractive: true } as never)
   await $.classic.Stop(STOP)
   await settle(() => records(io.writes, 'stop').length > 0)
@@ -197,6 +211,22 @@ test('tool jev, shadow: the tool runs first, then the path is judged and recorde
   const [record] = records(io.writes, 'tool')
   expect(record?.decision).toBe('allow')
   expect((record?.facts as Record<string, string>).class).toBe('standard')
+})
+
+test('a command long enough to be cut is scrubbed before the cut, so no value reaches Jev in part', { options: EXTERNAL_JEV }, async ($, on) => {
+  // A phone number sits across the 200-character bound: its label starts at
+  // 197, so a cut at 200 lands inside it. Cutting first would leave "010" in
+  // what is sent; scrubbing first leaves the whole label, and the cut then
+  // falls short of it.
+  const command = `${'a b '.repeat(50).slice(0, 197)}010-1234-5678 tail`
+  const io = setup(on, { env: KEY_ENV, fetch: () => STANDARD })
+  await $.tool.call({ tool: 'Bash', command })
+  await settle(() => records(io.writes, 'tool').length > 0)
+
+  const target = (io.fetches[0]?.body.state as Record<string, string> | undefined)?.target ?? ''
+  expect(target).not.toContain('010')
+  expect(target).not.toContain('1234')
+  expect(target.length).toBeLessThanOrEqual(200)
 })
 
 test('tool jev sends nothing in a first-party session', { options: { toolJev: 'shadow' } }, async ($, on) => {

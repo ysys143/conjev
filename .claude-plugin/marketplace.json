@@ -1,6 +1,6 @@
 {
-  "name": "context-harness",
-  "description": "context-harness: fold instead of summarize, project state, and Jev judgment gates for Claude Code.",
+  "name": "conjev",
+  "description": "conjev: Jev judgment gates around Claude Code's compaction, project state, and folding as an option.",
   "owner": { "name": "ysys143" },
-  "plugins": [{ "name": "context-harness", "source": "./" }]
+  "plugins": [{ "name": "conjev", "source": "./" }]
 }

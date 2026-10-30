@@ -1,9 +1,10 @@
 import type { HttpResponse, SessionMessage } from 'claude-code'
-import { expect, test } from 'claude-code/testing'
+import { expect } from 'claude-code/testing'
+import { test } from './folding'
 import { DEFAULT_SETTINGS, turnsAgoOf } from '../hooks/fold'
 import { currentRequest, foldCandidates } from '../hooks/fold-judge'
 import { attachedNames, decideFragments, fragmentBlock, fragmentsHash, isFragment, keywordHit, parseFragment, pinnedSection, type Fragment } from '../hooks/instructions'
-import { HOME, KEY_ENV, drain, records, settle, setup as kitSetup, type On, type Setup } from './kit'
+import { HOME, KEY_ENV, drain, records, settle, setup as kitSetup, smallRounds, type On, type Setup } from './kit'
 
 const DIR = `${HOME}/.agents/fragments`
 
@@ -65,22 +66,24 @@ const TRANSCRIPT: SessionMessage[] = [
   prompt('Fix the rounding bug in invoice totals'),
   call('d', 'Read', { file_path: '/proj/README.md' }),
   answer('d', '[folded Read · ./README.md · 60 lines]'),
+  ...smallRounds(10),
   prompt('/compact'),
 ]
 
 test('fold candidates come from the fold policy itself: its turn count, its size floor, its verdict', () => {
   // A /command is not the request.
   expect(currentRequest(TRANSCRIPT)).toBe('Fix the rounding bug in invoice totals')
-  // The fold counts every user text as a turn boundary, injected reminders and /commands included.
-  expect(turnsAgoOf(TRANSCRIPT)[2]).toBe(4)
+  // The fold counts model turns only: the reminder and the /command add
+  // nothing, the calls after the read and the ten small rounds at the end do.
+  expect(turnsAgoOf(TRANSCRIPT)[2]).toBe(13)
   expect(foldCandidates(TRANSCRIPT, DEFAULT_SETTINGS, HOME, '/proj', 48).map(c => [c.id, c.call, c.turnsAgo, c.ruleFolds])).toEqual([
-    ['c', 'Bash npm test (3001 lines)', 2, true],
-    ['a', 'Read ./src/billing/invoice.ts (1501 lines)', 4, true],
+    ['c', 'Bash npm test (3001 lines)', 11, true],
+    ['a', 'Read ./src/billing/invoice.ts (1501 lines)', 13, true],
   ])
-  // A lower size floor brings the 800-character result in; a wider recent window keeps c.
-  const wider = foldCandidates(TRANSCRIPT, { ...DEFAULT_SETTINGS, minFoldChars: 500, keepRecentTurns: 3 }, HOME, '/proj', 48)
+  // A lower size floor brings the 800-character result in; a wider recent window
+  // keeps c, so the policy does not fold it and the judgment is not asked about it.
+  const wider = foldCandidates(TRANSCRIPT, { ...DEFAULT_SETTINGS, minFoldChars: 500, keepRecentTurns: 12 }, HOME, '/proj', 48)
   expect(wider.map(c => [c.id, c.ruleFolds])).toEqual([
-    ['c', false],
     ['a', true],
     ['b', true],
   ])
@@ -90,16 +93,16 @@ test('fold candidates come from the fold policy itself: its turn count, its size
 test('attached fragments are counted in the messages the next request carries', () => {
   const text = (t: string) => ({ type: 'text', text: t })
   const names = attachedNames([
-    { role: 'user', content: [text('Publish it'), text('<instruction name="deploy" source="context-harness">\nx\n</instruction>')] },
+    { role: 'user', content: [text('Publish it'), text('<instruction name="deploy" source="conjev">\nx\n</instruction>')] },
     { role: 'user', content: [text('<instruction name="prose" source="jev-harness">\ny\n</instruction>')] },
-    { role: 'assistant', content: [text('<instruction name="quoted" source="context-harness">')] },
+    { role: 'assistant', content: [text('<instruction name="quoted" source="conjev">')] },
     { role: 'user', content: [text('<instruction name="other" source="someone-else">')] },
   ])
   expect([...names].sort()).toEqual(['deploy', 'prose'])
   // An opening tag alone, quoted or carried into a summary, is not a block; text before a whole block is fine.
   const quoted = attachedNames([
-    { role: 'user', content: [text('Why does <instruction name="release" source="context-harness"> show up?')] },
-    { role: 'user', content: [text('prompt.submit hook additional context: <instruction name="deploy" source="context-harness">\nx\n</instruction>')] },
+    { role: 'user', content: [text('Why does <instruction name="release" source="conjev"> show up?')] },
+    { role: 'user', content: [text('prompt.submit hook additional context: <instruction name="deploy" source="conjev">\nx\n</instruction>')] },
   ])
   expect([...quoted]).toEqual(['deploy'])
 })
@@ -138,7 +141,7 @@ test('active: a fragment whose condition holds is appended to that prompt, once'
   expect(io.fetches.length).toBe(1)
   // Neither had a keyword hit, so both are asked about; only deploy applies.
   expect(Object.keys(io.fetches[0]!.body.questions as object).sort()).toEqual(['deploy', 'prose'])
-  expect(io.submitted[0]?.context).toEqual(['<instruction name="deploy" source="context-harness">\nCheck the rollback plan first.\n</instruction>'])
+  expect(io.submitted[0]?.context).toEqual(['<instruction name="deploy" source="conjev">\nCheck the rollback plan first.\n</instruction>'])
 
   await $.prompt.submit(typed('Publish the next release too'))
   expect(io.submitted[1]?.context).toBe(undefined)
@@ -150,6 +153,23 @@ test('active: a keyword hit attaches without asking Jev about it', ACTIVE, async
   await $.prompt.submit(typed('주간 보고서로 정리해줘'))
   expect(Object.keys(io.fetches[0]!.body.questions as object)).toEqual(['deploy'])
   expect(io.submitted[0]?.context?.[0]).toContain('name="prose"')
+})
+
+test('active: a Korean phone number, resident number and name in the prompt reach Jev as labels', ACTIVE, async ($, on) => {
+  const io = setup(on, { files: FILES })
+  await $.prompt.submit(typed('Publish the release. 담당자 김민수 010-1234-5678, 주민번호 800101-1234560 확인 부탁'))
+  const sent = JSON.stringify(io.fetches[0]?.body.state)
+  expect(sent).toContain('담당자 [이름] [전화번호], 주민번호 [주민등록번호]')
+  for (const value of ['김민수', '010-1234-5678', '800101-1234560']) expect(sent).not.toContain(value)
+})
+
+test('active: a phone number across the 600-character cut reaches Jev neither as half a label nor as part of the number', ACTIVE, async ($, on) => {
+  const io = setup(on, { files: FILES })
+  const before = `${'ab '.repeat(198)}go `
+  await $.prompt.submit(typed(`${before}010-1234-5678 끝`))
+  const request = (io.fetches[0]?.body.state as { request: string }).request
+  expect(request).toBe(before)
+  expect(request.length <= 600).toBe(true)
 })
 
 const DEPLOY_APPLIES = () => choice({ deploy: { applies: 0.99, not: 0.01 }, prose: { applies: 0.01, not: 0.99 } })
@@ -167,9 +187,9 @@ test('after a compaction the engine summarized, a fragment is attached again', A
 })
 
 test('after a compaction that only folded, a fragment still in the conversation is not attached again', ACTIVE, async ($, on) => {
-  const io = setup(on, { files: FILES, fetch: DEPLOY_APPLIES })
+  const transcript = [prompt('Publish the release'), call('x', 'Read', { file_path: '/proj/big.txt' }), answer('x', BIG), ...smallRounds(10), prompt('next'), prompt('and next')]
+  const io = setup(on, { transcript, files: FILES, fetch: DEPLOY_APPLIES })
   await $.prompt.submit(typed('Publish the release'))
-  const transcript = [prompt('Publish the release'), call('x', 'Read', { file_path: '/proj/big.txt' }), answer('x', BIG), prompt('next'), prompt('and next')]
   const compacted = await $.session.compact({ trigger: 'manual', messages: transcript } as never)
   // The plugin answered the compaction itself: the result became a pointer, the block stayed.
   expect(JSON.stringify(compacted)).toContain('[folded Read')
@@ -201,7 +221,7 @@ test('slash commands and messages from other origins are left alone', ACTIVE, as
 test('pinned fragments become one section at the end of the system prompt, only when active', ACTIVE, async ($, on) => {
   setup(on, { files: FILES })
   const { sections } = await $.prompt.compose(COMPOSE as never)
-  expect(sections.map(s => [s.id, s.scope])).toEqual([['base', 'shared'], ['context-harness:pinned', 'session']])
+  expect(sections.map(s => [s.id, s.scope])).toEqual([['base', 'shared'], ['conjev:pinned', 'session']])
   expect(sections[1]?.text).toContain("Answer in the person's language.")
 })
 
@@ -213,7 +233,7 @@ test('a changed fragment set is announced', ACTIVE, async ($, on) => {
 })
 
 test('fold shadow: the judgment rides the fold, and its rule verdict is what the fold did', { options: { foldJev: 'shadow' } }, async ($, on) => {
-  const io = setup(on, { fetch: () => choice({ r0: { needed: 0.9, done: 0.1 }, r1: { needed: 0.2, done: 0.8 } }) })
+  const io = setup(on, { transcript: TRANSCRIPT, fetch: () => choice({ r0: { needed: 0.9, done: 0.1 }, r1: { needed: 0.2, done: 0.8 } }) })
   await $.session.compact({ trigger: 'manual', messages: TRANSCRIPT } as never)
   await settle(() => records(io.writes, 'fold').length >= 2)
   expect(io.fetches[0]?.body.state).toEqual({ current_request: 'Fix the rounding bug in invoice totals' })
@@ -222,7 +242,7 @@ test('fold shadow: the judgment rides the fold, and its rule verdict is what the
     ['c', true, '0.1'],
     ['a', true, '0.8'],
   ])
-  const archived = io.writes.filter(w => w.path.startsWith(`${HOME}/.local/state/context-harness/archive/sess-1/`)).map(w => w.path.split('/').at(-1))
+  const archived = io.writes.filter(w => w.path.startsWith(`${HOME}/.conjev/state/archive/sess-1/`)).map(w => w.path.split('/').at(-1))
   expect(archived).toEqual(['a.json', 'c.json'])
 })
 
@@ -245,10 +265,10 @@ const wouldAttachDeploy = (writes: readonly { path: string; text: string }[]) =>
   records(writes, 'instructions').filter(r => r.decision === 'would-attach' && (r.facts as Record<string, string>).fragment === 'deploy').length
 
 test('shadow: after a compaction that only folded, it would not attach again', SHADOW, async ($, on) => {
-  const io = setup(on, { files: FILES, fetch: DEPLOY_APPLIES })
+  const transcript = [prompt('Publish the release'), call('x', 'Read', { file_path: '/proj/big.txt' }), answer('x', BIG), ...smallRounds(10), prompt('next'), prompt('and next')]
+  const io = setup(on, { transcript, files: FILES, fetch: DEPLOY_APPLIES })
   await $.prompt.submit(typed('Publish the release'))
   await settle(() => wouldAttachDeploy(io.writes) === 1)
-  const transcript = [prompt('Publish the release'), call('x', 'Read', { file_path: '/proj/big.txt' }), answer('x', BIG), prompt('next'), prompt('and next')]
   await $.session.compact({ trigger: 'manual', messages: transcript } as never)
   await $.classic.PostCompact({ trigger: 'manual', compact_summary: '' } as never)
   await $.classic.SessionStart({ source: 'compact' } as never)

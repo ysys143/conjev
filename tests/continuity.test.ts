@@ -31,18 +31,27 @@ test('the anchor note points at the canonical files in order and copies nothing 
   expect(text).toContain('- INTENT.md: the person\'s intent, last written 2026-10-21T02:00Z\n- PHASE.md: the status board, last written 2026-10-21T06:00Z')
   expect(text).toContain('Earlier episodes are in sessions/ (newest written 2026-10-21T08:00Z)')
   expect(text).not.toContain('consolidate')
+  // The status board is also the handoff: a session that picks this up reads
+  // its Handoff section before touching anything, and the note says so.
+  expect(text).toContain('"Handoff" section is what a session that picks this up reads first')
+})
+
+test('with no status board the note says nothing about a Handoff section', () => {
+  const withoutBoard = FILES.filter(file => file.role !== 'phase')
+
+  expect(anchorNote(withoutBoard, 3, [])).not.toContain('Handoff')
 })
 
 test('the anchor note names what was not written since the previous compaction', () => {
   const text = anchorNote(FILES, 0, dueBeforeFold(FILES, T0))
 
-  expect(text.startsWith('[context-harness] This conversation was just compacted.')).toBe(true)
-  expect(text).toContain("Not written since the previous compaction (or the session's start): PHASE.md. Run the context-harness:consolidate skill")
+  expect(text.startsWith('[conjev] This conversation was just compacted.')).toBe(true)
+  expect(text).toContain("Not written since the previous compaction (or the session's start): PHASE.md. Run the conjev:consolidate skill")
 })
 
 test('with no canonical files the note only says what was folded', () => {
   expect(anchorNote([], 3, [])).toBe(
-    '[context-harness] This conversation was just compacted; 3 tool results were folded into one-line pointers (read_coordinate returns the originals).',
+    '[conjev] This conversation was just compacted; 3 tool results were folded into one-line pointers (read_coordinate returns the originals).',
   )
 })
 
@@ -50,7 +59,7 @@ test('the deferral note lists each due file and asks for the consolidate skill',
   const text = dueNote(dueBeforeFold(FILES, T0 + 2 * HOUR))
 
   expect(text).toContain('PHASE.md (the status board, last written 2026-10-21T06:00Z); sessions (the episode log, last written 2026-10-21T08:00Z)')
-  expect(text).toContain('Run the context-harness:consolidate skill now')
+  expect(text).toContain('Run the conjev:consolidate skill now')
 })
 
 test('policy_report lists the canonical files it found', async ($, on) => {
@@ -65,7 +74,7 @@ test('policy_report lists the canonical files it found', async ($, on) => {
     ],
   }))
 
-  const report = await $.tool.call({ tool: 'mcp__context-harness__policy_report' })
+  const report = await $.tool.call({ tool: 'mcp__conjev__policy_report' })
   const { anchors } = JSON.parse(String(report.result)) as { anchors: AnchorFile[] }
   expect(anchors).toEqual([
     { role: 'phase', path: 'PHASE.md', mtimeMs: T0 },

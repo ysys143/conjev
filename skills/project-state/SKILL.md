@@ -1,13 +1,13 @@
 ---
 name: project-state
-description: Keep INTENT.md (the agent's reading of what the person wants, sourced from their own words) and PHASE.md (the status board the person reads) current, alone or across several agent sessions. Use when work spans more than one session or compaction, when the person states or changes a goal, when several agents (for example over xsm) share one project, or when context-harness asks for the status board.
+description: Keep INTENT.md (the agent's reading of what the person wants, sourced from their own words) and PHASE.md (the status board the person reads) current, alone or across several agent sessions. Use when work spans more than one session or compaction, when the person states or changes a goal, when several agents (for example over xsm) share one project, or when conjev asks for the status board.
 ---
 
 # Project state: INTENT.md and PHASE.md
 
-Two files hold what a later session, another agent, or the person after a break needs: why the work is done and where it stands. A conversation summary is never the source; these files are. context-harness points the model back at them after every compaction and holds its own folds until PHASE.md is current.
+Two files hold what a later session, another agent, or the person after a break needs: why the work is done and where it stands. A conversation summary is never the source; these files are. conjev points the model back at them after every compaction and holds its own folds until PHASE.md is current.
 
-Their paths are the plugin's settings `intentFile` and `phaseFile` (defaults `INTENT.md` and `PHASE.md` in the working directory; `policy_report` shows them under `current.settings`). Create the files when the person agrees; context-harness uses each only while it exists.
+Their paths are the plugin's settings `intentFile` and `phaseFile` (defaults `INTENT.md` and `PHASE.md` in the working directory; `policy_report` shows them under `current.settings`). Create the files when the person agrees; conjev uses each only while it exists.
 
 ## INTENT.md: the agent's reading of what the person wants
 
@@ -67,16 +67,36 @@ Rules:
 
 ## Resume notes
 - <half-done steps and how to resume them; traps; what not to touch; resources left running and when to stop them>
+
+## Handoff
+- Workspace: <branch> at <worktree path>; base <commit>
+- Commits: <n> local, <pushed | not pushed>; <PR link or none>
+- Uncommitted: <what is dirty, or "clean">
+- Start here: <the one command to run first>
+- Do not: <what a resuming session must not do, and why>
 ```
 
 Agents and Messages in flight exist only when several agents share the project.
 
+Handoff is what a session that picks this up needs and cannot guess: which branch and worktree, whether the commits are pushed, what is dirty, the one command to run first, and what not to repeat. It is written for that reader, not for the person watching the work, so plain facts and no narrative. A session that resumes reads it before touching anything.
+
 Rules:
 
 - It fits on one screen. Details live in their own place (INTENT.md, the episode log, evidence files); PHASE.md points at them.
-- Write it when something happens: a step finishes or is blocked, the person decides, before an expensive or irreversible action, before a handoff, and when context-harness asks. Not on every turn and not on a timer.
+- Write it when something happens: a step finishes or is blocked, the person decides, before an expensive or irreversible action, before a handoff, and when conjev asks. Not on every turn and not on a timer.
 - The evidence of anything in Done is a path, a commit, a message id or a folded pointer, never the agent's recollection.
 - Items of earlier phases leave Done for the episode log (the consolidate skill) instead of growing the board.
+- Keep Handoff true whenever the commit state changes: after a commit, a push, or a change to the working tree that matters. A handoff that names the wrong branch is worse than none, because a resuming session trusts it.
+
+## Starting from a handoff
+
+A session that opens a project with a PHASE.md reads it before anything else, and Handoff first:
+
+1. `git status --short --branch` and compare it with Handoff: the branch, the worktree, and whether the tree is as described.
+2. Read Now, Next, Needs you. Anything under Needs you waits for the person; do not decide it.
+3. Read the canonical files it points at (INTENT.md, then the episode log only if a detail is needed).
+4. Run the Start here command before changing anything: it establishes the state the handoff claims.
+5. Stop and tell the person if Handoff and the repository disagree. Do not reconcile them by guessing.
 
 ## Several agents on one project
 

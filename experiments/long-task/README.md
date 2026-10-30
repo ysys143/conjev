@@ -1,5 +1,9 @@
 # Long-task evaluation
 
+This is the historical context-harness 0.0.3 evaluation kit. The 2026-10-27 receipts bind that build and its exact source fingerprints; they do not validate the current conjev build. Live probes keep the original plugin and tool identifiers and require the pinned build. The pure Python unit tests can run independently.
+
+Source, reports, selected acceptance/usage receipts, analysis scripts and frozen source copies are tracked. Raw request/response captures, task workspaces and the study database remain local under the ignored `runs/` tree. Archived manifests retain those original paths and hashes. Reproducing a complete live acceptance requires the original local evidence; lightweight published receipts alone cannot establish it.
+
 Implementation of [next-evaluation.md](../../docs/research/next-evaluation.md).
 The study requires all phase 0–4 gates. Phase 0 passed its source-bound
 23-gate acceptance; [the report](../../docs/research/phase-0-results.md) records

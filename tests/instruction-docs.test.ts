@@ -68,7 +68,7 @@ test('chunk ids are ASCII, stable, and read back as attached fragment names', ()
   expect(a.map(c => c.id)).toEqual(b.map(c => c.id))
   for (const chunk of a) {
     expect(/^doc-[0-9a-f]{8}$/.test(chunk.id)).toBe(true)
-    const block = `<instruction name="${chunk.id}" source="context-harness">\nx\n</instruction>`
+    const block = `<instruction name="${chunk.id}" source="conjev">\nx\n</instruction>`
     expect([...attachedNames([{ role: 'user', content: [{ type: 'text', text: block }] }])]).toEqual([chunk.id])
   }
 })
@@ -87,8 +87,22 @@ test('a chunk loaded twice keeps its first copy; organization and memory files a
   const out = withoutChunks([managed, user, project, memory], chunks, drops, '/u')
   expect(out[0]).toBe(managed)
   expect(out[3]).toBe(memory)
-  expect(out[1]?.content).toBe('[context-harness: left out "문체", loaded from /etc/CLAUDE.md]\n\n## 산출물\n\nWrite reports in Markdown, always.\n')
-  expect(out[2]?.content).toBe('[context-harness: left out "산출물", loaded from ~/AGENTS.md]\n\n')
+  expect(out[1]?.content).toBe('[conjev: left out "문체", loaded from /etc/CLAUDE.md]\n\n## 산출물\n\nWrite reports in Markdown, always.\n')
+  expect(out[2]?.content).toBe('[conjev: left out "산출물", loaded from ~/AGENTS.md]\n\n')
+})
+
+test('an organization file loaded after a copy of its section is never cut, by the duplicate rule or by any drop', () => {
+  const user = file('/u/AGENTS.md', 'user', '## 문체\n\nLead with the result, then give the evidence.\n')
+  const managed = file('/etc/CLAUDE.md', 'managed', '## 문체\n\nLead   with the result, then give the evidence.\n\n## 산출물\n\nWrite reports in Markdown, always.\n')
+  const project = file('/p/AGENTS.md', 'project', '## 산출물\n\nWrite reports in Markdown, always.\n')
+  const chunks = chunksOf([user, managed, project])
+  const drops = exactDuplicates(chunks)
+  expect(chunks.filter(c => drops.has(c.id)).map(c => c.file)).toEqual(['/p/AGENTS.md'])
+
+  // Even a drop that names its chunks, as a judgment's would, leaves the file whole.
+  const every = new Map(chunks.filter(c => c.file === managed.path).map(c => [c.id, chunks[0]!]))
+  expect(withoutChunks([user, managed, project], chunks, every, '/u')[1]).toBe(managed)
+  expect(withoutChunks([user, managed, project], chunks, drops, '/u')[1]).toBe(managed)
 })
 
 test('of two OMC blocks at different versions, the older one leaves whole', () => {
@@ -104,6 +118,22 @@ test('of two OMC blocks at different versions, the older one leaves whole', () =
   expect(drops.size).toBe(chunks.filter(c => c.file === older.path).length)
   expect(supersededOmc(chunks, new Map([[older.path, '5.7.8'], [newer.path, '5.7.8']])).size).toBe(0)
   expect(omcVersionOf('no marker')).toBe(undefined)
+})
+
+test('an organization file is never superseded by a newer OMC block elsewhere', () => {
+  // The managed file's own OMC block is older, but nothing this plugin does may
+  // drop it: only user, project and local files are changeable.
+  const managed = file('/etc/claude/managed.md', 'managed', omc())
+  const newer = file('/u/.claude/CLAUDE.md', 'project', omc('\n- A rule the newer version added.'))
+  const chunks = chunksOf([managed, newer])
+  const versions = new Map([
+    [managed.path, omcVersionOf('<!-- OMC:VERSION:5.2.0 -->')!],
+    [newer.path, omcVersionOf('<!-- OMC:START -->\n<!-- OMC:VERSION:5.7.8 -->')!],
+  ])
+  const drops = supersededOmc(chunks, versions)
+
+  expect([...drops.values()].some(chunk => chunk.file === managed.path)).toBe(false)
+  expect(chunks.filter(c => c.file === managed.path && drops.has(c.id)).length).toBe(0)
 })
 
 const one = (heading: string, kind: DocFile['kind'] = 'user', body = 'Some instruction that is long enough to count.'): Chunk =>

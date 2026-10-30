@@ -89,6 +89,7 @@ export function sweep(points: readonly { probability: number; label: boolean }[]
 
 const fmt = (n: number | undefined, digits = 2): string => (n === undefined ? '-' : n.toFixed(digits))
 const ms = (n: number | undefined): string => (n === undefined ? '-' : `${Math.round(n)} ms`)
+const seconds = (n: number | undefined): string => (n === undefined ? '-' : `${(n / 1000).toFixed(1)}s`)
 
 /** The report for one point, as plain text. */
 export function pointReport(point: string, records: readonly ShadowRecord[], labels: ReadonlyMap<string, boolean>, threshold: number): string {
@@ -174,6 +175,143 @@ export function filterReport(records: readonly ShadowRecord[]): string {
     const missed = events.filter(u => !defers.some(d => d.sessionId === u.sessionId && d.ts <= u.ts && d.facts?.signature === signature && d.decision === 'would-attach'))
     const pct = events.length === 0 ? '-' : `${Math.round((missed.length / events.length) * 100)}%`
     lines.push(`  would-miss, ${signature}: ${events.length} tool uses, ${missed.length} with the chunk not yet attached (${pct})`)
+  }
+
+  return lines.join('\n')
+}
+
+/**
+ * A block judgment (web pages, kept fold blocks): how often it ran, what it
+ * returned, how much of the original it passed on, and what it cost in Jev.
+ */
+export function blockReport(point: string, records: readonly ShadowRecord[]): string {
+  const rs = records.filter(r => r.point === point)
+  const judged = rs.filter(r => r.facts?.status !== undefined)
+  const statuses = new Map<string, number>()
+  for (const r of judged) statuses.set(r.facts!.status!, (statuses.get(r.facts!.status!) ?? 0) + 1)
+  const shares = judged.filter(r => Number(r.facts?.docTokens) > 0).map(r => Number(r.facts?.outTokens) / Number(r.facts?.docTokens))
+  const jevTokens = judged.reduce((sum, r) => sum + (r.usage?.input_tokens ?? 0), 0)
+  const requests = judged.reduce((sum, r) => sum + Number(r.facts?.requests ?? 0), 0)
+  const failed = judged.reduce((sum, r) => sum + Number(r.facts?.failed ?? 0), 0)
+  const ms = judged.map(r => r.jevMs).filter((v): v is number => typeof v === 'number')
+  const median = (values: number[]): number | undefined => percentile(values, 0.5)
+  const share = median(shares)
+  const lines = [
+    `${point}: ${rs.length} records, ${judged.length} judged, ${rs.length - judged.length} not (${[...new Set(rs.filter(r => r.facts?.status === undefined).map(r => r.skipped ?? r.error ?? '?'))].join(', ') || '-'})`,
+    `  status: ${[...statuses].map(([s, n]) => `${s} ${n}`).join(', ') || '-'}`,
+    `  passed on: median ${share === undefined ? '-' : `${Math.round(share * 1000) / 10}%`} of the original's tokens`,
+    `  Jev: ${requests} requests, ${failed} failed, ${jevTokens} input tokens; time median ${median(ms) ?? '-'} ms, p90 ${percentile(ms, 0.9) ?? '-'} ms`,
+  ]
+  const decisions = new Map<string, number>()
+  for (const r of judged) if (r.decision !== undefined) decisions.set(r.decision, (decisions.get(r.decision) ?? 0) + 1)
+  if (point !== 'web') lines.push(`  decision: ${[...decisions].map(([d, n]) => `${d} ${n}`).join(', ') || '-'}`)
+  if (point === 'web') {
+    const fetched = judged.filter(r => r.facts?.webFetchChars !== undefined)
+    if (fetched.length > 0) {
+      const wf = median(fetched.map(r => Number(r.facts!.webFetchChars)))
+      lines.push(`  beside WebFetch: ${fetched.length} calls, WebFetch answer median ${wf ?? '-'} chars`)
+    }
+  }
+
+  return lines.join('\n')
+}
+
+/**
+ * What the compactions did, in the terms the person felt: how long each one
+ * held the turn, and what it changed in the window.
+ *
+ * This is the measurement that replaced the statistics. The numbers come from
+ * the engine — `tokensBefore` and `tokensAfter` as it counted them, and the
+ * wall clock the plugin measured — so they describe this person's own sessions
+ * rather than a sample of someone else's.
+ */
+export function compactReport(records: readonly ShadowRecord[]): string | undefined {
+  const compactions = records.filter(r => r.point === 'compact')
+  if (compactions.length === 0) return undefined
+  const byTrigger = new Map<string, number>()
+  for (const r of compactions) {
+    const trigger = (r.facts as Record<string, string> | undefined)?.trigger ?? 'unknown'
+    byTrigger.set(trigger, (byTrigger.get(trigger) ?? 0) + 1)
+  }
+  const summarized = compactions.filter(r => r.decision === 'summarized')
+  const withTokens = compactions.flatMap(r => {
+    const before = Number((r.facts as Record<string, string> | undefined)?.tokensBefore)
+    const after = Number((r.facts as Record<string, string> | undefined)?.tokensAfter)
+
+    return Number.isFinite(before) && Number.isFinite(after) ? [{ before, after }] : []
+  })
+  const saved = withTokens.map(({ before, after }) => before - after)
+
+  const lines = [
+    '## compact',
+    `compactions ${compactions.length} (${[...byTrigger].map(([k, v]) => `${k} ${v}`).join(', ')}); ` +
+      `summaries ${summarized.length}, folds alone ${compactions.length - summarized.length}`,
+    `held the turn: p50 ${ms(percentile(compactions.map(r => r.hookMs), 0.5))}, p95 ${ms(percentile(compactions.map(r => r.hookMs), 0.95))}`,
+  ]
+  if (saved.length > 0) {
+    lines.push(
+      `window: ${withTokens.length} of ${compactions.length} compactions reported tokens; ` +
+        `before p50 ${Math.round(percentile(withTokens.map(t => t.before), 0.5) ?? 0)}, after p50 ${Math.round(percentile(withTokens.map(t => t.after), 0.5) ?? 0)}, ` +
+        `saved p50 ${Math.round(percentile(saved, 0.5) ?? 0)} tokens`,
+    )
+  } else {
+    lines.push('window: no compaction reported token counts')
+  }
+  // D5: how soon one compaction follows another, to compare against later changes.
+  const since = (name: string): number[] =>
+    compactions.flatMap(r => {
+      const value = Number((r.facts as Record<string, string> | undefined)?.[name])
+
+      return (r.facts as Record<string, string> | undefined)?.[name] !== undefined && Number.isFinite(value) ? [value] : []
+    })
+  const [prompts, turns, times] = [since('sincePrompts'), since('sinceTurns'), since('sinceMs')]
+  if (times.length > 0) {
+    lines.push(
+      `between compactions: prompts p50 ${percentile(prompts, 0.5) ?? '-'}, turns p50 ${percentile(turns, 0.5) ?? '-'}, time p50 ${seconds(percentile(times, 0.5))}, p95 ${seconds(percentile(times, 0.95))}`,
+    )
+  }
+
+  return lines.join('\n')
+}
+
+/** A3: how many labeled stop judgments it takes before precision can demote the gate, and the bar. */
+export const DEMOTE_LABELS = 150
+export const DEMOTE_PRECISION = 0.9
+
+/**
+ * The Stop gate's precision over the labeled judgments: of those Jev flagged
+ * at the threshold, the share the person labeled as real announcements.
+ */
+export function stopPrecision(records: readonly ShadowRecord[], labels: ReadonlyMap<string, boolean>, threshold: number): { labeled: number; flagged: number; precision?: number } {
+  const judged = records.filter(r => r.point === 'stop' && typeof r.jev === 'number' && labels.has(r.id))
+  const flagged = judged.filter(r => r.jev! >= threshold)
+
+  return {
+    labeled: judged.length,
+    flagged: flagged.length,
+    ...(flagged.length === 0 ? {} : { precision: flagged.filter(r => labels.get(r.id) === true).length / flagged.length }),
+  }
+}
+
+/** Whether the labels say the Stop gate is wrong too often to hold turns. */
+export function shouldDemoteStop(p: { labeled: number; precision?: number }): boolean {
+  return p.labeled >= DEMOTE_LABELS && p.precision !== undefined && p.precision < DEMOTE_PRECISION
+}
+
+/**
+ * A7: how long each gate waited on Jev and held its event, p50 and p95, from
+ * the records of calls that went out.
+ */
+export function latencyReport(records: readonly ShadowRecord[], timeoutMs: number): string | undefined {
+  const byPoint = new Map<string, ShadowRecord[]>()
+  for (const r of records) if (typeof r.jevMs === 'number' && r.jevMs > 0) byPoint.set(r.point, [...(byPoint.get(r.point) ?? []), r])
+  if (byPoint.size === 0) return undefined
+  const lines = [`## latency (timeout ${timeoutMs} ms)`]
+  for (const [point, rs] of [...byPoint].sort(([a], [b]) => a.localeCompare(b))) {
+    const jev = rs.map(r => r.jevMs!)
+    const hook = rs.map(r => r.hookMs)
+    const late = rs.filter(r => r.error === 'timeout').length
+    lines.push(`${point}: jev p50 ${ms(percentile(jev, 0.5))}, p95 ${ms(percentile(jev, 0.95))}; hook p50 ${ms(percentile(hook, 0.5))}, p95 ${ms(percentile(hook, 0.95))}; ${rs.length} calls, ${late} timed out`)
   }
 
   return lines.join('\n')

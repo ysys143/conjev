@@ -1,0 +1,8 @@
+{
+  "target": "ref:cdf11a",
+  "kind": "note",
+  "message_sha256": "c09f814c23df6f606865bac9a81163f2495336fb6da08f53d68909bc209d5f78",
+  "returncode": 0,
+  "stdout": "delivered: receiver recorded it (id f2071f55f54c4e0d)\n",
+  "stderr": ""
+}

@@ -1,0 +1,288 @@
+// The body of `/conjev:onboard`, as the model reads it.
+//
+// Why this is code and not only the Markdown file beside it: a command file's
+// body is the prompt the model runs, and there is no way for a test to read a
+// file (a hooks module imports its own `.ts` by relative path and nothing
+// else). Keeping the text here lets the tests hold it to what it must say — and
+// `commands/conjev:onboard.md` is generated from it, so the two cannot
+// drift.
+//
+// It replaces an earlier `command.run` hook. That hook could print a summary
+// and leave a hidden note, but it could not start a turn: the note sat in the
+// transcript unread until the person wrote again, which looked like no answer
+// at all. A Markdown command's body is the turn.
+//
+// What the hook knew and the model does not is where the plugin found a key.
+// That now travels with the command: when it expands, the hooks module attaches
+// KEY_CHECK's note (register.ts), so the body never has to guess or probe.
+import type { KeySource } from './key'
+
+export const INSTALL_COMMAND_NAME = 'onboard'
+
+export const INSTALL_COMMAND_DESCRIPTION =
+  'conjev: find a Jev key, help place one without showing it, and say what each gate sends'
+
+/** How the note attached to the command begins; the body tells the model to look for it. */
+export const KEY_CHECK = 'conjev key check:'
+
+/** Where each source keeps the key, in words a person who set none of them up can follow. */
+const SOURCE_WORDS: Record<KeySource | 'shared', string> = {
+  shared: '~/.conjev/key, the file every Claude Code profile on this machine reads',
+  config: "this Claude Code profile's secure plugin setting (claude plugin configure)",
+  dotenv: "the .env file in the plugin's own folder",
+  env: 'TYPESAFE_API_KEY in the environment Claude Code was started with',
+}
+
+/** The note for the model: where the key was found, or every place looked. Never the key. */
+export function keyNote(source: KeySource | 'shared' | undefined): string {
+  if (source !== undefined) return `${KEY_CHECK} found, in ${SOURCE_WORDS[source]}.`
+
+  return `${KEY_CHECK} none found. The plugin looked in ${Object.values(SOURCE_WORDS).join('; ')}.`
+}
+
+/**
+ * What consenting means, in the words /jev-consent and the setup both use: what
+ * leaves the machine, and in what form.
+ */
+export const CONSENT_TEXT =
+  'With your consent, Jev, a judging model run by TypeSafe, judges what the work needs at each point, and to do so it is sent parts of this session: ' +
+  'your latest prompt, the end of the assistant\'s last paragraph, tool names and targets, the opening lines of large tool results, ' +
+  'instruction file text, and the passages of a folded result or web page a question is about. Parts of the original text are included. ' +
+  'Before anything leaves, secrets, email addresses, your home folder and Korean personal information (names, phone, resident and card numbers) ' +
+  'are replaced by labels, and each part is cut to a fixed length. Nothing is sent without a key, and `jev: off` in ~/.conjev/config.json stops all of it.'
+
+/** The body, front matter left to the writer. `$ARGUMENTS` is the engine's. */
+export const INSTALL_COMMAND_BODY = `# conjev: getting a Jev key in place
+
+The person ran this to learn whether conjev has what it needs, and to
+get it in place if not. They may never have heard of Jev, TypeSafe or any file
+named below; this command is where they meet them.
+
+**Never show, print, echo or repeat the key.** Not in a reply, not in a summary,
+not in a file you write. If the person pastes one into the chat, do not repeat
+it; tell them it is now in the transcript and in any folded archive, and that
+they should rotate it.
+
+## What you need to understand first
+
+These are facts for you, not text to read out. Say them in your own words,
+and only as much as the moment needs.
+
+- **What it is for.** It keeps a long session in step with the work in front
+  of the person: what the model sees and does is what that work needs.
+- **The one rule.** The context holds only what the current work needs, and
+  what is set aside can be read back. What it needs is judged by Jev, a small
+  judging model run by TypeSafe. Where Jev is not set up or does not answer
+  in time, a fixed rule decides instead.
+- **Where that judgment is made.** At every point where the session changes
+  what the model sees or does. When the conversation compacts: Claude Code's
+  own summary runs by default; with \`fold: on\`, large older tool results and
+  inputs fold to one-line pointers with the original on disk instead, and the
+  passages still needed stay under them. When the model reads an original back: only
+  the parts that bear on the request. When something comes in: the blocks of a
+  web page that answer the question, and the instruction fragments that apply
+  to this prompt. When the model acts: a turn that ends on a promise instead
+  of a result is sent back to finish, and a call that reaches for a secret
+  file is stopped.
+- **The key and consent.** Without a key every one of those points runs on its
+  rule alone, a reduced mode. With a
+  TypeSafe key and the person's consent, Jev makes the calls. Setting up both
+  is what this command is for.
+- **What leaves the machine, once they consent.** Short, bounded excerpts at
+  each of those moments (the latest prompt, the tail of the last paragraph,
+  tool names and targets, the opening of a large result), with secrets, email
+  addresses, the home folder and Korean personal data replaced by labels
+  first. Nothing is sent before consent, and one switch (\`jev: off\`) stops it.
+
+## How to talk to them
+
+- Answer in the person's language. Write it as you would explain it to a
+  colleague sitting next to you: plain words, whole sentences, no labels.
+- Open with two or three sentences built from the facts above, in this order:
+  what goes wrong in a long session, the one rule that keeps it right, and
+  that Jev is what judges what the work needs at each point. Describe one
+  system, not a list of features. Do not open with a definition
+  ("conjev is a plugin that ..."), and do not translate any sentence
+  of this prompt word for word.
+- Do not use the plugin's internal words unless the person asks: leave out
+  "gates", \`auto\`, \`shadow\` and setting names until they matter.
+- Then say that Jev needs a TypeSafe API key and their consent, that without
+  them the plugin runs in a reduced mode on rules alone, and that this is what
+  you are about to set up together.
+- Then give the result as what it means for them: a key is set up, so Jev can
+  take over the judgment once they consent; or no key is set up yet, so the
+  plugin is in its reduced mode for now, and placing a key is the next step. Do not open with a file path, a missing file, or a list of
+  what you did not check. When none was found, do not list the places the
+  plugin looked either: they are for 4, when a key that was placed still is not
+  found.
+- The first time you name a file or a setting, say what it is and why it is
+  there. \`~/.conjev/key\` is a file the person creates: it holds the key
+  alone, the plugin only reads it, and every Claude Code profile on this machine
+  uses it.
+- Do not look for the key in files or settings the person has not named. Ask.
+
+## Pace: one step, one question, then wait
+
+This is a conversation, not a page of instructions. Each reply covers one step
+and ends with at most one question; then stop and wait for the answer before
+the next step. Never put a later step's material into an earlier reply: the
+ways to place a key, the consent disclosure and the consent commands each
+come only when their step is reached, and only the part that fits what the
+person just said.
+
+The turns, in order:
+
+1. **Opening.** The two or three sentences on what it is for, the current
+   state in one sentence (from 1), and one question: if no key was found,
+   whether they already have a TypeSafe key; if one was found, go straight to
+   the consent step instead.
+2. **Where the key is** (only if they have one). One question: where they
+   keep it. Then offer the one way from 3 that fits the answer, and do it.
+3. **Check** (4), in the same reply as the placing when you can check it
+   yourself.
+4. **Consent** (5). The disclosure, then one question: do they allow it.
+5. **Close.** After they answer: one or two sentences on what happens now.
+
+If the person answers more than was asked, or asks something else, follow
+them; the order is a default, not a script.
+
+## 1. Find out what is already there
+
+The plugin has already looked. Its answer is attached to this command as a note
+that begins \`${KEY_CHECK}\`: either found, with where, or none found, with
+every place it looked. That is the authoritative answer, because the plugin
+reads the key from those places and no others. The note never holds the key.
+
+If no such note is attached, the plugin's hooks are not running in this
+session; it was installed or changed after the session started. Say that a new
+session is needed for the plugin to answer, and that until then only the shared
+file can be checked:
+
+\`\`\`bash
+test -s "$HOME/.conjev/key" && echo "shared key file: present" || echo "shared key file: absent"
+\`\`\`
+
+That prints a word, never a value.
+
+## 2. If a key was found
+
+Say where it is kept, in the words of the note: the place, never the value. If
+it is not \`~/.conjev/key\`, offer to copy it there, the same way as in
+3, so every Claude Code profile uses the same one, and say why: the plugin's
+secure setting is kept per profile, so a person with several profiles enters the
+key once per profile.
+
+Then go to 5: the gates wait for the person's consent.
+
+## 3. If no key was found
+
+Ask one plain question: **do you already have a TypeSafe key?** Then stop.
+
+- **No.** Give the address, https://console.typesafe.ai/home, and say that
+  getting one is the next step. Until then the plugin runs in its reduced
+  mode. Then go on to 5 in the next reply: consent can be given before the key.
+- **Yes.** Ask one question: where do they keep it? (On this machine, in a
+  file or an environment variable; or somewhere you cannot reach, such as a
+  password manager.) Then stop. When they answer, offer only the way below that
+  fits, not the list; offer 2 only if they say they use a single profile or ask.
+
+  1. **If the key is already on this machine**, you can place it without ever
+     seeing it. You need the file or the variable, and the name it is stored
+     under. If they know the file but not the name, list the names in that file
+     only, never a value: \`grep -o '^[A-Za-z_][A-Za-z0-9_]*=' <the file>\`.
+
+     Then copy it inside one command, so the value never reaches your context,
+     the transcript or the process list. Put in the file they named, as an
+     absolute path, and the name in it:
+
+     \`\`\`bash
+     mkdir -p "$HOME/.conjev" && chmod 700 "$HOME/.conjev"
+     sh -c 'umask 077; . <the file> && printf "%s\\n" "$<THE_NAME>" > "$HOME/.conjev/key"'
+     chmod 600 "$HOME/.conjev/key"
+     \`\`\`
+
+     If it is an environment variable of this session, leave out \`. <the file> &&\`.
+     Then check only that it is non-empty, never what it is:
+     \`test -s "$HOME/.conjev/key" && echo placed\`. Do not print the file,
+     do not \`cat\` it, do not compare its contents aloud.
+
+  2. **For one profile only**, in their own terminal:
+     \`\`\`
+     claude plugin configure conjev@conjev
+     \`\`\`
+
+  3. **By hand**, if the key is somewhere you cannot reach, such as a password
+     manager: have them write it in an editor, so it never passes through this
+     conversation and never lands in shell history.
+     \`\`\`
+     $EDITOR "$HOME/.conjev/key"   # the key alone, then save
+     chmod 600 "$HOME/.conjev/key"
+     \`\`\`
+
+Never ask them to paste the key to you. There is no step where you need to see
+it, and a key that reaches the chat is a key in the transcript and in any folded
+archive.
+
+## 4. Check the result
+
+If the key went into \`~/.conjev/key\`, check it yourself with
+\`test -s\` as above; the plugin watches that file and picks the key up without
+a new command. Otherwise ask them to run \`/conjev:onboard\` again: the
+plugin looks afresh each time, so its note should now say found. If it still
+says none, the value is not where the plugin reads it; check, in this order:
+
+1. \`~/.conjev/key\` exists, is a plain file, is readable, and holds the
+   key alone: no \`NAME=\`, no quotes, no blank line before it;
+2. the plugin's secure setting (\`claude plugin configure conjev@conjev\`);
+3. \`TYPESAFE_API_KEY\` in the environment of the session that runs Claude Code,
+   not only in the shell that started it, and not exported after it started.
+
+Once it says found, go to 5.
+
+## 5. Consent
+
+The Jev gates are set to \`auto\` by default: each one turns on by itself once
+there is a key, the \`jev\` switch is on, and the person has said yes. Until
+they say yes, nothing goes to Jev, key or no key, and every gate runs on its rule.
+
+Tell them what saying yes sends. The text below is the disclosure the plugin
+itself shows on \`/jev-consent\`; it is your source, not your script. Explain it
+in their language and your own sentences, as you would to a colleague, and
+leave none of its points out or softer than it says: what is sent, that parts
+of the original text are included, what is masked first, that each part is cut
+short, and how to stop it.
+
+> ${CONSENT_TEXT}
+
+Then ask one question: do they allow it? Say that they answer by typing it
+themselves, since you cannot answer for them, and give the three answers in
+one short line each, then stop:
+
+- \`/jev-consent yes\`: allow it. Jev takes over now, or as soon as a key is in
+  place.
+- \`/jev-consent no\`: refuse it. The plugin stays in its reduced mode.
+- \`/jev-consent later\`: decide later. This setup will not start by itself
+  again; \`/conjev:onboard\` brings it back.
+
+Any of the three ends the setup. Only after they have answered, in the closing
+reply, say that \`/jev-consent no\` takes a yes back at any time, that \`jev: off\`
+in \`~/.conjev/config.json\` switches Jev off everywhere at once, and
+that \`/jev-report\` shows what Jev did.
+
+$ARGUMENTS
+`
+
+/** How the setup begins when it starts by itself, on the plugin's first run. */
+export const ONBOARDING_MARK = '[conjev first run]'
+
+/**
+ * The first run's opening prompt: the command's body as it would expand, with
+ * the key check the expansion would have attached, since no expansion runs.
+ */
+export function onboardingMessage(source: KeySource | 'shared' | undefined): string {
+  return [
+    `${ONBOARDING_MARK} conjev was just installed and has not been set up. Run its setup now, as /${INSTALL_COMMAND_NAME} would: the person did not type anything yet.`,
+    keyNote(source),
+    INSTALL_COMMAND_BODY.replace(/\n\$ARGUMENTS\n$/, '\n'),
+  ].join('\n\n')
+}

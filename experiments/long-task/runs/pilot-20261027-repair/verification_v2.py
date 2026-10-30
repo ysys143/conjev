@@ -15,7 +15,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-HERE = Path('/Users/jaesolshin/Documents/GitHub/context-harness/experiments/long-task')
+HERE = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(HERE))
 from grading import digest, subscription_env
 from observation import verify_snapshot

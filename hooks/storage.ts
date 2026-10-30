@@ -1,18 +1,27 @@
-// Everything the plugin keeps on disk, under one root only the user can enter:
-//   ~/.local/state/context-harness/archive/<session>/<id>.json  folded originals, never deleted
-//   ~/.local/state/context-harness/records/<session>/<point>/   judgment records, 14 days
-//   ~/.local/state/context-harness/records/labels/labels/       labels, kept
+// Everything the plugin keeps on disk, under one root only the user can enter,
+// beside the shared settings and key so one folder holds all of it:
+//   ~/.conjev/state/archive/<session>/<id>.json  folded originals, never deleted
+//   ~/.conjev/state/records/<session>/<point>/   judgment records, 14 days
+//   ~/.conjev/state/records/labels/labels/       labels, kept
+// The root was ~/.local/state/context-harness before: a session start moves it
+// here when only the old one exists, and the old one is still read when both do.
 // Folds made before the rename stay readable at ~/.claude-context-fold/<session>/.
 import type { EngineInterface } from 'claude-code'
 import type { Archived } from './fold'
 import type { ShadowRecord } from './report'
+import { moveInto, type Moved } from './move'
 import { madeDirs } from './state'
 
-export const STATE_DIR = '.local/state/context-harness'
+export const STATE_DIR = '.conjev/state'
+export const OLD_STATE_DIR = '.local/state/context-harness'
 const LEGACY_ARCHIVE_DIR = '.claude-context-fold'
 
 export function stateRoot(home: string): string {
   return `${home.replace(/\/+$/, '')}/${STATE_DIR}`
+}
+
+export function oldStateRoot(home: string): string {
+  return `${home.replace(/\/+$/, '')}/${OLD_STATE_DIR}`
 }
 
 export function legacyArchiveRoot(home: string): string {
@@ -27,7 +36,7 @@ export const fileId = (id: string): string => id.replace(/[^A-Za-z0-9_-]/g, '_')
  * folder gets no command at all.
  */
 export function cleanupArgs(recordsRoot: string): string[][] {
-  if (!recordsRoot.endsWith(`/${STATE_DIR}/records`)) return []
+  if (!recordsRoot.endsWith(`/${STATE_DIR}/records`) && !recordsRoot.endsWith(`/${OLD_STATE_DIR}/records`)) return []
 
   return [
     ['find', recordsRoot, '-type', 'f', '-name', '*.json', '-mtime', '+14', '-not', '-path', `${recordsRoot}/labels/*`, '-delete'],
@@ -49,7 +58,7 @@ export async function homeOf($: EngineInterface): Promise<string | undefined> {
   return home === undefined || home.trim() === '' ? undefined : home
 }
 
-/** A research process can keep its state apart without changing HOME or auth. */
+/** Select evaluator-owned state without changing HOME, authentication or shared settings. */
 export async function storageHomeOf($: EngineInterface): Promise<string | undefined> {
   const selected = await $.env.get('CONTEXT_HARNESS_STATE_HOME')
   if (selected === undefined) return homeOf($)
@@ -93,8 +102,9 @@ export async function readArchived($: EngineInterface, sessionId: string, id: st
   const home = await storageHomeOf($)
   if (home === undefined || id === '') return undefined
   const dirs = [`${stateRoot(home)}/archive/${sessionId}`]
-  // An isolated run must never fall through to the person's historical archive.
-  if ((await $.env.get('CONTEXT_HARNESS_STATE_HOME')) === undefined) dirs.push(`${legacyArchiveRoot(home)}/${sessionId}`)
+  if ((await $.env.get('CONTEXT_HARNESS_STATE_HOME')) === undefined) {
+    dirs.push(`${oldStateRoot(home)}/archive/${sessionId}`, `${legacyArchiveRoot(home)}/${sessionId}`)
+  }
   for (const dir of dirs) {
     const path = `${dir}/${fileId(id)}.json`
     if (await $.fs.exists(path)) return JSON.parse(await $.fs.read(path)) as Archived
@@ -116,12 +126,23 @@ export async function writeLabel($: EngineInterface, id: string, label: boolean,
   await $.fs.write(`${dir}/${id}.json`, JSON.stringify({ id, label, ts }))
 }
 
-/** Every record, at most `limit`, and the labels. */
+/** Every record, at most `limit`, and the labels: the root's, then any the old root still holds. */
 export async function readRecords($: EngineInterface, limit: number): Promise<{ records: ShadowRecord[]; labels: Map<string, boolean> }> {
-  const root = `${await rootOf($)}/records`
+  const home = await storageHomeOf($)
+  if (home === undefined) throw new Error('HOME is not set')
   const records: ShadowRecord[] = []
   const labels = new Map<string, boolean>()
-  if (!(await $.fs.exists(root))) return { records, labels }
+  for (const root of [
+    `${stateRoot(home)}/records`,
+    ...((await $.env.get('CONTEXT_HARNESS_STATE_HOME')) === undefined ? [`${oldStateRoot(home)}/records`] : []),
+  ]) {
+    if (await $.fs.exists(root)) await readRecordsUnder($, root, limit, records, labels)
+  }
+
+  return { records, labels }
+}
+
+async function readRecordsUnder($: EngineInterface, root: string, limit: number, records: ShadowRecord[], labels: Map<string, boolean>): Promise<void> {
   for (const session of await $.fs.list(root)) {
     if (session.kind !== 'dir') continue
     const sessionDir = `${root}/${session.name}`
@@ -139,15 +160,33 @@ export async function readRecords($: EngineInterface, limit: number): Promise<{ 
       }
     }
   }
-
-  return { records, labels }
 }
 
-/** Drops judgment records older than 14 days. */
+/** Drops judgment records older than 14 days, under the root and the old one. */
 export async function cleanupRecords($: EngineInterface): Promise<void> {
   const home = await storageHomeOf($)
   if (home === undefined) return
-  const root = `${stateRoot(home)}/records`
-  if (!(await $.fs.exists(root))) return
-  for (const args of cleanupArgs(root)) await $.process.run(args)
+  for (const root of [
+    `${stateRoot(home)}/records`,
+    ...((await $.env.get('CONTEXT_HARNESS_STATE_HOME')) === undefined ? [`${oldStateRoot(home)}/records`] : []),
+  ]) {
+    if (!(await $.fs.exists(root))) continue
+    for (const args of cleanupArgs(root)) await $.process.run(args)
+  }
+}
+
+/**
+ * Moves the old state root into the new one: all of it when only the old one
+ * exists, and what the new one lacks when both do (see move.ts). Runs at every
+ * session start, so what a session on the old code wrote since is merged too.
+ * Returns whether there was anything to move.
+ */
+export async function migrateState($: EngineInterface): Promise<Moved> {
+  if ((await $.env.get('CONTEXT_HARNESS_STATE_HOME')) !== undefined) return undefined
+  const home = await homeOf($)
+  if (home === undefined) return undefined
+  const moved = await moveInto($, oldStateRoot(home), stateRoot(home))
+  if (moved !== undefined) madeDirs.clear()
+
+  return moved
 }

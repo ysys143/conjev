@@ -77,13 +77,13 @@ export function conditionQuestion(when: string): JevQuestion {
 
 /** The block appended for one fragment: named, so a later turn can tell it is already there. */
 export function fragmentBlock(fragment: Fragment): string {
-  return `<instruction name="${fragment.name}" source="context-harness">\n${fragment.body}\n</instruction>`
+  return `<instruction name="${fragment.name}" source="conjev">\n${fragment.body}\n</instruction>`
 }
 
 // A whole block this plugin appended, or jev-harness before it was renamed:
 // an opening tag quoted alone, or carried into a summary, does not count. The
 // engine may put text before it ("prompt.submit hook additional context: ").
-const BLOCK = /<instruction name="([A-Za-z0-9_-]+)" source="(?:context-harness|jev-harness)">\n[\s\S]*?\n<\/instruction>/g
+const BLOCK = /<instruction name="([A-Za-z0-9_-]+)" source="(?:conjev|jev-harness)">\n[\s\S]*?\n<\/instruction>/g
 
 /**
  * The fragments whose blocks the next request still carries. A compaction that

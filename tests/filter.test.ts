@@ -53,7 +53,7 @@ test('active: a chunk loaded twice leaves the later file, with a line saying whe
   const io = setup(on)
   await $.prompt.context(context(DUPED))
   const project = io.loaded[0]?.find(f => f.path === PROJECT)?.content ?? ''
-  expect(project).toBe('## Project rules\n\nRun the suites before a commit, every time.\n\n[context-harness: left out "웹 페이지 가져오기", loaded from ~/.agents/AGENTS.md]\n\n')
+  expect(project).toBe('## Project rules\n\nRun the suites before a commit, every time.\n\n[conjev: left out "웹 페이지 가져오기", loaded from ~/.agents/AGENTS.md]\n\n')
   expect(io.loaded[0]?.find(f => f.path === USER)?.content).toBe(AGENTS)
   expect(io.toasts.some(t => t.includes('left out 1 instruction chunks loaded twice'))).toBe(true)
   await settle(() => records(io.writes, 'instr-filter').length > 0)

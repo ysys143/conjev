@@ -1,21 +1,32 @@
-import type { Register } from 'claude-code'
-import { DEFAULT_SETTINGS, SETTING_KEYS, dueBeforeFold, dueNote, foldTranscript, makePolicy, reportFor, settingsFrom, sliceLines, transcriptChars, type PolicySettings } from './fold'
-import { FOLD_POINT } from './fold-judge'
-import { afterCompaction, anchorsOf, judgeFold, note, since, type Continuity } from './fold-flow'
+import type { EngineInterface, Register } from 'claude-code'
+import { DEFAULT_SETTINGS, SETTING_KEYS, conversationArchive, dueBeforeFold, dueNote, foldTranscript, makePolicy, messageViewOf, partialCut, pointerMessage, reportFor, settingsFrom, sliceLines, splitForSummary, stillIdle, transcriptChars, type Archived, type MessageView, type PolicySettings } from './fold'
+import { routeBrowser } from './browser-flow'
+import { BROWSER_BLOCK, BROWSER_POINT } from './browser-route'
+import { FOLD_BLOCKS_POINT, judgeBlocks, withKeptBlocks } from './fold-blocks'
+import { parseText } from './blocks'
+import { FOLD_POINT, currentRequest, judgedPolicy } from './fold-judge'
+import { afterCompaction, anchorsOf, askNeeded, judgeFold, note, since, type Continuity } from './fold-flow'
 import { askConditions, attachedNow, forgetAttached, fragmentsDirOf, loadFragments, pendingOf, recordFragments, rememberWouldAttach, wouldAttach } from './fragment-flow'
-import { INSTRUCTIONS_POINT, decideFragments, fragmentBlock, keywordHit, pinnedSection } from './instructions'
+import { INSTRUCTIONS_POINT, attachedNames, decideFragments, fragmentBlock, keywordHit, pinnedSection } from './instructions'
 import { probabilityOf, type JevResult } from './jev'
-import { errorOf, judge, keyFor, trustFor } from './jev-call'
-import { filterReport, pointReport, type ShadowRecord } from './report'
+import { errorOf, judge, keyFor, resolveKey, trustFor } from './jev-call'
+import { CONSENT_TEXT, INSTALL_COMMAND_NAME, keyNote, onboardingMessage } from './install-command'
+import { DEMOTE_LABELS, DEMOTE_PRECISION, blockReport, compactReport, filterReport, latencyReport, pointReport, shouldDemoteStop, stopPrecision, type ShadowRecord } from './report'
 import { chunksOf, exactDuplicates, normalized, supersededOmc, withoutChunks, type DocFile } from './instruction-docs'
-import { judgeDeferred, omcVersionsOf, recordFilter, recordToolUse, stateKeyOf } from './filter-flow'
-import { scrub } from './scrub'
-import { harnessSettingsFrom, usesJev } from './settings'
-import { newId, runtime, startRuntime } from './state'
-import { showStatus } from './status'
-import { STOP_MESSAGE, STOP_POINT, STOP_QUESTION, announcesByRule, lastParagraph, stopSkipReason } from './stop-gate'
-import { cleanupRecords, homeOf, legacyArchiveRoot, readArchived, readRecords, rootOf, stateRoot, writeArchive, writeLabel, writeRecord } from './storage'
+import { jevDropsOf, judgeDeferred, omcVersionsOf, recordFilter, recordToolUse, stateKeyOf } from './filter-flow'
+import { clip, scrub } from './scrub'
+import { harnessSettingsFrom, usesJev, type HarnessSettings } from './settings'
+import { newId, retuneRuntime, runtime, startRuntime } from './state'
+import { OFFER_TIMEOUT_MS, boardHasHandoff, boardOfferStep, handoffGap, offerAccepted, repoStateOf, type BoardOffer } from './repostate'
+import { imageToRead } from './image-size'
+import type { Moved } from './move'
+import { SHARED_CONFIG, SHARED_CONSENT, SHARED_KEY, SHARED_ONBOARDING, migrateShared, readShared, sharedDirOf, writeSharedRecord, type Shared } from './shared'
+import { DEFAULT_RELEVANCE, omittedRanges, selectRelevant } from './relevance'
+import { hintWithStatus, showStatus } from './status'
+import { PARAGRAPH_CHARS, STOP_MESSAGE, STOP_POINT, STOP_QUESTION, announcesByRule, lastParagraph, stopSkipReason } from './stop-gate'
+import { cleanupRecords, homeOf, legacyArchiveRoot, migrateState, oldStateRoot, readArchived, readRecords, rootOf, stateRoot, writeArchive, writeLabel, writeRecord } from './storage'
 import { judgeTool } from './tool-flow'
+import { WEB_POINT, WEB_TOOL_DESCRIPTION, jevAsker, readWeb, shadowWebFetch } from './web-flow'
 import {
   TOOL_POINT,
   archivedReason,
@@ -37,14 +48,65 @@ import {
 const SUMMARIZE_ABOVE_SHARE = 0.6
 const CHARS_PER_TOKEN = 4
 const READ_LIMIT = 400
+
+/**
+ * E3: what every summary this plugin lets the engine write is also asked to
+ * keep, after whatever the person typed after /compact.
+ */
+export const PRESERVE_INSTRUCTIONS =
+  "conjev: keep the person's own requests and decisions in their words, quoted where they are short. " +
+  'Keep every line that starts with "[folded " exactly as it is, id included: read_coordinate returns the original behind it.'
+
+/** How much of a read_coordinate query goes to Jev; the rest is dropped, not summarized. */
+const QUERY_CHARS = 400
 // How many idle boundaries a fold waits for the status board and the episode
 // log to be brought up to date before it goes ahead anyway.
 const MAX_DEFERRALS = 2
 
+// How long the automatic fold waits for the person to type before it takes the
+// moment: long enough to read the answer, short enough to run while they are away.
+const FOLD_IDLE_MS = 30_000
+
+/** One record per compaction: its trigger, its wait, and what it did or did not save. */
+export const COMPACT_POINT = 'compact'
+
+/** Where the offer to create the status board stands, across sessions. */
+const OFFER_KEY = 'board-offer'
+const OFFER_ASKED_KEY = 'board-offer-asked-at'
+
+/** A3: where the Stop gate's demotion to shadow is kept, across sessions. */
+export const STOP_DEMOTED_KEY = 'stop-demoted'
+
+type StopDemotion = { precision: number; labeled: number; at: string }
+
+/**
+ * A3: once enough stop judgments are labeled, the gate's precision decides
+ * whether it may hold turns. Below the bar it is demoted to shadow, and the
+ * demotion is kept in `$.store` so later sessions keep it. Returns the new
+ * demotion, or undefined when nothing changed.
+ */
+async function demoteStop($: EngineInterface, threshold: number): Promise<StopDemotion | undefined> {
+  if ((await $.store.get(STOP_DEMOTED_KEY)) !== undefined) return undefined
+  const { records, labels } = await readRecords($, 20_000)
+  const p = stopPrecision(records, labels, threshold)
+  if (!shouldDemoteStop(p)) return undefined
+  const demotion = { precision: p.precision!, labeled: p.labeled, at: new Date(await $.clock.now()).toISOString() }
+  await $.store.set(STOP_DEMOTED_KEY, demotion)
+  // The engine puts the plugin's name before a log line; a toast has no owner shown.
+  const text = `the Stop gate was right ${Math.round(demotion.precision * 100)}% of the time over ${demotion.labeled} labels, under ${DEMOTE_PRECISION * 100}%, so it now only records (shadow).`
+  $.ui.toast(`conjev: ${text}`)
+  $.ui.log(text)
+
+  return demotion
+}
+
+/** Where the armed automatic fold records the moment it began waiting. */
+export const FOLD_ARMED_KEY = 'fold-armed-at'
+
 const SETTINGS_SCHEMA = {
   type: 'object',
   properties: {
-    keepRecentTurns: { type: 'number', description: 'Results from this many most recent turns are never folded' },
+    keepRecentTurns: { type: 'number', description: 'Results from this many most recent model turns (one response each) are never folded' },
     minFoldChars: { type: 'number', description: 'Fold only results of at least this many characters' },
     keepErrorsUnder: { type: 'number', description: 'Keep error results shorter than this many characters' },
     keepTools: { type: 'array', items: { type: 'string' }, description: 'Tools whose results are never folded' },
@@ -56,17 +118,142 @@ const SETTINGS_SCHEMA = {
   },
 }
 
+/**
+ * What the status board's Handoff section should have said about the tree, or
+ * undefined when there is nothing to report. A top-level declaration on
+ * purpose: a hooks module may pass `$` only to one of these, or to a function
+ * it imports from a file of its own.
+ */
+async function handoffLine($: EngineInterface, phaseFile: string): Promise<string | undefined> {
+  const state = await repoStateOf($)
+  if (state === undefined) return undefined
+  let board: string | undefined
+  if (phaseFile !== '' && (await $.fs.exists(phaseFile))) {
+    try {
+      board = await $.fs.read(phaseFile)
+    } catch {
+      board = undefined
+    }
+  }
+
+  return handoffGap(state, boardHasHandoff(board))
+}
+
+/**
+ * Offers to create the status board when a project has none, and counts three
+ * hours of silence as a yes (the person's own instruction). Returns what to
+ * tell the model, or undefined when there is nothing to say.
+ *
+ * The offer is remembered in `$.store`, which outlives a session: a question
+ * left open when the process ends is still open when the next one starts, so
+ * the three hours keep counting rather than starting over.
+ */
+async function boardOffer($: EngineInterface, phaseFile: string): Promise<string | undefined> {
+  // A board that exists settles the question; so does an empty setting, which
+  // says the project does not keep one.
+  if (phaseFile === '' || (await $.fs.exists(phaseFile))) return undefined
+  const [state, askedRaw] = await Promise.all([$.store.get(OFFER_KEY), $.store.get(OFFER_ASKED_KEY)])
+  const askedAt = typeof askedRaw === 'number' ? askedRaw : undefined
+  const step = boardOfferStep(state as BoardOffer | undefined, askedAt, await $.clock.now())
+  if (step === 'leave' || step === 'wait') return undefined
+
+  if (step === 'accept') {
+    await $.store.set(OFFER_KEY, 'accepted')
+    await $.store.delete(OFFER_ASKED_KEY)
+
+    return 'The status board was never created, and the offer to make one went unanswered for three hours; that silence counts as a yes. Create PHASE.md now, in the form the conjev:project-state skill gives, and fill its Handoff section from the repository.'
+  }
+
+  // The moment the question went up is written before it is asked, so a
+  // session that ends with the dialog still open does not restart the count.
+  await $.store.set(OFFER_ASKED_KEY, await $.clock.now())
+  // Nobody to ask is not a yes: a `-p` run refuses the dialog, and the offer
+  // stays open rather than becoming consent.
+  let answer: string
+  try {
+    answer = await $.ui.ask('This project has no PHASE.md. Create it?', {
+      options: ['Create it', 'Not now'],
+      header: 'Status board',
+    })
+  } catch {
+    return undefined
+  }
+  const wanted = offerAccepted(answer)
+  await $.store.set(OFFER_KEY, wanted ? 'accepted' : 'declined')
+  await $.store.delete(OFFER_ASKED_KEY)
+
+  return wanted
+    ? 'The person agreed to a status board. Create PHASE.md now, in the form the conjev:project-state skill gives, and fill its Handoff section from the repository.'
+    : undefined
+}
+
+/**
+ * The settings as they stand now: the shared folder over this profile's own
+ * (`/config`), and every `auto` gate resolved against the key and the recorded
+ * consent. Read afresh at session start, when a shared file changes, and when
+ * the person places a key or answers /jev-consent.
+ */
+async function sharedState(
+  $: EngineInterface,
+  options: Readonly<Record<string, unknown>>,
+): Promise<{ gates: HarnessSettings; policy: PolicySettings; shared: Shared; key: { key: string; source: string } | undefined }> {
+  const shared = await readShared($, await homeOf($))
+  // The shared file wins over /config: one file tunes every profile.
+  const merged = { ...options, ...shared.settings }
+  const key = shared.key === undefined ? await resolveKey($, merged.apiKey) : { key: shared.key, source: 'shared' }
+  const gates = harnessSettingsFrom(merged, { hasKey: key !== undefined, isConsented: shared.consent === true })
+
+  return { gates, policy: settingsFrom(merged), shared, key }
+}
+
+/**
+ * The first move is worth a line on screen; the merges after it, of what a
+ * session on an older release wrote since, would say the same at every start,
+ * so they go to the debug log.
+ */
+function announce($: EngineInterface, moved: Moved, text: string): void {
+  if (moved === 'moved') $.ui.log(text)
+  else if (moved === 'merged') $.ui.log(`${text} (merged what an older release wrote since)`, { to: 'debug' })
+}
+
 export const register: Register = (on, options) => {
-  const policySettings = settingsFrom(options)
-  const policy = makePolicy(policySettings)
-  const settings = harnessSettingsFrom(options)
+  let policySettings = settingsFrom(options)
+  let policy = makePolicy(policySettings)
+  let settings = harnessSettingsFrom(options)
   startRuntime(settings, policySettings)
-  const isOn = usesJev(settings) || settings.toolGate !== 'off'
+  let isOn = usesJev(settings) || settings.toolGate !== 'off'
+  // A3: set once the labels demoted the Stop gate; active then runs as shadow.
+  let stopDemoted: StopDemotion | undefined
+  const stopMode = () => (settings.stopGate === 'active' && stopDemoted !== undefined ? 'shadow' : settings.stopGate)
+  // Every hook below reads `settings` and `policy` when it runs, so replacing
+  // them here is what a changed shared file or a new consent takes effect by.
+  const apply = (next: Awaited<ReturnType<typeof sharedState>>): void => {
+    settings = next.gates
+    policySettings = next.policy
+    policy = makePolicy(policySettings)
+    isOn = usesJev(settings) || settings.toolGate !== 'off'
+    retuneRuntime(settings, policySettings)
+    runtime.key = next.key ?? null
+  }
   const { counts } = runtime
   let isFoldScheduled = false
   const state: Continuity = { deferrals: 0, isJustCompacted: false }
 
   on('session.start', async ($, e, next) => {
+    // Before anything reads it: the folder from before the rename becomes ~/.conjev.
+    try {
+      announce($, await migrateShared($, await homeOf($)), 'moved ~/.context-harness to ~/.conjev')
+    } catch (error) {
+      $.ui.log(`could not move ~/.context-harness to ~/.conjev (${String(error)})`)
+    }
+    // The shared folder comes first, then whatever this profile's settings say:
+    // a person with several profiles tunes one file rather than each of them.
+    // Read here rather than at register time, where there is no `$` to read with.
+    try {
+      apply(await sharedState($, options))
+    } catch (error) {
+      $.ui.log(`the shared settings could not be read (${String(error)})`)
+    }
     // Each half starts on its own, so one that fails leaves the other working.
     try {
       await $.tool.register({
@@ -74,13 +261,19 @@ export const register: Register = (on, options) => {
         description:
           'Return the original text of a tool result that was folded into a line like ' +
           '[folded Read · src/a.ts · 412 lines — read_coordinate("toolu_…")]. ' +
-          'Pass that id. offset (1-based line) and limit (lines, default 400) select a part.',
+          'Pass that id. offset (1-based line) and limit (lines, default 400) select a part. ' +
+          'Add query instead when you want only the parts that bear on one question: the answer keeps the ' +
+          'passages that matter and names the line ranges it left out, so you can read them next. ' +
+          'Without query, offset or limit, the parts that bear on the person\'s latest request are kept the same way. ' +
+          'Set full to true for the whole original when query would leave out something you need.',
         inputSchema: {
           type: 'object',
           properties: {
             id: { type: 'string', description: 'The id inside read_coordinate("…") of the folded line' },
             offset: { type: 'number', description: 'First line to return, 1-based' },
             limit: { type: 'number', description: 'How many lines to return' },
+            query: { type: 'string', description: 'What you need from it; keeps only the passages that bear on this' },
+            full: { type: 'boolean', description: 'Return the whole original, ignoring query' },
           },
           required: ['id'],
         },
@@ -89,7 +282,7 @@ export const register: Register = (on, options) => {
       await $.tool.register({
         name: 'policy_report',
         description:
-          "Measure this session's tool results and what context-harness's fold policy would fold now. " +
+          "Measure this session's tool results and what conjev's fold policy would fold now. " +
           'With no input it reports the current policy; give any policy values to dry-run a candidate beside it. ' +
           'Used by the tune-policy skill.',
         inputSchema: SETTINGS_SCHEMA,
@@ -97,35 +290,67 @@ export const register: Register = (on, options) => {
       await $.tool.register({
         name: 'set_policy',
         description:
-          "Set context-harness's fold policy values in the person's Claude Code settings, the same as /config. " +
+          "Set conjev's fold policy values in the person's Claude Code settings, the same as /config. " +
           'Give only the values to change. Call it only after the person agreed to the values.',
         inputSchema: SETTINGS_SCHEMA,
       })
+      if (settings.webRead === 'active') {
+        await $.tool.register({
+          name: 'web_read',
+          description: WEB_TOOL_DESCRIPTION,
+          inputSchema: {
+            type: 'object',
+            properties: {
+              url: { type: 'string', description: 'The page to read (http or https)' },
+              question: { type: 'string', description: 'What to find on the page: the question, every sub-question, or keywords' },
+            },
+            required: ['url', 'question'],
+          },
+          isDeferred: false,
+        })
+      }
     } catch (error) {
-      $.ui.log(`${$.plugin.name}: could not register its tools (${String(error)})`)
+      $.ui.log(`could not register its tools (${String(error)})`)
     }
     try {
-      await $.command.register({ name: 'jev-report', description: 'context-harness: what the gates recorded and how Jev agreed with the rules' })
-      await $.command.register({ name: 'jev-mark', description: 'context-harness: label a record, /jev-mark <id> y|n', argumentHint: '<id> y|n' })
+      await $.command.register({ name: 'jev-report', description: 'conjev: what the gates recorded and how Jev agreed with the rules' })
+      await $.command.register({ name: 'jev-mark', description: 'conjev: label a record, /jev-mark <id> y|n', argumentHint: '<id> y|n' })
+      await $.command.register({ name: 'jev-consent', description: 'conjev: allow or refuse sending to Jev, /jev-consent yes|no|later', argumentHint: 'yes|no|later' })
+      // Registered, not only answered: without this call the name never reaches
+      // the slash list. `/install` alone is a built-in name and stays the
+      // engine's, which is why this one carries the plugin's name.
+
       if (settings.instructions !== 'off') await loadFragments($)
       if (isOn) {
         await keyFor($)
         showStatus($)
       }
     } catch (error) {
-      $.ui.log(`${$.plugin.name}: the judgment layer did not start (${String(error)})`)
+      $.ui.log(`the judgment layer did not start (${String(error)})`)
+    }
+    // B2: the state moves under ~/.conjev once; the old root stays readable.
+    try {
+      announce($, await migrateState($), 'moved its records and folded originals to ~/.conjev/state')
+    } catch (error) {
+      $.ui.log(`could not move its state, reading it where it is (${String(error)})`)
+    }
+    try {
+      stopDemoted = ((await $.store.get(STOP_DEMOTED_KEY)) as StopDemotion | undefined) ?? (settings.stopGate === 'active' ? await demoteStop($, settings.stopThreshold) : undefined)
+    } catch (error) {
+      $.ui.log(`could not check the Stop gate's labels (${String(error)})`)
     }
     try {
       await cleanupRecords($)
     } catch (error) {
-      $.ui.log(`${$.plugin.name}: could not drop old records (${String(error)})`)
+      $.ui.log(`could not drop old records (${String(error)})`)
     }
 
     return next(e)
   })
 
   // The instruction files the engine is about to load: chunks loaded twice
-  // leave in active; Jev's reading of the rest is recorded, never applied.
+  // leave in active, and so do those Jev's stored reading leaves out (never
+  // one of the always-kept rules); shadow only records what it would do.
   on('prompt.context', async ($, e, next) => {
     const mode = settings.instructionFilter
     const files = e.instructionFiles
@@ -136,11 +361,15 @@ export const register: Register = (on, options) => {
     const drops = new Map([...exactDuplicates(chunks), ...supersededOmc(chunks, await omcVersionsOf($, docs))])
     const droppedChars = chunks.filter(c => drops.has(c.id)).reduce((sum, c) => sum + normalized(c.text).length, 0)
     runtime.filter = { stateKey: stateKeyOf(chunks), chunks, drops, droppedChars, deferred: runtime.filter?.deferred ?? [] }
-    const passed = mode === 'active' && drops.size > 0 ? withoutChunks(files as unknown as DocFile[], chunks, drops, await homeOf($)) : undefined
+    // Jev's reading of this set of files, once it has answered, is applied in active too.
+    const jevDrops = mode === 'active' ? await jevDropsOf($, chunks, drops) : new Map()
+    const applied = new Map([...drops, ...jevDrops])
+    const passed = mode === 'active' && applied.size > 0 ? withoutChunks(files as unknown as DocFile[], chunks, applied, await homeOf($)) : undefined
     const hookMs = (await $.clock.now()) - t0
     // Judged and recorded after the request has gone.
     void recordFilter($, chunks, drops, mode, t0, hookMs).catch(() => undefined)
-    if (passed !== undefined) $.ui.toast(`context-harness: left out ${drops.size} instruction chunks loaded twice (${droppedChars} chars)`)
+    if (passed !== undefined && drops.size > 0) $.ui.toast(`conjev: left out ${drops.size} instruction chunks loaded twice (${droppedChars} chars)`)
+    if (passed !== undefined && jevDrops.size > 0) $.ui.toast(`conjev: left out ${jevDrops.size} instruction chunks Jev read as repeated or needed only for some work`)
     showStatus($)
 
     return passed === undefined ? next(e) : next({ ...e, instructionFiles: passed as unknown as typeof files })
@@ -153,12 +382,47 @@ export const register: Register = (on, options) => {
     const text = pinnedSection((await loadFragments($)).list)
     if (text === undefined) return composed
 
-    return { ...composed, sections: [...composed.sections, { id: 'context-harness:pinned', text, scope: 'session' as const }] }
+    return { ...composed, sections: [...composed.sections, { id: 'conjev:pinned', text, scope: 'session' as const }] }
   }).catch((_, e, next) => next(e))
 
   // E1, conditional fragments: appended to the prompt that first meets their
   // condition, and again only once the conversation no longer carries them.
-  on('prompt.submit', async ($, e, next) => {
+  on('prompt.submit', async ($, e, nextBelow) => {
+    // The person is here: an automatic fold waiting for a quiet moment will see
+    // this and stand down, so their request is never queued behind a summary.
+    if (!e.isMeta && e.command === undefined) {
+      state.promptedAt = await $.clock.now()
+      state.promptsSince = (state.promptsSince ?? 0) + 1
+    }
+    // A project with no status board is offered one, once, and silence for
+    // three hours is taken as a yes. The model is told what to do about it.
+    if (!e.isMeta && e.command === undefined) {
+      try {
+        const offer = await boardOffer($, policySettings.phaseFile)
+        if (offer !== undefined) await note($, `[conjev] ${offer}`)
+      } catch (error) {
+        $.ui.log(`the status board offer was skipped (${String(error)})`)
+      }
+    }
+    // Browser routing first: a prompt that needs a browser operated gets the tool to use, once
+    // while the conversation carries it. Whatever the fragments below decide, the block rides along.
+    const origin0 = e.origin
+    const isPersons0 =
+      origin0 !== undefined &&
+      (origin0.kind === 'composer' || origin0.kind === 'bridge' || origin0.kind === 'sdk' || (origin0.kind === 'plugin' && origin0.asUser === true))
+    let browserBlock: string | undefined
+    if (settings.browserRoute !== 'off' && e.command === undefined && !e.isMeta && isPersons0) {
+      try {
+        const carried = settings.browserRoute === 'active' && attachedNames(await $.session.messages({ as: 'api' })).has(BROWSER_BLOCK)
+        browserBlock = await routeBrowser($, e.text, e.turnId, carried)
+      } catch (error) {
+        $.ui.log(`browser routing skipped (${String(error)})`)
+      }
+    }
+    const next: typeof nextBelow = Object.assign(
+      (ev: typeof e) => nextBelow(browserBlock === undefined ? ev : { ...ev, context: [...(ev.context ?? []), browserBlock] }),
+      nextBelow,
+    )
     if (settings.instructionFilter !== 'off') {
       const text = e.command !== undefined ? `/${e.command.name} ${e.command.args ?? ''}` : e.text
       void judgeDeferred($, text, e.origin?.kind ?? 'unknown', e.turnId).catch(() => undefined)
@@ -191,7 +455,7 @@ export const register: Register = (on, options) => {
 
     const rule = new Map(candidates.map(fragment => [fragment.name, keywordHit(e.text, fragment.keywords)]))
     const key = await keyFor($)
-    const sent = key === undefined ? null : { request: scrub(e.text, await homeOf($)).slice(0, 600) }
+    const sent = key === undefined ? null : { request: clip(scrub(e.text, await homeOf($)), 600) }
     // Active asks Jev only where no keyword decided; shadow asks for every candidate, to compare.
     const toAsk = mode === 'active' ? candidates.filter(fragment => rule.get(fragment.name) !== true) : candidates
 
@@ -226,7 +490,37 @@ export const register: Register = (on, options) => {
   // where the compaction is answered, below.
   on('classic.SessionStart', async ($, e, next) => {
     const below = await next(e)
-    if (e.agent_id === undefined && settings.instructions !== 'off' && e.source === 'clear') await forgetAttached($, await $.session.id())
+    if (e.agent_id !== undefined) return below
+    if (settings.instructions !== 'off' && e.source === 'clear') await forgetAttached($, await $.session.id())
+    const home = await homeOf($)
+    if (home === undefined) return below
+    const dir = sharedDirOf(home)
+    // B4: the shared files are watched, so a change made in another profile
+    // or an editor reaches this session (classic.FileChanged, below).
+    const watched = { ...below, watchPaths: [...(below.watchPaths ?? []), ...[SHARED_CONFIG, SHARED_KEY, SHARED_CONSENT].map(name => `${dir}/${name}`)] }
+    if (e.source !== 'startup') return watched
+    // The first run: no key or no answer about consent, and the setup neither
+    // finished nor declined. The setup starts by itself, as the first turn.
+    //
+    // initialUserMessage, not additionalContext: additionalContext only rides
+    // along with the next request, so the model would say nothing until the
+    // person wrote first, and someone who has never heard of the plugin has no
+    // reason to. initialUserMessage is sent as the session's first prompt, which
+    // starts a model turn, so the setup runs as /conjev:onboard would.
+    const { shared, key } = await sharedState($, options)
+    if (shared.onboarding !== undefined || (key !== undefined && shared.consent !== undefined)) return watched
+
+    return { ...watched, initialUserMessage: onboardingMessage(key?.source as Parameters<typeof keyNote>[0]) }
+  }).catch((_, e, next) => next(e))
+
+  // A shared file changed during the session: read them again, so a gate, a
+  // fold value, a key or a consent takes effect without a new session.
+  on('classic.FileChanged', async ($, e, next) => {
+    const below = await next(e)
+    const home = await homeOf($)
+    if (home === undefined || !e.file_path.startsWith(`${sharedDirOf(home)}/`)) return below
+    apply(await sharedState($, options))
+    showStatus($)
 
     return below
   }).catch((_, e, next) => next(e))
@@ -236,6 +530,37 @@ export const register: Register = (on, options) => {
     if (e.agentId !== undefined || e.trigger === 'precompute') return next(e)
 
     const sessionId = await $.session.id()
+    // What a compaction costs the person is wall-clock time, and what it buys
+    // is fewer tokens. Both are recorded, by trigger: only then can a later
+    // look say whether a summary was worth the wait it caused.
+    const startedAt = await $.clock.now()
+    // D5: how long since the previous compaction, in prompts, turns and time.
+    const sinceMs = startedAt - (await since($, state))
+    const sinceFacts = { sincePrompts: String(state.promptsSince ?? 0), sinceTurns: String(state.turnsSince ?? 0), sinceMs: String(sinceMs) }
+    const recordCompaction = async (isSummarized: boolean, before?: number, after?: number): Promise<void> => {
+      state.promptsSince = 0
+      state.turnsSince = 0
+      await writeRecord($, {
+        id: newId(startedAt),
+        ts: new Date(startedAt).toISOString(),
+        sessionId,
+        point: COMPACT_POINT,
+        mode: 'active',
+        sent: null,
+        hookMs: (await $.clock.now()) - startedAt,
+        decision: isSummarized ? 'summarized' : 'folded',
+        facts: {
+          trigger: e.trigger,
+          messagesBefore: String(e.messages.length),
+          ...sinceFacts,
+          ...(before === undefined ? {} : { tokensBefore: String(before) }),
+          ...(after === undefined ? {} : { tokensAfter: String(after) }),
+        },
+      }).catch(() => undefined)
+    }
+    // Nothing in the types promises the api view here; without it no message
+    // can be shown free of media, so nothing folds and the engine summarizes.
+    const view = await $.session.messages({ as: 'api' }).then(messageViewOf, () => new Map() as MessageView)
     // What follows a compaction that stands. A failure here leaves the
     // compaction as it is: the hook's .catch would otherwise summarize the
     // unfolded transcript.
@@ -244,15 +569,65 @@ export const register: Register = (on, options) => {
         if (isSummarized) await forgetAttached($, sessionId)
         await afterCompaction($, policySettings, state, folded)
       } catch (error) {
-        $.ui.log(`${$.plugin.name}: after the compaction (${String(error)})`)
+        $.ui.log(`after the compaction (${String(error)})`)
       }
-      if (settings.foldJev !== 'off') void judgeFold($, e.messages, new Set(archivedIds)).catch(() => undefined)
+      if (settings.foldJev === 'shadow' && settings.fold === 'on') void judgeFold($, e.messages, new Set(archivedIds), view).catch(() => undefined)
     }
 
-    const outcome = foldTranscript(e.messages, policy)
+    // E3: whatever the person typed after /compact goes first; the plugin's own
+    // request to keep their words and the pointers follows it.
+    const instructions = [e.instructions, PRESERVE_INSTRUCTIONS].filter(text => text !== undefined && text.trim() !== '').join('\n\n')
+    // E2: what a summary is about to replace is kept first, whole, so the
+    // conversation stays readable through read_coordinate after it is gone.
+    const summarize = async (messages: readonly (typeof e.messages)[number][], told: string | undefined = instructions) => {
+      const kept = conversationArchive(messages, `conversation-${newId(startedAt)}`)
+      let isKept = false
+      try {
+        await writeArchive($, sessionId, [kept])
+        isKept = true
+      } catch (error) {
+        $.ui.log(`could not keep the summarized conversation (${String(error)})`)
+      }
+      const below = await next({ ...e, messages, instructions: told })
+
+      return { below, kept: isKept ? [kept] : [] }
+    }
+
+    // Folding off: the engine's own summary, over the whole transcript and told
+    // only what the person typed after /compact. What the plugin keeps around
+    // it stays: the conversation the summary replaces is archived first and
+    // named in a pointer after it, and the note after the compaction points the
+    // model back at the project's files.
+    if (settings.fold === 'off') {
+      const { below, kept } = await summarize(e.messages, e.instructions)
+      if (below.skip !== undefined) return below
+      await recordCompaction(true, below.tokensBefore, below.tokensAfter)
+      await after(0, [], true)
+
+      return kept.length === 0 ? below : { ...below, messages: [...below.messages, pointerMessage(kept)] }
+    }
+
+    // Fold relevance, active: Jev decides which results are still needed before
+    // the fold, so the fold keeps those and takes the finished ones, recent or
+    // not. On the automatic path too (A4): a Jev that does not answer in time
+    // leaves every result to the rule, so the wait is bounded by the timeout.
+    let foldPolicy = policy
+    if (settings.foldJev === 'active') {
+      try {
+        foldPolicy = judgedPolicy(policySettings, await askNeeded($, e.messages, view), settings.foldThreshold)
+      } catch (error) {
+        $.ui.log(`fold relevance skipped (${String(error)})`)
+      }
+    }
+    const outcome = foldTranscript(e.messages, foldPolicy, view)
     if (outcome.archived.length === 0) {
-      const summarized = await next(e)
-      if (summarized.skip === undefined) await after(0, [], true)
+      const { below: summarized, kept } = await summarize(e.messages)
+      if (summarized.skip === undefined) {
+        await recordCompaction(true, summarized.tokensBefore, summarized.tokensAfter)
+        await after(0, [], true)
+
+        return kept.length === 0 ? summarized : { ...summarized, messages: [...summarized.messages, pointerMessage(kept)] }
+      }
 
       return summarized
     }
@@ -260,35 +635,92 @@ export const register: Register = (on, options) => {
     try {
       await writeArchive($, sessionId, outcome.archived)
     } catch (error) {
-      $.ui.log(`${$.plugin.name}: could not keep folded results, summarizing instead (${String(error)})`)
-      const summarized = await next(e)
-      if (summarized.skip === undefined) await after(0, [], true)
+      $.ui.log(`could not keep folded results, summarizing instead (${String(error)})`)
+      const summarized = await next({ ...e, instructions })
+      if (summarized.skip === undefined) {
+        await recordCompaction(true)
+        await after(0, [], true)
+      }
 
       return summarized
     }
 
-    const { context } = await $.session.usage()
-    const tokensAfter = transcriptChars(outcome.messages) / CHARS_PER_TOKEN
-    const isSummarized = tokensAfter > context.window * SUMMARIZE_ABOVE_SHARE
-    const compacted = isSummarized ? await next({ ...e, messages: outcome.messages }) : { messages: outcome.messages }
-    if (compacted.skip === undefined) {
-      runtime.folded.results += outcome.archived.length
-      runtime.folded.savedChars += outcome.savedChars
-      showStatus($)
-      await after(
-        outcome.archived.length,
-        outcome.archived.map(item => item.id),
-        isSummarized,
-      )
+    // Blocks of the largest folded results that the current request still needs.
+    if (settings.foldBlocks === 'active') {
+      try {
+        const decided = await judgeBlocks($, e.messages, outcome.archived, 'active')
+        const kept = withKeptBlocks(outcome.messages, outcome.archived, decided)
+        outcome.messages = kept.messages
+        outcome.savedChars -= kept.addedChars
+      } catch (error) {
+        $.ui.log(`kept no blocks (${String(error)})`)
+      }
+    } else if (settings.foldBlocks === 'shadow') {
+      void judgeBlocks($, e.messages, outcome.archived, 'shadow').catch(() => undefined)
     }
 
-    return compacted
+    // A partial summary: the engine summarizes what is older than the recent
+    // window, and the recent messages — folded where the policy says so — are
+    // carried over as they stand. This is what clears the old assistant turns,
+    // tool inputs and reasoning blocks a fold alone leaves behind. It runs only
+    // when the fold left enough behind that the window is still crowded.
+    const { context } = await $.session.usage()
+    const kept = partialCut(outcome.messages, policySettings.keepRecentTurns)
+    const isCrowded = transcriptChars(outcome.messages) > context.window * SUMMARIZE_ABOVE_SHARE * CHARS_PER_TOKEN
+    const cut = kept > 0 && isCrowded ? kept : 0
+    // A summary replaces what the person said with the agent's reading of it,
+    // and the canonical files are where that reading lives. So before a summary
+    // runs they are asked to be current: an agent that cannot yet say what the
+    // person wants has nothing to put in their words' place. The fold itself
+    // goes ahead either way — only the summary waits.
+    const due = cut > 0 ? dueBeforeFold(await anchorsOf($, policySettings), await since($, state)) : []
+    const isDeferred = due.length > 0 && state.deferrals < MAX_DEFERRALS
+    if (isDeferred) {
+      state.deferrals++
+      state.isCleanupAsked = true
+      await note($, dueNote(due, await handoffLine($, policySettings.phaseFile)))
+    }
+
+    const split = cut > 0 && !isDeferred ? splitForSummary(outcome.messages, cut) : undefined
+    // A summary is the one step here that lasts seconds: say so while it runs.
+    runtime.isSummarizing = split !== undefined
+    if (runtime.isSummarizing) showStatus($)
+    let below
+    let conversation: Archived[] = []
+    try {
+      if (split !== undefined) ({ below, kept: conversation } = await summarize(split.older))
+    } finally {
+      runtime.isSummarizing = false
+    }
+    // A summary the engine refused leaves the conversation as it is: the
+    // compaction does not stand, so nothing is recorded or counted.
+    if (below !== undefined && below.skip !== undefined) return below
+    const isSummarized = below !== undefined
+    // A summary carries none of the folded ids it replaced, so the plugin puts
+    // them back itself: the model keeps a way to reach every original. The
+    // person's own prompts come back the same way — a summary would have
+    // replaced the only copy of what they said.
+    const messages = isSummarized && split !== undefined
+      ? [...below.messages, pointerMessage([...conversation, ...outcome.archived]), ...split.keptPrompts, ...outcome.messages.slice(cut)]
+      : outcome.messages
+    runtime.folded.results += outcome.archived.length
+    runtime.folded.savedChars += outcome.savedChars
+    showStatus($)
+    await recordCompaction(isSummarized, below?.tokensBefore, below?.tokensAfter)
+    await after(
+      outcome.archived.length,
+      outcome.archived.map(item => item.id),
+      isSummarized,
+    )
+
+    return { messages }
   }).catch((_, e, next) => next(e))
 
   // The idle boundary: the turn has ended and the person has not written yet.
   on('turn.complete', async ($, e, next) => {
     const done = await next(e)
-    if (e.agentId !== undefined || isFoldScheduled || policySettings.foldAtPercent === 0) return done
+    if (e.agentId === undefined) state.turnsSince = (state.turnsSince ?? 0) + 1
+    if (e.agentId !== undefined || isFoldScheduled || policySettings.foldAtPercent === 0 || settings.fold === 'off') return done
     if (state.isJustCompacted) {
       state.isJustCompacted = false
 
@@ -304,7 +736,8 @@ export const register: Register = (on, options) => {
     // removes enough of the transcript.
     const messages = await $.session.messages()
     const before = transcriptChars(messages)
-    const { savedChars } = foldTranscript(messages, policy)
+    const view = await $.session.messages({ as: 'api' }).then(messageViewOf, () => new Map() as MessageView)
+    const { savedChars } = foldTranscript(messages, policy, view)
     if (before === 0 || (savedChars / before) * 100 < policySettings.minSavedPercent) return done
 
     // What this stretch of work produced goes to the canonical files before
@@ -312,13 +745,31 @@ export const register: Register = (on, options) => {
     const due = dueBeforeFold(await anchorsOf($, policySettings), await since($, state))
     if (due.length > 0 && state.deferrals < MAX_DEFERRALS) {
       state.deferrals++
-      await note($, dueNote(due))
+      state.isCleanupAsked = true
+      await note($, dueNote(due, await handoffLine($, policySettings.phaseFile)))
 
       return done
     }
 
     isFoldScheduled = true
-    $.clock.after(1000, () => {
+    // The fold runs a compaction, and a compaction can run the engine's
+    // summary: seconds, at the moment the person finishes reading an answer.
+    // So it waits for a quiet moment, and stands down if they type first —
+    // their request is never queued behind a summary.
+    const at = await $.clock.now()
+    await $.store.set(FOLD_ARMED_KEY, at)
+    // Where the timer's own check can find the moment it was armed: the value
+    // is written to the store rather than held in a closure, so a test can see
+    // that the fold is armed and what it will compare against.
+    $.clock.after(FOLD_IDLE_MS, () => {
+      // A prompt that arrived while this waited took the moment back.
+      const holds = stillIdle(state.promptedAt, at)
+      if (!holds) {
+        isFoldScheduled = false
+
+        return
+      }
+      state.promptedAt = undefined
       // /compact as the person would type it: a compaction this plugin starts
       // with $.session.compact() skips this plugin's own session.compact hook,
       // so it would summarize instead of fold. Queued until the session is idle.
@@ -339,41 +790,102 @@ export const register: Register = (on, options) => {
     const trust = await trustFor($)
     const fragments = settings.instructions === 'off' ? undefined : await loadFragments($)
     const header = [
-      `context-harness: stop ${settings.stopGate}, tool ${settings.toolGate}, tool jev ${settings.toolJev}, instructions ${settings.instructions}, fold ${settings.foldJev}, instruction filter ${settings.instructionFilter}`,
+      `conjev: stop ${stopMode()}, tool ${settings.toolGate}, tool jev ${settings.toolJev}, instructions ${settings.instructions}, fold ${settings.foldJev}, instruction filter ${settings.instructionFilter}, web ${settings.webRead}, fold blocks ${settings.foldBlocks}, browser ${settings.browserRoute}; folding ${settings.fold}`,
       `key ${key ? `from ${key.source}` : 'none'}, provider ${trust.trust} (${trust.why})`,
       ...(fragments
         ? [`fragments: ${fragments.list.length} in ${fragments.dir} (#${fragments.hash.slice(0, 6)})${fragments.problems.length ? `; skipped: ${fragments.problems.join('; ')}` : ''}`]
         : []),
       `${records.length} records, ${labels.size} labels`,
+      ...(stopDemoted === undefined
+        ? []
+        : [`stop demoted to shadow on ${stopDemoted.at}: precision ${stopDemoted.precision.toFixed(2)} over ${stopDemoted.labeled} labels, under ${DEMOTE_PRECISION} (/jev-mark ${DEMOTE_LABELS}+ labels)`]),
     ]
     const reports = [
       pointReport(STOP_POINT, records, labels, settings.stopThreshold),
       pointReport(TOOL_POINT, records, labels, settings.toolThreshold),
       pointReport(INSTRUCTIONS_POINT, records, labels, settings.instructionThreshold),
       pointReport(FOLD_POINT, records, labels, 0.5),
+      ...(records.some(r => r.point === BROWSER_POINT) ? [pointReport(BROWSER_POINT, records, labels, settings.browserThreshold)] : []),
       ...(settings.instructionFilter === 'off' && !records.some(r => r.point === 'instr-filter') ? [] : [filterReport(records)]),
-    ]
+      ...[WEB_POINT, FOLD_BLOCKS_POINT].filter(point => records.some(r => r.point === point)).map(point => blockReport(point, records)),
+      compactReport(records),
+      latencyReport(records, settings.timeoutMs),
+    ].filter((part): part is string => part !== undefined)
 
     return { text: [...header, ...reports].join('\n\n') }
+  })
+
+  // C2: the person's answer, typed by them; the model cannot give it for them.
+  on('command.run', { command: 'jev-consent' }, async ($, e) => {
+    const answer = e.args.trim().toLowerCase()
+    const home = await homeOf($)
+    if (answer === '' || home === undefined) {
+      const { shared } = await sharedState($, options)
+      const now = shared.consent === undefined ? 'not answered yet' : shared.consent ? 'allowed' : 'refused'
+
+      return { text: `conjev: sending to Jev is ${now}.\n\n${CONSENT_TEXT}\n\nUsage: /jev-consent yes|no|later` }
+    }
+    if (answer !== 'yes' && answer !== 'no' && answer !== 'later') return { text: 'Usage: /jev-consent yes|no|later' }
+    const at = new Date(await $.clock.now()).toISOString()
+    if (answer !== 'later') await writeSharedRecord($, home, SHARED_CONSENT, { consent: answer === 'yes', at })
+    await writeSharedRecord($, home, SHARED_ONBOARDING, { state: answer === 'yes' ? 'done' : 'declined', at })
+    apply(await sharedState($, options))
+    showStatus($)
+    if (answer === 'later') return { text: 'conjev: the setup will not start by itself again. Run /conjev:onboard when you want it.' }
+
+    return {
+      text:
+        answer === 'yes'
+          ? `conjev: sending to Jev is allowed. Gates set to auto are ${settings.auto.length > 0 && runtime.key ? 'on now' : 'on once a key is in place'}. /jev-consent no takes it back.`
+          : 'conjev: sending to Jev is refused. Gates set to auto stay off, and folding runs by rule. /jev-consent yes changes it.',
+    }
   })
 
   on('command.run', { command: 'jev-mark' }, async ($, e) => {
     const [id, value] = e.args.trim().split(/\s+/)
     if (id === undefined || !/^[a-z0-9]{4,20}$/.test(id) || (value !== 'y' && value !== 'n')) return { text: 'Usage: /jev-mark <id> y|n' }
     await writeLabel($, id, value === 'y', new Date(await $.clock.now()).toISOString())
+    const demoted = settings.stopGate === 'active' && stopDemoted === undefined ? await demoteStop($, settings.stopThreshold) : undefined
+    if (demoted !== undefined) stopDemoted = demoted
 
-    return { text: `Labeled ${id} as ${value === 'y' ? 'positive' : 'negative'}.` }
+    return {
+      text:
+        `Labeled ${id} as ${value === 'y' ? 'positive' : 'negative'}.` +
+        (demoted === undefined ? '' : ` The Stop gate's precision is ${demoted.precision.toFixed(2)} over ${demoted.labeled} labels, under ${DEMOTE_PRECISION}: it now only records (shadow).`),
+    }
   })
 
+  // The status, drawn after the prompt's hint (see showStatus).
+  on('ui.render', { component: 'PromptHint' }, ($, e, next) => next(hintWithStatus(e, runtime.statusLine)))
+
+  // /conjev:onboard is a Markdown command, so the model writes the
+  // answer. What only the plugin knows is where it finds a key; that rides along
+  // as a note when the command expands. It looks afresh each time, so running the
+  // command again after placing a key sees it, and the gates use it from then on.
+  on('classic.UserPromptExpansion', async ($, e, next) => {
+    const below = await next(e)
+    if (e.expansion_type !== 'slash_command' || e.command_name.replace(/^.*:/, '') !== INSTALL_COMMAND_NAME) return below
+    const next0 = await sharedState($, options)
+    // A key placed since the session started turns its `auto` gates on now.
+    apply(next0)
+    const found = next0.key as { key: string; source: Parameters<typeof keyNote>[0] } | undefined
+
+    return { ...below, additionalContext: [...(below.additionalContext ?? []), keyNote(found?.source)] }
+  }).catch((_, e, next) => next(e))
   // E5: a turn that ends by announcing work. Settings Stop hooks run first.
   on('classic.Stop', async ($, e, next) => {
     const below = await next(e)
-    const mode = settings.stopGate
+    const mode = stopMode()
     if (mode === 'off' || below.block !== undefined) return below
 
     const t0 = await $.clock.now()
     const paragraph = lastParagraph(e.last_assistant_message)
+    // A6: the turn that answers the plugin's own request to bring the canonical
+    // files up to date before a fold is not held: the fold is waiting on it.
+    const isFoldCleanup = state.isCleanupAsked === true && e.agent_id === undefined
+    if (isFoldCleanup) state.isCleanupAsked = false
     const skipped = stopSkipReason({
+      isFoldCleanup,
       stopHookActive: e.stop_hook_active,
       permissionMode: e.permission_mode,
       backgroundTasks: e.background_tasks?.length ?? 0,
@@ -397,7 +909,9 @@ export const register: Register = (on, options) => {
       return below
     }
 
-    const sent = { last_paragraph: scrub(paragraph, await homeOf($)) }
+    // Scrubbed first, then bounded to its end.
+    // Scrubbed first, then bounded to its end.
+    const sent = { last_paragraph: clip(scrub(paragraph, await homeOf($)), PARAGRAPH_CHARS, 'tail') }
     const run = async (hookMs: number): Promise<number | undefined> => {
       const result = await judge($, { sessionId: e.session_id, point: STOP_POINT, cap: settings.stopCap }, key.key, sent, { stop: STOP_QUESTION }, settings.timeoutMs)
       const probability = result.ok ? probabilityOf(result.answers.stop!, 'announce') : undefined
@@ -452,11 +966,12 @@ export const register: Register = (on, options) => {
       $.plugin.root,
       stateRoot(home),
       await rootOf($),
+      oldStateRoot(home),
       legacyArchiveRoot(home),
       ...(settings.instructions === 'off' ? [] : [await fragmentsDirOf($)]),
     ].filter(root => root !== '')
     // Folded originals hold whatever the tools returned, secrets included.
-    const archiveRoots = [`${stateRoot(home)}/archive`, `${await rootOf($)}/archive`, legacyArchiveRoot(home)]
+    const archiveRoots = [`${await rootOf($)}/archive`, `${stateRoot(home)}/archive`, `${oldStateRoot(home)}/archive`, legacyArchiveRoot(home)]
     const isWriting = canWrite(tool, command)
 
     let verdict: FloorVerdict | undefined
@@ -506,11 +1021,28 @@ export const register: Register = (on, options) => {
     return next(e)
   }).catch((_, e, next) =>
     // The floor fails closed when active: a guard that broke refuses rather than lets through.
-    next.called || settings.toolGate !== 'active' ? next(e) : { deny: 'context-harness: the tool guard failed, so this call was refused.' },
+    next.called || settings.toolGate !== 'active' ? next(e) : { deny: 'conjev: the tool guard failed, so this call was refused.' },
   )
 
-  on('tool.call', { tool: 'mcp__context-harness__read_coordinate' }, async ($, e) => {
-    const input = e as unknown as { id?: unknown; offset?: unknown; limit?: unknown }
+  // A Read of a large image reads a smaller copy instead. An image is not
+  // folded and not summarized away while it is recent, so its size is paid for
+  // on every request until the session ends; this is where it can be cut.
+  on('tool.call', { tool: 'Read' }, async ($, e, next) => {
+    if (settings.imageMaxPx <= 0) return next(e)
+    const input = e as unknown as { file_path?: unknown }
+    const filePath = typeof input.file_path === 'string' ? input.file_path : ''
+    if (filePath === '') return next(e)
+    const home = await homeOf($)
+    if (home === undefined) return next(e)
+    const smaller = await imageToRead($, filePath, settings.imageMaxPx, stateRoot(home))
+    if (smaller === undefined) return next(e)
+    $.ui.log(`read ${smaller} instead of ${filePath} (over ${settings.imageMaxPx}px)`)
+
+    return next({ ...e, file_path: smaller })
+  }).catch((_, e, next) => next(e))
+
+  on('tool.call', { tool: 'mcp__conjev__read_coordinate' }, async ($, e) => {
+    const input = e as unknown as { id?: unknown; offset?: unknown; limit?: unknown; query?: unknown; full?: unknown }
     const id = typeof input.id === 'string' ? input.id : ''
     const item = await readArchived($, await $.session.id(), id)
 
@@ -556,6 +1088,29 @@ export const register: Register = (on, options) => {
       }
     }
 
+    // A judgment needs a key. Without one the whole original comes back: a
+    // partial answer nothing could choose would only hide what is there.
+    // F5: no question and no range asked for means the person's latest request is the question.
+    const asked = typeof input.query === 'string' ? input.query.trim() : ''
+    const isRange = typeof input.offset === 'number' || typeof input.limit === 'number'
+    const query = asked !== '' || input.full === true || isRange ? asked : (currentRequest(await $.session.messages()) ?? '')
+    const key = input.full === true || query === '' ? undefined : await keyFor($)
+    if (key !== undefined && key !== null) {
+      const home = (await homeOf($)) ?? '/'
+      const sessionId = await $.session.id()
+      const ask = jevAsker($, { sessionId, point: FOLD_BLOCKS_POINT, cap: settings.foldBlocksCap }, key.key, settings.webTimeoutMs)
+      const rel = await selectRelevant(parseText(item.text), clip(query, QUERY_CHARS), ask, text => scrub(text, home), DEFAULT_RELEVANCE, () => settings.foldBlocks === 'off')
+      if (rel.status === 'filtered' && rel.text !== '') {
+        const left = omittedRanges(item.text, rel.text)
+        const ranges = left.map(r => (r.from === r.to ? `${r.from}` : `${r.from}-${r.to}`)).join(', ')
+        const head = `${item.tool} ${JSON.stringify(item.input)} — ${rel.blocksKept} of ${rel.blocksTotal} passages, of ${item.text.split('\n').length} lines`
+        const tail = left.length === 0 ? '' : `\n\nLeft out: lines ${ranges}. Read them with offset and limit, or pass full for the whole original.`
+
+        return { isReadOnly: true, result: `${head}\n${rel.text}${tail}` }
+      }
+      // passthrough, no_match, jev_error: the original is what helps, not a fragment.
+    }
+
     const offset = typeof input.offset === 'number' ? input.offset : 1
     const limit = typeof input.limit === 'number' ? input.limit : READ_LIMIT
     const part = sliceLines(item.text, offset, limit)
@@ -564,14 +1119,43 @@ export const register: Register = (on, options) => {
     return { isReadOnly: true, result: `${head}\n${part.body}` }
   }).catch($ => ({ deny: `${$.plugin.name}: could not read the folded result.` }))
 
-  on('tool.call', { tool: 'mcp__context-harness__policy_report' }, async ($, e) => {
+  on('tool.call', { tool: 'mcp__conjev__web_read' }, async ($, e) => {
+    const input = e as unknown as { url?: unknown; question?: unknown }
+    const url = typeof input.url === 'string' ? input.url.trim() : ''
+    const question = typeof input.question === 'string' ? input.question.trim() : ''
+    if (url === '' || question === '') return { isError: true, result: 'web_read needs a url and a question.' }
+    const answer = await readWeb($, url, question, e.tool_use_id)
+
+    return answer.isError ? { isError: true, result: answer.text } : { isReadOnly: true, result: answer.text }
+  }).catch($ => ({ isError: true, result: `${$.plugin.name}: web_read failed; use WebFetch instead.` }))
+
+  // Shadow: what web_read would have returned, measured after WebFetch answered.
+  on('tool.call', { tool: 'WebFetch' }, async ($, e, next) => {
+    const result = await next(e)
+    if (settings.webRead !== 'shadow' || 'deny' in result) return result
+    try {
+      const answer = result.result as { result?: unknown } | string | undefined
+      const text = typeof answer === 'string' ? answer : answer?.result
+      const chars = typeof text === 'string' ? text.length : 0
+      void shadowWebFetch($, e.url, e.prompt, e.tool_use_id, chars).catch(() => undefined)
+    } catch {
+      // A measurement that cannot start leaves WebFetch's answer as it is.
+    }
+
+    return result
+  }).catch((_, e, next) => next(e))
+
+  on('tool.call', { tool: 'mcp__conjev__policy_report' }, async ($, e) => {
     const input = e as unknown as Record<string, unknown>
     const messages = await $.session.messages()
+    // The dry run must fold what a real compaction would, so it reads the same
+    // api view: without it a message holding media looks foldable here.
+    const view = await $.session.messages({ as: 'api' }).then(messageViewOf, () => new Map() as MessageView)
     const hasCandidate = SETTING_KEYS.some(key => input[key] !== undefined)
     const candidate = settingsFrom(input, policySettings)
     const report = {
-      current: { settings: policySettings, ...reportFor(messages, policySettings) },
-      ...(hasCandidate ? { candidate: { settings: candidate, folds: reportFor(messages, candidate).folds } } : {}),
+      current: { settings: policySettings, ...reportFor(messages, policySettings, view) },
+      ...(hasCandidate ? { candidate: { settings: candidate, folds: reportFor(messages, candidate, view).folds } } : {}),
       anchors: await anchorsOf($, policySettings),
       defaults: DEFAULT_SETTINGS,
     }
@@ -580,7 +1164,7 @@ export const register: Register = (on, options) => {
   }).catch($ => ({ deny: `${$.plugin.name}: could not measure this session.` }))
 
   // Only the fold policy's own values: never a gate, a Jev mode or the key.
-  on('tool.call', { tool: 'mcp__context-harness__set_policy' }, async ($, e) => {
+  on('tool.call', { tool: 'mcp__conjev__set_policy' }, async ($, e) => {
     const input = e as unknown as Record<string, unknown>
     const wanted = settingsFrom(input, policySettings)
     const lines: string[] = []

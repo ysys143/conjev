@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 300" width="880" height="300" role="img" aria-labelledby="turn-title turn-desc">
   <title id="turn-title">Where the judgment layer acts</title>
-  <desc id="turn-desc">Four Claude Code events in a turn and its compaction, each with the gate that judges it: instructions at the prompt, the tool gate at every tool call including read_coordinate, the Stop gate after your own Stop hooks when the turn ends, and fold relevance at compaction.</desc>
+  <desc id="turn-desc">Four Claude Code events in a turn and its compaction, each with what the plugin does there: instructions at the prompt, the tool gate at every tool call including read_coordinate, the Stop gate after your own Stop hooks when the turn ends, and at compaction Claude Code's own summary, with the conversation it replaces archived and a note pointing back at the project's files.</desc>
   <style>
     text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; fill: #2d3142; }
     .eyebrow { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 10.5px; letter-spacing: 1px; fill: #4f5d75; }
@@ -67,9 +67,9 @@
   <text x="464" y="256" class="desc">work it has not done.</text>
 
   <rect x="662" y="144" width="186" height="132" rx="6" fill="#ffffff" stroke="#eb6c36" stroke-width="0.9"/>
-  <text x="674" y="170" class="name">Fold relevance</text>
-  <text x="674" y="192" class="desc">Records which large</text>
-  <text x="674" y="208" class="desc">earlier results the</text>
-  <text x="674" y="224" class="desc">request still needs.</text>
-  <text x="674" y="240" class="desc">Shadow only, for now.</text>
+  <text x="674" y="170" class="name">Archive and note</text>
+  <text x="674" y="192" class="desc">Claude Code summarizes;</text>
+  <text x="674" y="208" class="desc">what it replaces is kept,</text>
+  <text x="674" y="224" class="desc">and a note points back</text>
+  <text x="674" y="240" class="desc">at INTENT.md, PHASE.md.</text>
 </svg>

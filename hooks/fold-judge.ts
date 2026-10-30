@@ -3,18 +3,28 @@
 // fold policy itself did. Compaction rebuilds the prompt cache anyway, so this
 // is where such a judgment costs no cache. Nothing here changes the compaction.
 import type { SessionMessage, ToolUseSummary } from 'claude-code'
-import { NOTE_MARKS, foldableResults, makePolicy, type PolicySettings } from './fold'
+import { NOTE_MARKS, foldableResults, makePolicy, type FoldPolicy, type PolicySettings } from './fold'
 import type { JevQuestion } from './jev'
+import { clip, scrub } from './scrub'
 import { normalizePath, targetOfCommand, targetOfPath } from './tool-gate'
 
 export const FOLD_POINT = 'fold'
 
-/** What the judgment sees of one result: never its text or its full input. */
+/**
+ * E6/F4: how much of a result's opening Jev sees, after scrubbing. The text is
+ * scrubbed over twice this length and then cut, so a value the cut would split
+ * lies past the part that is sent.
+ */
+export const EXCERPT_CHARS = 300
+
+/** What the judgment sees of one result: its call, and the scrubbed opening of its text. */
 export type FoldCandidate = {
   id: string
   tool: string
   /** What Jev is shown: the tool, its target as tool-gate shows targets, and the size. */
   call: string
+  /** The scrubbed opening of the result, at most EXCERPT_CHARS. */
+  excerpt: string
   chars: number
   turnsAgo: number
   /** Whether the fold policy folds it. */
@@ -57,7 +67,7 @@ export function describeCall(use: Pick<ToolUseSummary, 'tool' | 'input'> | undef
   }
   for (const key of OTHER_KEYS) {
     const value = input[key]
-    if (typeof value === 'string') return `${use.tool} "${value.slice(0, 120)}"`
+    if (typeof value === 'string') return `${use.tool} "${value}"`
   }
 
   return use.tool
@@ -66,15 +76,18 @@ export function describeCall(use: Pick<ToolUseSummary, 'tool' | 'input'> | undef
 /**
  * The results the fold could act on, at least the policy's minimum size, at
  * most `limit`, largest first. Built from the fold's own list, so the rule's
- * verdict here is the fold's.
+ * verdict here is the fold's: a result the fold would leave whole — one in a
+ * message holding media, or one whose pointer would not save anything — is not
+ * judged either.
  */
-export function foldCandidates(messages: readonly SessionMessage[], settings: PolicySettings, home: string, cwd: string, limit: number): FoldCandidate[] {
-  return foldableResults(messages, makePolicy(settings))
-    .filter(result => result.text.length >= settings.minFoldChars)
+export function foldCandidates(messages: readonly SessionMessage[], settings: PolicySettings, home: string, cwd: string, limit: number, view?: MessageView): FoldCandidate[] {
+  return foldableResults(messages, makePolicy(settings), view)
+    .filter(result => result.fold && result.text.length >= settings.minFoldChars)
     .map(result => ({
       id: result.id,
       tool: result.tool,
       call: `${describeCall(result, home, cwd)} (${result.text.split('\n').length} lines)`,
+      excerpt: clip(scrub(result.text.slice(0, EXCERPT_CHARS * 2), home), EXCERPT_CHARS),
       chars: result.text.length,
       turnsAgo: result.turnsAgo,
       ruleFolds: result.fold,
@@ -83,12 +96,43 @@ export function foldCandidates(messages: readonly SessionMessage[], settings: Po
     .slice(0, limit)
 }
 
+/**
+ * The fold policy once Jev has judged: `needed` holds, by call id, Jev's
+ * probability that the current request still needs a result.
+ *
+ * The rule stays the floor. A result the rule keeps for reasons that are not
+ * about relevance — a short error, a tool whose output is current state, a
+ * result too small to be worth a read_coordinate call — is never folded.
+ * Inside that floor Jev decides both ways:
+ *
+ * - a result the rule would fold, but Jev says is still needed, stays whole;
+ * - a result the rule keeps only because it is recent, but Jev says is done
+ *   with, is folded.
+ *
+ * A result Jev did not judge (a failed request, a cap reached) gets the rule's
+ * own verdict, so a judgment that goes wrong never folds more than the rule.
+ */
+export function judgedPolicy(settings: PolicySettings, needed: ReadonlyMap<string, number>, threshold: number): FoldPolicy {
+  const rule = makePolicy(settings)
+  const floor = makePolicy({ ...settings, keepRecentTurns: 0 })
+
+  return candidate => {
+    const p = candidate.id === undefined ? undefined : needed.get(candidate.id)
+    if (p === undefined) return rule(candidate)
+    if (!floor(candidate)) return false
+
+    return p < threshold
+  }
+}
+
 // Measured with jev-1.14.0 on 10 results of a bug-fix request: results the
 // fix needed got 0.38-0.85 for "needed", the others 0.00-0.26.
-export function foldQuestion(call: string): JevQuestion {
+export function foldQuestion(call: string, excerpt = ''): JevQuestion {
   return {
     type: 'choice',
-    instructions: `Will the agent need the full output of this earlier tool call again to finish the current request? Tool call: ${call}`,
+    instructions:
+      `Will the agent need the full output of this earlier tool call again to finish the current request? Tool call: ${call}` +
+      (excerpt === '' ? '' : `\nIts output begins:\n${excerpt}`),
     criteria: { needed: 'The output is still needed for the current request.', done: 'The output is no longer needed for it.' },
   }
 }

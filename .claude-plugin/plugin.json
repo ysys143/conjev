@@ -1,14 +1,14 @@
 {
-  "name": "context-harness",
+  "name": "conjev",
   "version": "0.0.3",
-  "description": "Context management for Claude Code: fold completed tool results into one-line pointers at compaction instead of summarizing, keep the project's intent and status files current, and, with a Jev key, judgment gates for announced-but-undone turns, secret files under other providers, and conditional instructions. Folding needs no key; every Jev setting is off by default.",
+  "description": "Context management for Claude Code: Jev judgment gates for announced-but-undone turns, secret files under other providers, conditional instructions, web pages and instruction files, around Claude Code's own compaction; folding completed tool results into one-line pointers instead of summarizing is there with fold: on. Keeps the project's intent and status files current. The Jev gates are auto by default and turn on once a key is in place and you consent (/jev-consent).",
   "author": {
     "name": "ysys143",
     "url": "https://github.com/ysys143"
   },
-  "homepage": "https://github.com/ysys143/context-harness",
-  "repository": "https://github.com/ysys143/context-harness",
-  "license": "MIT",
+  "homepage": "https://github.com/ysys143/conjev",
+  "repository": "https://github.com/ysys143/conjev",
+  "license": "Apache-2.0",
   "keywords": [
     "context",
     "compaction",
@@ -21,8 +21,8 @@
     "keepRecentTurns": {
       "type": "number",
       "title": "Turns kept verbatim",
-      "description": "Tool results from this many most recent turns are never folded.",
-      "default": 2
+      "description": "Tool results from this many most recent model turns (one assistant message each, a tool call and its answer) are never folded, and a partial summary keeps them whole.",
+      "default": 10
     },
     "minFoldChars": {
       "type": "number",
@@ -72,16 +72,37 @@
       "description": "Dated logs of what happened. Must have a new entry before a fold. Used only while it exists; empty turns it off.",
       "default": "sessions"
     },
+    "fold": {
+      "type": "string",
+      "title": "Folding",
+      "description": "off (default): every compaction is the engine's own summary, untouched, and none starts early; the Jev gates outside the fold still run. on: a compaction folds finished tool results into pointers instead of summarizing them (read_coordinate returns the originals), and starts early at foldAtPercent.",
+      "options": [
+        "on",
+        "off"
+      ],
+      "default": "off"
+    },
+    "jev": {
+      "type": "string",
+      "title": "Jev (every judgment gate)",
+      "description": "on (default): the gates send to Jev as each one's mode says. off: nothing is sent to Jev by any gate, whatever its mode; folding, when on, runs by rule alone.",
+      "options": [
+        "on",
+        "off"
+      ],
+      "default": "on"
+    },
     "stopGate": {
       "type": "string",
       "title": "Stop gate (announced-but-not-done turns)",
-      "description": "off: nothing. shadow: Jev judges each turn end and only records it; the last paragraph (scrubbed) is sent to TypeSafe. active: a judged announcement makes the model continue.",
+      "description": "auto (default): active once a key is in place, jev is on, and you consented with /jev-consent; off until then. off: nothing. shadow: Jev judges each turn end and only records it; the last paragraph (scrubbed) is sent to TypeSafe. active: a judged announcement makes the model continue.",
       "options": [
+        "auto",
         "off",
         "shadow",
         "active"
       ],
-      "default": "off"
+      "default": "auto"
     },
     "toolGate": {
       "type": "string",
@@ -97,13 +118,14 @@
     "toolJev": {
       "type": "string",
       "title": "Tool gate: Jev judgment (external sessions)",
-      "description": "off: nothing. shadow: in sessions served by a provider other than Anthropic, Jev classifies each call the floor let through (open, standard, restricted, custom) from its path or command and records it; the scrubbed path or the command's first 200 characters are sent to TypeSafe, never file contents. active: calls judged restricted or custom are refused.",
+      "description": "auto (default): active once a key is in place, jev is on, and you consented with /jev-consent; off until then. off: nothing. shadow: in sessions served by a provider other than Anthropic, Jev classifies each call the floor let through (open, standard, restricted, custom) from its path or command and records it; the scrubbed path or the command's first 200 characters are sent to TypeSafe, never file contents. active: calls judged restricted or custom are refused.",
       "options": [
+        "auto",
         "off",
         "shadow",
         "active"
       ],
-      "default": "off"
+      "default": "auto"
     },
     "stopThreshold": {
       "type": "number",
@@ -154,13 +176,14 @@
     "instructions": {
       "type": "string",
       "title": "Conditional instructions",
-      "description": "off: nothing. shadow: for each prompt you type, Jev judges which fragments' conditions hold and records it; the prompt (scrubbed, first 600 characters) and the fragments' conditions are sent to TypeSafe, never their bodies. active: matching fragments are appended to that prompt once, and pinned fragments go at the end of the system prompt.",
+      "description": "auto (default): active once a key is in place, jev is on, and you consented with /jev-consent; off until then. off: nothing. shadow: for each prompt you type, Jev judges which fragments' conditions hold and records it; the prompt (scrubbed, first 600 characters) and the fragments' conditions are sent to TypeSafe, never their bodies. active: matching fragments are appended to that prompt once, and pinned fragments go at the end of the system prompt.",
       "options": [
+        "auto",
         "off",
         "shadow",
         "active"
       ],
-      "default": "off"
+      "default": "auto"
     },
     "fragmentsDir": {
       "type": "string",
@@ -182,13 +205,21 @@
     },
     "foldJev": {
       "type": "string",
-      "title": "Fold relevance (shadow only)",
-      "description": "off: nothing. shadow: at each compaction, Jev judges which large earlier tool results the current request still needs, beside what the fold policy itself folded, and records it; your last prompt (scrubbed) and each result's tool and target are sent, never the contents.",
+      "title": "Fold relevance",
+      "description": "auto (default): active once a key is in place, jev is on, and you consented with /jev-consent; off until then. off: nothing. shadow: at each compaction Jev judges which large earlier tool results the current request still needs, beside what the policy folded, and records it. active: a result Jev says is finished with is folded even inside the recent window, and one it says is still needed is left whole, at every compaction, automatic ones included; a Jev that does not answer within the timeout leaves the fold to the rule. Your last prompt (scrubbed), each result's tool and target, and the scrubbed opening of each result (at most 300 characters) are sent.",
       "options": [
+        "auto",
         "off",
-        "shadow"
+        "shadow",
+        "active"
       ],
-      "default": "off"
+      "default": "auto"
+    },
+    "foldThreshold": {
+      "type": "number",
+      "title": "Fold relevance: still needed from",
+      "description": "With fold relevance active, a result Jev gives at least this probability of still being needed stays whole. Measured with jev-1.14.0 on one bug-fix request: results the fix needed got 0.38-0.85, the others 0.00-0.26.",
+      "default": 0.3
     },
     "foldCap": {
       "type": "number",
@@ -205,13 +236,110 @@
     "instructionFilter": {
       "type": "string",
       "title": "Instruction filter (CLAUDE.md, AGENTS.md)",
-      "description": "off: nothing. shadow: each time the instruction files load, records which chunks are loaded twice and, with a key, Jev's reading of which chunks every request needs and which repeat earlier ones; the scrubbed instruction text, and for chunks Jev would defer your prompts (first 600 characters), are sent to TypeSafe. active: chunks loaded twice byte for byte are left out; Jev's readings are still only recorded.",
+      "description": "auto (default): active once a key is in place, jev is on, and you consented with /jev-consent; off until then. off: nothing. shadow: each time the instruction files load, records which chunks are loaded twice and, with a key, Jev's reading of which chunks every request needs and which repeat earlier ones; the scrubbed instruction text, and for chunks Jev would defer your prompts (first 600 characters), are sent to TypeSafe. active: chunks loaded twice byte for byte are left out, and once Jev has read the files, so are the chunks it reads as repeating earlier ones or needed only for some work; the always-kept rules (identity, language, approval, shell, git, keys, browser) never are.",
       "options": [
+        "auto",
         "off",
         "shadow",
         "active"
       ],
-      "default": "off"
+      "default": "auto"
+    },
+    "webRead": {
+      "type": "string",
+      "title": "Web reading (web_read)",
+      "description": "auto (default): active once a key is in place, jev is on, and you consented with /jev-consent; off until then. off: nothing. shadow: after each WebFetch call, the same page is fetched and Jev judges which of its blocks answer the call's prompt; what web_read would have returned is recorded, WebFetch's answer is unchanged. active: adds the web_read tool, which returns only the blocks of a page that answer the question, verbatim, and keeps the whole page for read_coordinate. The page's text and your question, scrubbed, are sent to TypeSafe.",
+      "options": [
+        "auto",
+        "off",
+        "shadow",
+        "active"
+      ],
+      "default": "auto"
+    },
+    "webReadCap": {
+      "type": "number",
+      "title": "Web reading calls per session",
+      "description": "Jev requests web reading may make in one session (a long page takes tens).",
+      "default": 600
+    },
+    "webTimeoutMs": {
+      "type": "number",
+      "title": "Block judgment timeout (ms)",
+      "description": "One Jev request of web reading or kept fold blocks that takes longer is dropped; its blocks count as unjudged.",
+      "default": 10000
+    },
+    "foldBlocks": {
+      "type": "string",
+      "title": "Kept blocks at a fold",
+      "description": "auto (default): active once a key is in place, jev is on, and you consented with /jev-consent; off until then. off: nothing. shadow: at each compaction, Jev judges which blocks of the largest folded results your last prompt still needs, and records it. active: those blocks stay verbatim under the pointer; the rest is in read_coordinate. The results' text and your last prompt, scrubbed, are sent to TypeSafe.",
+      "options": [
+        "auto",
+        "off",
+        "shadow",
+        "active"
+      ],
+      "default": "auto"
+    },
+    "foldBlocksCap": {
+      "type": "number",
+      "title": "Kept-block calls per session",
+      "description": "Jev requests the kept-block judgment may make in one session.",
+      "default": 300
+    },
+    "foldBlocksResults": {
+      "type": "number",
+      "title": "Results judged per fold",
+      "description": "The largest folded results judged for kept blocks at each compaction.",
+      "default": 4
+    },
+    "foldBlocksBudgetMs": {
+      "type": "number",
+      "title": "Kept-block time per fold (ms)",
+      "description": "How long a compaction waits for the kept-block judgment; results still being judged then are folded to a pointer alone.",
+      "default": 10000
+    },
+    "browserRoute": {
+      "type": "string",
+      "title": "Browser routing",
+      "description": "auto (default): active once a key is in place, jev is on, and you consented with /jev-consent; off until then. off: nothing. shadow: for each prompt you write, records whether it needs a web browser operated (keywords, else Jev) and which installed tool would be used. active: such a prompt gets one instruction naming the tool to use, in the order ego-browser, Aside, agent-browser, Playwright, then a CDP tool you name; with none installed, you are told once in 14 days. Your prompt (scrubbed, first 600 characters) is sent to TypeSafe when no keyword decides.",
+      "options": [
+        "auto",
+        "off",
+        "shadow",
+        "active"
+      ],
+      "default": "auto"
+    },
+    "browserThreshold": {
+      "type": "number",
+      "title": "Browser routing threshold",
+      "description": "Jev's probability that a request needs a browser operated, at or above which it is routed.",
+      "default": 0.9
+    },
+    "browserCap": {
+      "type": "number",
+      "title": "Browser routing calls per session",
+      "description": "Jev calls browser routing may make in one session.",
+      "default": 200
+    },
+    "browserBlocked": {
+      "type": "string",
+      "title": "Browser tools never suggested",
+      "description": "Comma-separated: ego, aside, agent-browser, playwright, cdp. A tool your settings or hooks block belongs here, so it is never suggested.",
+      "default": ""
+    },
+    "browserCdp": {
+      "type": "string",
+      "title": "CDP tool to suggest last",
+      "description": "How to name a Chrome DevTools Protocol tool you use (for example an MCP server), suggested when none of the others is installed. Empty: none.",
+      "default": ""
+    },
+    "imageMaxPx": {
+      "type": "number",
+      "title": "Downscale Read images over (pixels; 0 = off)",
+      "description": "A Read of a PNG or JPEG larger than this on its long side reads a smaller copy instead. An image costs about width*height/750 tokens and a fold cannot reach it, so a large screenshot is paid for on every request until the session ends.",
+      "default": 0
     }
   }
 }

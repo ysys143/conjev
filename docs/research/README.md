@@ -1,5 +1,7 @@
 # Research
 
+These reports describe context-harness 0.0.3 at the recorded source fingerprints. Current conjev has since changed its name, state layout, compaction policy and defaults. Do not treat the historical results as current-build validation.
+
 What has been measured about context-harness, what has not, and what is planned. Results are dated and name the version and model they ran on.
 
 | Layer | Measured so far | Not yet measured |
@@ -13,6 +15,8 @@ What has been measured about context-harness, what has not, and what is planned.
 | Instruction filter | Chunks loaded twice leave; Jev's readings recorded | Would-miss rate |
 
 ## Documents
+
+- [publication-2026-10-30.md](publication-2026-10-30.md): merge validation, historical-build boundaries and published evidence coverage.
 
 - [next-evaluation.md](next-evaluation.md): **the plan.** Q1 compares vanilla/harness on long work (18 main runs); Q2 checks every device; [Q3](next-evaluation.md#q3-does-the-stop-gate-improve-completion) compares Stop off/active on task completion (18 additional main runs).
 - [evaluation-progress.md](evaluation-progress.md): current acceptance, execution and failure records.
