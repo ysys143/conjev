@@ -1,0 +1,15 @@
+{
+  "fresh_recomputation_matches": true,
+  "http_records": 170,
+  "generation_requests": 168,
+  "direct_message_id_bindings": 165,
+  "summary_interval_bindings": 3,
+  "count_only_requests": 2,
+  "original_retained_files_checked": 3835,
+  "retained_sources_match": true,
+  "report_links_checked": 13,
+  "report_sha256": "4f3a480a10f538598aa533a238e381f7b217c9bb564856921e369213c524f984",
+  "analysis_sha256": "338f9a1a9145cc36b7c84da2c48d9810e7ef7e0ccba447e6de4b8f445d534a7d",
+  "supplement_sha256": "96dd7200a801e6813cac2ad36ac1c29d1ba52b50b638ba66a945339c0cceded3",
+  "new_model_calls": 0
+}

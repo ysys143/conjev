@@ -1,0 +1,27 @@
+{
+  "positive_clone_passed": true,
+  "mutations": [
+    {
+      "mutation": "one-original-request-record-removed",
+      "rejected": true
+    },
+    {
+      "mutation": "stage-12-receipt-removed-with-completed-metadata-retained",
+      "rejected": true
+    },
+    {
+      "mutation": "original-instructions-removed-with-all-grade-counts-retained",
+      "rejected": true
+    },
+    {
+      "mutation": "actual-block-continuation-record-removed",
+      "rejected": true
+    },
+    {
+      "mutation": "actual-pre-decision-snapshot-receipt-removed",
+      "rejected": true
+    }
+  ],
+  "original_evidence_modified": false,
+  "temporary_clones_only": true
+}

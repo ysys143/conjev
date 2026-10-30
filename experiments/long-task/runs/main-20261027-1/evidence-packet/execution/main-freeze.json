@@ -1,0 +1,325 @@
+{
+  "version": 1,
+  "study_phase": "main",
+  "authorized_pairs": 1,
+  "authorized_runs": 2,
+  "authorization": "Owner requested one main comparison pair on 2026-10-27.",
+  "allocation_rng_seed": 20261027,
+  "allocation": [
+    {
+      "question": "Q1",
+      "family": "ledger",
+      "seed": 23,
+      "arms": [
+        "H",
+        "V"
+      ],
+      "task_identity": "7c13369016ba94799db97db052ee9c374984fd24266a6eb8ff95e278d77f5e26"
+    },
+    {
+      "question": "Q3",
+      "family": "ledger",
+      "seed": 23,
+      "arms": [
+        "S0",
+        "S1"
+      ],
+      "task_identity": "7c13369016ba94799db97db052ee9c374984fd24266a6eb8ff95e278d77f5e26"
+    },
+    {
+      "question": "Q3",
+      "family": "telemetry",
+      "seed": 11,
+      "arms": [
+        "S0",
+        "S1"
+      ],
+      "task_identity": "18f10be4c47374aebf3deaafc4ba59b82b2adbddd42d27e98df0b2b789f69f91"
+    },
+    {
+      "question": "Q3",
+      "family": "ledger",
+      "seed": 47,
+      "arms": [
+        "S0",
+        "S1"
+      ],
+      "task_identity": "c08a26ca89024223e179b2fb4217e6bbef4e83839de023a4360b3b9f093f7d51"
+    },
+    {
+      "question": "Q1",
+      "family": "ledger",
+      "seed": 11,
+      "arms": [
+        "H",
+        "V"
+      ],
+      "task_identity": "26df15fa49365a80ab2dd5c664ad50c4ac03a997637d4114e5373201b48c89cd"
+    },
+    {
+      "question": "Q3",
+      "family": "ledger",
+      "seed": 11,
+      "arms": [
+        "S1",
+        "S0"
+      ],
+      "task_identity": "26df15fa49365a80ab2dd5c664ad50c4ac03a997637d4114e5373201b48c89cd"
+    },
+    {
+      "question": "Q3",
+      "family": "telemetry",
+      "seed": 23,
+      "arms": [
+        "S1",
+        "S0"
+      ],
+      "task_identity": "d3c84ee70232d393ffc27733a85f3792925aafba741e68afd19f337cf7a73f59"
+    },
+    {
+      "question": "Q1",
+      "family": "routing",
+      "seed": 23,
+      "arms": [
+        "H",
+        "V"
+      ],
+      "task_identity": "fc4a0f664f81fb199206f35e849818a1c25ee6370fe2cb5999cfb12774bcb6e1"
+    },
+    {
+      "question": "Q3",
+      "family": "routing",
+      "seed": 47,
+      "arms": [
+        "S1",
+        "S0"
+      ],
+      "task_identity": "103f8a0a474c4bca9523b3c5a30c951f5d51c76b23e529372354b11d7230feea"
+    },
+    {
+      "question": "Q3",
+      "family": "telemetry",
+      "seed": 47,
+      "arms": [
+        "S0",
+        "S1"
+      ],
+      "task_identity": "b0b039161999ef50acb3f5ad6c6edc85c1bc2b5556aa425a1876d5317946a11c"
+    },
+    {
+      "question": "Q1",
+      "family": "routing",
+      "seed": 47,
+      "arms": [
+        "V",
+        "H"
+      ],
+      "task_identity": "103f8a0a474c4bca9523b3c5a30c951f5d51c76b23e529372354b11d7230feea"
+    },
+    {
+      "question": "Q1",
+      "family": "telemetry",
+      "seed": 23,
+      "arms": [
+        "H",
+        "V"
+      ],
+      "task_identity": "d3c84ee70232d393ffc27733a85f3792925aafba741e68afd19f337cf7a73f59"
+    },
+    {
+      "question": "Q1",
+      "family": "routing",
+      "seed": 11,
+      "arms": [
+        "H",
+        "V"
+      ],
+      "task_identity": "a78feecfd3b9f5fc1fdad9710333ca3060216216fea542b81b27f91ca6a374df"
+    },
+    {
+      "question": "Q1",
+      "family": "ledger",
+      "seed": 47,
+      "arms": [
+        "H",
+        "V"
+      ],
+      "task_identity": "c08a26ca89024223e179b2fb4217e6bbef4e83839de023a4360b3b9f093f7d51"
+    },
+    {
+      "question": "Q3",
+      "family": "routing",
+      "seed": 23,
+      "arms": [
+        "S1",
+        "S0"
+      ],
+      "task_identity": "fc4a0f664f81fb199206f35e849818a1c25ee6370fe2cb5999cfb12774bcb6e1"
+    },
+    {
+      "question": "Q3",
+      "family": "routing",
+      "seed": 11,
+      "arms": [
+        "S0",
+        "S1"
+      ],
+      "task_identity": "a78feecfd3b9f5fc1fdad9710333ca3060216216fea542b81b27f91ca6a374df"
+    },
+    {
+      "question": "Q1",
+      "family": "telemetry",
+      "seed": 47,
+      "arms": [
+        "H",
+        "V"
+      ],
+      "task_identity": "b0b039161999ef50acb3f5ad6c6edc85c1bc2b5556aa425a1876d5317946a11c"
+    },
+    {
+      "question": "Q1",
+      "family": "telemetry",
+      "seed": 11,
+      "arms": [
+        "H",
+        "V"
+      ],
+      "task_identity": "18f10be4c47374aebf3deaafc4ba59b82b2adbddd42d27e98df0b2b789f69f91"
+    }
+  ],
+  "selected_pair_index": 0,
+  "pilot_seed_excluded": 71,
+  "main_seeds": [
+    11,
+    23,
+    47
+  ],
+  "order": [
+    [
+      "H",
+      "V"
+    ]
+  ],
+  "family": "ledger",
+  "seed": 23,
+  "question": "Q1",
+  "task_identity": "7c13369016ba94799db97db052ee9c374984fd24266a6eb8ff95e278d77f5e26",
+  "ceilings": {
+    "stage_seconds": 600,
+    "run_seconds": 7200,
+    "tool_calls": 400,
+    "input_tokens": 30000000,
+    "output_tokens": 1000000,
+    "clarifications_per_stage": 2
+  },
+  "executor_model": "claude-haiku-5-5",
+  "executor_effort": "max",
+  "judge_model": "claude-opus-5-5",
+  "judge_effort": "low",
+  "cli_version": "2.1.309 (Claude Code)",
+  "jev_model": "jev-1.14.0",
+  "source_sha256": {
+    "/Users/jaesolshin/Documents/GitHub/context-harness/hooks/state.ts": "ce52c54f6f431f9cb25bbd69ec79254098f3402a7247ff0908a3b0643b1a0630",
+    "/Users/jaesolshin/Documents/GitHub/context-harness/hooks/fold.ts": "d008a67597ba12f1e818229c709ed754cfec220f0673c6f3ae0eb32de8fc0b87",
+    "/Users/jaesolshin/Documents/GitHub/context-harness/hooks/status.ts": "66005e51edc5ca99cad7818e1638fcbc7a16eb0b345499ab01a1f893863af074",
+    "/Users/jaesolshin/Documents/GitHub/context-harness/hooks/fragment-flow.ts": "8668802055b9ad7356bf288fd0b911edf7e7459c4a2618d8955542eb0492f674",
+    "/Users/jaesolshin/Documents/GitHub/context-harness/hooks/instruction-docs.ts": "ccfe1bbef8818d089de051c095432eba2d000bb8eb1c3ebe662541bbeba4d6d3",
+    "/Users/jaesolshin/Documents/GitHub/context-harness/hooks/report.ts": "9bce9a8abd81261bdc2ae19455cb11fae4a19538b1365ba062c66cecb1f6085b",
+    "/Users/jaesolshin/Documents/GitHub/context-harness/hooks/tool-gate.ts": "656c280ce7678c1d2fef51938d206fe1e97ea27cb5ecc960b0664919e47df332",
+    "/Users/jaesolshin/Documents/GitHub/context-harness/hooks/fold-judge.ts": "5d7fa91b6ce8f459191761fe87449f8062f1d111ccc181923c80b97cc694f97c",
+    "/Users/jaesolshin/Documents/GitHub/context-harness/hooks/settings.ts": "388452c99e57a9000b6d9d641e20850416a6f2466148df1e6e109290ae0f7bc9",
+    "/Users/jaesolshin/Documents/GitHub/context-harness/hooks/storage.ts": "a91cc1536cfffaaf729e50f7023932fa4f5d1a1a9aebc741769b35e0947150ca",
+    "/Users/jaesolshin/Documents/GitHub/context-harness/hooks/scrub.ts": "2f1ff2b71b8c78d29afa02ff36f2fff0e8c8c47287240e2cd503654b65bf7dcc",
+    "/Users/jaesolshin/Documents/GitHub/context-harness/hooks/stop-gate.ts": "86a7c63c9049fbc73fdd38adb648f9e234bc61780e7b1f84e87451a9506206c8",
+    "/Users/jaesolshin/Documents/GitHub/context-harness/hooks/filter-flow.ts": "87f28d7fc2481ed950563e955bd7e796747118c8ccddf649020ef3484965c512",
+    "/Users/jaesolshin/Documents/GitHub/context-harness/hooks/instructions.ts": "734d723ac710557ca1c0064bd6cf1a35f36f87c3ed935a05c67b22ddae435a3b",
+    "/Users/jaesolshin/Documents/GitHub/context-harness/hooks/jev-call.ts": "29426749e2307de4a6516a3ddf07b197e5547d805e4b56f1df23e1af14736aa0",
+    "/Users/jaesolshin/Documents/GitHub/context-harness/hooks/key.ts": "3871ed475600b85ec7d360386544d45472265a0eed3fd1390875464ebe0ee5e6",
+    "/Users/jaesolshin/Documents/GitHub/context-harness/hooks/budget.ts": "5bf092ab0cda6a5ec57db9ac2aabd868e237788fd2c24ed017d37b6f12201b57",
+    "/Users/jaesolshin/Documents/GitHub/context-harness/hooks/fold-flow.ts": "220306c2b0fd6cf23a5e6a699f5a7e4d32728e7af287076d49238b05a1e92173",
+    "/Users/jaesolshin/Documents/GitHub/context-harness/hooks/register.ts": "3205c3cbf86f778fe4b7c9664cdeb988e2cdb6e2250abb4bc303668fd9781a3b",
+    "/Users/jaesolshin/Documents/GitHub/context-harness/hooks/jev.ts": "a74a2124b89b53eecf3f13153cf82a6f6c55ce826e9ff9d56a4d7072590adb2b",
+    "/Users/jaesolshin/Documents/GitHub/context-harness/hooks/tool-flow.ts": "5661401535b25c7440fc3913b160f9e3ec60e26f9156eedfee16aaf40e490b1f",
+    "/Users/jaesolshin/Documents/GitHub/context-harness/skills/tune-policy/SKILL.md": "c7c74213addb3f9dc5ff835a23943836a34ee5f9221eb9baf52f43ae9028cc6c",
+    "/Users/jaesolshin/Documents/GitHub/context-harness/skills/consolidate/SKILL.md": "402d4ea05e527d37d5a2aae7f21553b9ee1286c7ad5f964858c6dfc102d08310",
+    "/Users/jaesolshin/Documents/GitHub/context-harness/skills/project-state/SKILL.md": "66762ccd51a30012d3ae62c7cbd198c41bfd545e3c7f4dc33410add3b14b0119",
+    "/Users/jaesolshin/Documents/GitHub/context-harness/.claude-plugin/plugin.json": "5e721f77ea72d8e65d6f87f1dbc0e509943822f74a1a008a5026201cd5e50cdb",
+    "/Users/jaesolshin/Documents/GitHub/context-harness/experiments/long-task/task_families/ledger.py": "fbe43d45194e9d57934ae62f4923bc4174c00b5fae939f4cf39d254f17dcf220",
+    "/Users/jaesolshin/Documents/GitHub/context-harness/experiments/long-task/task_families/__init__.py": "3b6702bf0065ccc439c957bafcca70dd6acf113d5c522adcd3bf51e34e15cbf6",
+    "/Users/jaesolshin/Documents/GitHub/context-harness/experiments/long-task/task_families/telemetry.py": "bbb1a72690723beb8b48993bc7b67631cd9aa3eff028d8db0a177114afc6e46b",
+    "/Users/jaesolshin/Documents/GitHub/context-harness/experiments/long-task/task_families/routing.py": "e5efa882b8b23133acc07fd90d759d56dcab3c1f11bf6c0cf8ffac4229dd5d74",
+    "/Users/jaesolshin/Documents/GitHub/context-harness/experiments/long-task/driver.py": "8bf3064266b1a568ca58763f8cc952626fece3d14c15618146bedce8b8ed2407",
+    "/Users/jaesolshin/Documents/GitHub/context-harness/experiments/long-task/capture.py": "208b89bc372f243d6d93f1007381e5a3af414b778f850d35eaf33830367ca2ae",
+    "/Users/jaesolshin/Documents/GitHub/context-harness/experiments/long-task/curl_transport.py": "5422e1e6ebdede9353fe70a4d2cb2d939903a67fc314c58fca7bfdf85acd9f92",
+    "/Users/jaesolshin/Documents/GitHub/context-harness/experiments/long-task/grading.py": "7e7f26840fe4c02d0fe205afcbca3f195494e49177c66d421220d00c628cc9a2",
+    "/Users/jaesolshin/Documents/GitHub/context-harness/experiments/long-task/observation.py": "3a752a5931a3af0c6eca12142f6a93632b84d244966f3177fd345aba072c6e92",
+    "/Users/jaesolshin/Documents/GitHub/context-harness/experiments/long-task/spend.py": "36a6164dd65f22bb2312bde5fc05c1cc75665167dfa185ca2c350f0b0f4d9764",
+    "/Users/jaesolshin/Documents/GitHub/context-harness/experiments/long-task/watcher.py": "c80b4c9be33c971f00defbbfb2f921135b8ca255dd7618ac05d35a6157b1dc40",
+    "/Users/jaesolshin/Documents/GitHub/context-harness/experiments/long-task/stage_scoring.py": "72ea3dbfa611ac9eb8c7e56069d740fe02a1f755ff3c7025776f6abd38e28699",
+    "/Users/jaesolshin/Documents/GitHub/context-harness/experiments/long-task/task_generator.py": "d524bb97b2b32aa4ce66bda712a35ec1019a34ab1d96e9e554f194e88e6aecc4",
+    "/Users/jaesolshin/Documents/GitHub/context-harness/experiments/long-task/contamination.py": "91ac92d5cc2963fa54b8802907b6e852bda81f7e0738d64ee5783d8733bf4b71",
+    "/Users/jaesolshin/Documents/GitHub/context-harness/experiments/long-task/pilot_run.py": "d361890fd65cb8319b3a55c7aaed0cf93e2e355d757c23faf18dda76528ca144",
+    "/Users/jaesolshin/Documents/GitHub/context-harness/experiments/long-task/pilot_judge.py": "7116da8c0a6d4fc3aa8284ec22160bcd49b1a100e89b2bc912d30a2e5c808588",
+    "/Users/jaesolshin/Documents/GitHub/context-harness/experiments/long-task/pilot_score.py": "9a7c0016e4aa709bfe9063fbf5a8d2609b9258697e817dfdb766cf853fc7ff17",
+    "/Users/jaesolshin/Documents/GitHub/context-harness/experiments/long-task/observer/hooks/register.ts": "751b9bbf7208d472fea6a19aa4a6175ee2cc9c9ad7bed26362b07115f1c6d103",
+    "/usr/bin/curl": "b636262803922ee1dd0fbf614818473ffa53c811e44fd3278c2270d3af4759d3",
+    "/Users/jaesolshin/Documents/GitHub/context-harness/experiments/long-task/main_pair.py": "c80ad25a6cf87671107d6848bfe97a7164ba0e3a06abf33cb80827657227c4f2",
+    "/Users/jaesolshin/.local/share/claude/versions/2.1.309": "5eadc0009cdcdbc0d06e58110d7b2baf88ced6088b1c33a60a21217fe410619c",
+    "/Users/jaesolshin/Documents/GitHub/context-harness/experiments/long-task/runs/pilot-20261027-repair/verification_v2.py": "2b9955e079d59a25ca66c368c8a08a679d96f6609e60a09b8999d5d84371dad6",
+    "/Users/jaesolshin/Documents/GitHub/context-harness/experiments/long-task/runs/pilot-20261027-repair/scratch_audit.py": "977feae9db5eb435ce4d387e1e94faf5513dce93e9b3bfa9afff81aa4eceabb2",
+    "/Users/jaesolshin/Documents/GitHub/context-harness/experiments/long-task/main_pair_score.py": "21e93d2b3a608a9b17a563bc71755b9f94c0793eaed3150166fcf4c0a8f8edc1"
+  },
+  "prerequisites": {
+    "/private/tmp/ch-research-phase1-20261027-5/acceptance.json": "bf7537cd1b8e2c7fe74c9d1900beb040c4ce1e31a63d45e750127e19d54371c7",
+    "/Users/jaesolshin/Documents/GitHub/context-harness/experiments/long-task/runs/pilot-20261027-2/acceptance-final.json": "7062380d80aaece1303824326301c9cad2ffb25af46ac7410ab81b9f9a743c70",
+    "/private/tmp/ch-research-main-preflight-20261027-1/smoke.json": "29b9b01b259ed5c96911fa5a37f0ba146f6408ea22c402b526caf8fabd928c2a",
+    "/private/tmp/ch-research-main-preflight-20261027-1/turn.json": "afa646bf14092b4e4f088d8966bc5a012beda4d34d07ba1ad60ab9c75f3bdc77"
+  },
+  "subscription_meters_before": [
+    {
+      "status": "allowed",
+      "resetsAt": 1793104200,
+      "rateLimitType": "five_hour",
+      "overageStatus": "rejected",
+      "overageDisabledReason": "org_level_disabled",
+      "isUsingOverage": false,
+      "unifiedWindows": {
+        "five_hour": {
+          "utilization": 0.02,
+          "resetsAt": 1793104200
+        },
+        "seven_day": {
+          "utilization": 0.07,
+          "resetsAt": 1793512800
+        }
+      }
+    }
+  ],
+  "spend_before": {
+    "calls": 282,
+    "unknown_calls": 0,
+    "known_spend_usd": 0.00689052,
+    "unknown_reserved_usd": 0.0,
+    "committed_upper_usd": 0.00689052,
+    "ceiling_usd": 10.0
+  },
+  "budget": {
+    "authorized_pair_run_seconds_max": 14400,
+    "per_run": {
+      "stage_seconds": 600,
+      "run_seconds": 7200,
+      "tool_calls": 400,
+      "input_tokens": 30000000,
+      "output_tokens": 1000000,
+      "clarifications_per_stage": 2
+    },
+    "jev_cumulative_usd": 10,
+    "claude_transport": "subscription only",
+    "remaining_17_pairs_authorized": false,
+    "full_study_capacity": "Not established; re-admission required before any additional pair"
+  },
+  "replacement_policy": "No automatic replacements. Preserve every attempt, interruption and ceiling outcome; missing comparisons stay missing.",
+  "verification_revision": 2,
+  "restatement_evidence": "All twelve original instructions included for every proposition.",
+  "environment_audit_revision": 2
+}

@@ -1,0 +1,49 @@
+{
+  "reference_root": "/Users/jaesolshin/Documents/GitHub/harness2",
+  "head": "1cfe254e8d25b15f37048c3730134686abe60335",
+  "branch": "subscription-macos",
+  "captured_on": "2026-10-23",
+  "method_only": true,
+  "files": [
+    {
+      "path": "harness2/benchmarks/lab.py",
+      "sha256": "95bfa213048e870f6c4e45f9040d881ef60f2282d25175b0f8fefe6ce9eb4e71",
+      "git_status": "unchanged_or_ignored_dependency"
+    },
+    {
+      "path": "harness2/subscription_judge.py",
+      "sha256": "b6cbf688317edd1a785b0aeae594bb6a7de111988eb6d878fa5b920a8edc05df",
+      "git_status": "?? harness2/subscription_judge.py"
+    },
+    {
+      "path": "harness2/subscription.py",
+      "sha256": "9fc4ad20c10e2fff9be764769b5858b55eb12ac67e99750a5d0ccdb38150d01c",
+      "git_status": "?? harness2/subscription.py"
+    },
+    {
+      "path": "harness2/core/judge.py",
+      "sha256": "0f8cd6f4ec659f5d5976bdad4ccdc432651f51486c3fbbee36be53a6d619fbba",
+      "git_status": "unchanged_or_ignored_dependency"
+    },
+    {
+      "path": "harness2/core/runmark.py",
+      "sha256": "99a7c3f0b023623224c3376bc0390e985b8e6608f0928d34b821ffe6c36f9175",
+      "git_status": "unchanged_or_ignored_dependency"
+    },
+    {
+      "path": "dependencies/harvey-labs/evaluation/scoring.py",
+      "sha256": "2c9e266ad0c148a599637fe05b0ba98c798c4de6c2fc987d0406dcfae9071cde",
+      "git_status": "unchanged_or_ignored_dependency"
+    },
+    {
+      "path": "dependencies/harvey-labs/evaluation/prompts/rubric_criterion.txt",
+      "sha256": "fcd53795c434163070053c156cb14eccc781db8018e3af8beae3834bca8bd5b1",
+      "git_status": "unchanged_or_ignored_dependency"
+    },
+    {
+      "path": "docs/SUBSCRIPTIONS.md",
+      "sha256": "9aa56d13f659d2116354bce983485b5cdec178cccd97cbcd75234caf338d7868",
+      "git_status": "?? docs/SUBSCRIPTIONS.md"
+    }
+  ]
+}

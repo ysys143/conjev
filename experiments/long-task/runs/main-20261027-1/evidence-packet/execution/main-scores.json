@@ -1,0 +1,110 @@
+{
+  "study_phase": "main",
+  "question": "Q1",
+  "runs": [
+    {
+      "arm": "H",
+      "completed_stages": 12,
+      "goal_failures": 0,
+      "final_task": {
+        "expected": 25,
+        "passed": 25,
+        "partial": 1.0
+      },
+      "stage_scoring_complete": true,
+      "stop_graded": 12,
+      "stop_expected": 12,
+      "stop_stage_coverage": 12,
+      "stop_stages_expected": 12,
+      "premature_candidates": 0,
+      "premature_handback_stages": 0,
+      "premature_announcement_stages": 0,
+      "other_premature_handback_stages": 0,
+      "false_interventions": 0,
+      "legitimate_stop_opportunities": 12,
+      "corrections": [],
+      "restatement_graded": 7,
+      "restatement_expected": 7,
+      "usage": {
+        "input_tokens": 18511450,
+        "output_tokens": 688606,
+        "requests": 85
+      },
+      "wall_seconds": 2870.012390666874,
+      "exposure_met": true,
+      "contamination": "unresolved",
+      "closure": {
+        "runner_observed_end": true,
+        "exit_code": 0,
+        "error": null,
+        "evidence_complete": true
+      },
+      "restatement_passed": 6,
+      "verification_revision": 2,
+      "artifact_checks": {
+        "all_twelve_stage_receipts": true,
+        "task_identity": true,
+        "captures_reconciled": true,
+        "complete_original_messages": true,
+        "uploads_recorded": true,
+        "wire_settings": true,
+        "stop_census": true,
+        "exposure": true
+      }
+    },
+    {
+      "arm": "V",
+      "completed_stages": 12,
+      "goal_failures": 0,
+      "final_task": {
+        "expected": 25,
+        "passed": 25,
+        "partial": 1.0
+      },
+      "stage_scoring_complete": true,
+      "stop_graded": 12,
+      "stop_expected": 12,
+      "stop_stage_coverage": 12,
+      "stop_stages_expected": 12,
+      "premature_candidates": 0,
+      "premature_handback_stages": 0,
+      "premature_announcement_stages": 0,
+      "other_premature_handback_stages": 0,
+      "false_interventions": 0,
+      "legitimate_stop_opportunities": 12,
+      "corrections": [],
+      "restatement_graded": 7,
+      "restatement_expected": 7,
+      "usage": {
+        "input_tokens": 8403740,
+        "output_tokens": 434409,
+        "requests": 85
+      },
+      "wall_seconds": 1961.9247469999827,
+      "exposure_met": true,
+      "contamination": "unresolved",
+      "closure": {
+        "runner_observed_end": true,
+        "exit_code": 0,
+        "error": null,
+        "evidence_complete": true
+      },
+      "restatement_passed": 6,
+      "verification_revision": 2,
+      "artifact_checks": {
+        "all_twelve_stage_receipts": true,
+        "task_identity": true,
+        "captures_reconciled": true,
+        "complete_original_messages": true,
+        "uploads_recorded": true,
+        "wire_settings": true,
+        "stop_census": true,
+        "exposure": true
+      }
+    }
+  ],
+  "main_runs_executed": 2,
+  "valid_pairs": 1,
+  "scoring_complete": true,
+  "freeze_sha256": "a7ee566d881abc86ea56969426f7522c0d3bce855927426d2479cc6695a442cb"
+}

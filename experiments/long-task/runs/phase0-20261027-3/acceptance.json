@@ -1,0 +1,348 @@
+{
+  "phase": 0,
+  "phase_0_complete": true,
+  "checks": {
+    "contract_and_checkout_current": true,
+    "all_six_native_jobs_terminal_success": true,
+    "all_component_receipts_pass": true,
+    "all_recorded_inputs_match_current_sources": true,
+    "pinned_cli_binary_matches": true,
+    "subscription_launches_have_no_api_key_source": true,
+    "actual_requests_use_haiku_max_adaptive": true,
+    "only_declared_plugins_and_skills": true,
+    "proxy_no_proxy_equivalence": true,
+    "forced_error_retry_with_and_without_proxy": true,
+    "live_long_sse_stream": true,
+    "cancelled_stream_preserved_as_incomplete": true,
+    "persistent_driver_full_chain": true,
+    "instructions_preserved_before_and_after_compaction": true,
+    "automatic_memory_absent_and_unwritten": true,
+    "first_party_trusted_proxy_classification": true,
+    "read_edit_and_test_permissions": true,
+    "transient_prohibited_action_watcher": true,
+    "teardown_and_controlled_contamination": true,
+    "stop_observer_ordering_and_basic_controls": true,
+    "source_bound_jev_usage_map_and_call_census": true,
+    "global_jev_spend_within_approved_ceiling": true,
+    "phase_budget_and_before_after_account_meters": true
+  },
+  "jev": {
+    "calls": 249,
+    "unknown_calls": 0,
+    "known_spend_usd": 0.005909904,
+    "unknown_reserved_usd": 0.0,
+    "committed_upper_usd": 0.005909904,
+    "ceiling_usd": 10.0
+  },
+  "accounting": {
+    "lifecycle": {
+      "expected_calls": 3,
+      "calls": 3,
+      "unknown_usage_calls": 0,
+      "known_spend_usd": 6.6864e-05,
+      "by_point": {
+        "fold": {
+          "records": 4,
+          "calls": 1,
+          "known_calls": 1,
+          "unknown_calls": 0,
+          "input_tokens": 679,
+          "output_tokens": 119,
+          "known_spend_usd": 2.8518e-05,
+          "unknown_reserved_usd": 0.0
+        },
+        "instr-defer": {
+          "records": 0,
+          "calls": 0,
+          "known_calls": 0,
+          "unknown_calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "known_spend_usd": 0.0,
+          "unknown_reserved_usd": 0.0
+        },
+        "instr-filter": {
+          "records": 0,
+          "calls": 0,
+          "known_calls": 0,
+          "unknown_calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "known_spend_usd": 0.0,
+          "unknown_reserved_usd": 0.0
+        },
+        "instr-tool": {
+          "records": 0,
+          "calls": 0,
+          "known_calls": 0,
+          "unknown_calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "known_spend_usd": 0.0,
+          "unknown_reserved_usd": 0.0
+        },
+        "instructions": {
+          "records": 0,
+          "calls": 0,
+          "known_calls": 0,
+          "unknown_calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "known_spend_usd": 0.0,
+          "unknown_reserved_usd": 0.0
+        },
+        "stop": {
+          "records": 3,
+          "calls": 2,
+          "known_calls": 2,
+          "unknown_calls": 0,
+          "input_tokens": 913,
+          "output_tokens": 62,
+          "known_spend_usd": 3.8346e-05,
+          "unknown_reserved_usd": 0.0
+        },
+        "tool": {
+          "records": 0,
+          "calls": 0,
+          "known_calls": 0,
+          "unknown_calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "known_spend_usd": 0.0,
+          "unknown_reserved_usd": 0.0
+        }
+      }
+    },
+    "stop_off": {
+      "expected_calls": 0,
+      "calls": 0,
+      "unknown_usage_calls": 0,
+      "known_spend_usd": 0.0,
+      "by_point": {
+        "fold": {
+          "records": 0,
+          "calls": 0,
+          "known_calls": 0,
+          "unknown_calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "known_spend_usd": 0.0,
+          "unknown_reserved_usd": 0.0
+        },
+        "instr-defer": {
+          "records": 0,
+          "calls": 0,
+          "known_calls": 0,
+          "unknown_calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "known_spend_usd": 0.0,
+          "unknown_reserved_usd": 0.0
+        },
+        "instr-filter": {
+          "records": 0,
+          "calls": 0,
+          "known_calls": 0,
+          "unknown_calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "known_spend_usd": 0.0,
+          "unknown_reserved_usd": 0.0
+        },
+        "instr-tool": {
+          "records": 0,
+          "calls": 0,
+          "known_calls": 0,
+          "unknown_calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "known_spend_usd": 0.0,
+          "unknown_reserved_usd": 0.0
+        },
+        "instructions": {
+          "records": 0,
+          "calls": 0,
+          "known_calls": 0,
+          "unknown_calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "known_spend_usd": 0.0,
+          "unknown_reserved_usd": 0.0
+        },
+        "stop": {
+          "records": 0,
+          "calls": 0,
+          "known_calls": 0,
+          "unknown_calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "known_spend_usd": 0.0,
+          "unknown_reserved_usd": 0.0
+        },
+        "tool": {
+          "records": 0,
+          "calls": 0,
+          "known_calls": 0,
+          "unknown_calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "known_spend_usd": 0.0,
+          "unknown_reserved_usd": 0.0
+        }
+      }
+    },
+    "stop_active": {
+      "expected_calls": 6,
+      "calls": 6,
+      "unknown_usage_calls": 0,
+      "known_spend_usd": 8.9082e-05,
+      "by_point": {
+        "fold": {
+          "records": 0,
+          "calls": 0,
+          "known_calls": 0,
+          "unknown_calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "known_spend_usd": 0.0,
+          "unknown_reserved_usd": 0.0
+        },
+        "instr-defer": {
+          "records": 0,
+          "calls": 0,
+          "known_calls": 0,
+          "unknown_calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "known_spend_usd": 0.0,
+          "unknown_reserved_usd": 0.0
+        },
+        "instr-filter": {
+          "records": 0,
+          "calls": 0,
+          "known_calls": 0,
+          "unknown_calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "known_spend_usd": 0.0,
+          "unknown_reserved_usd": 0.0
+        },
+        "instr-tool": {
+          "records": 0,
+          "calls": 0,
+          "known_calls": 0,
+          "unknown_calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "known_spend_usd": 0.0,
+          "unknown_reserved_usd": 0.0
+        },
+        "instructions": {
+          "records": 0,
+          "calls": 0,
+          "known_calls": 0,
+          "unknown_calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "known_spend_usd": 0.0,
+          "unknown_reserved_usd": 0.0
+        },
+        "stop": {
+          "records": 12,
+          "calls": 6,
+          "known_calls": 6,
+          "unknown_calls": 0,
+          "input_tokens": 2121,
+          "output_tokens": 186,
+          "known_spend_usd": 8.9082e-05,
+          "unknown_reserved_usd": 0.0
+        },
+        "tool": {
+          "records": 0,
+          "calls": 0,
+          "known_calls": 0,
+          "unknown_calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "known_spend_usd": 0.0,
+          "unknown_reserved_usd": 0.0
+        }
+      }
+    }
+  },
+  "runs": {
+    "transport": {
+      "run": "/private/tmp/ch-research-transport-20261027-3",
+      "job": "experiments/long-task/runs/transport-20261027-3/job.json"
+    },
+    "environment": {
+      "run": "/private/tmp/ch-research-environment-20261027-3",
+      "job": "experiments/long-task/runs/environment-20261027-3/job.json"
+    },
+    "lifecycle": {
+      "run": "/private/tmp/ch-research-full-chain-20261027-3",
+      "job": "experiments/long-task/runs/full-chain-20261027-3/job.json"
+    },
+    "contamination": {
+      "run": "/private/tmp/ch-research-contamination-20261027-3",
+      "job": "experiments/long-task/runs/contamination-20261027-3/job.json"
+    },
+    "stop_off": {
+      "run": "/private/tmp/ch-research-stop-off-20261027-3",
+      "job": "experiments/long-task/runs/stop-off-20261027-3/job.json"
+    },
+    "stop_active": {
+      "run": "/private/tmp/ch-research-stop-active-20261027-3",
+      "job": "experiments/long-task/runs/stop-active-20261027-3/job.json"
+    }
+  },
+  "budget": {
+    "version": 1,
+    "phase": 0,
+    "authorization": {
+      "claude_transport": "subscription",
+      "paid_claude_api_ceiling_usd": 0,
+      "jev_shared_ceiling_usd": 10,
+      "jev_phase_admission": "Shared approved ceiling, all failed attempts retained"
+    },
+    "before": {
+      "source": "/private/tmp/ch-research-transport-pool-20261027-2/evidence/stdout.jsonl",
+      "source_sha256": "c3094cb051e76cdf3fe3f11ce7d1ea6a586366bf10af8811116eb2f188c145f9",
+      "event_index": 2,
+      "windows": {
+        "five_hour": {
+          "utilization": 0.02,
+          "resetsAt": 1793086200
+        },
+        "seven_day": {
+          "utilization": 0.03,
+          "resetsAt": 1793512800
+        }
+      },
+      "status": "allowed"
+    },
+    "after": {
+      "source": "/private/tmp/ch-research-full-chain-20261027-3/evidence/requests/16bf60d64cf74668bf77d6725c15c987.json",
+      "source_sha256": "c3f3f15a670de048fa635df13e0f658b2d67b13af076d0f2e77b58db360b1c03",
+      "observed_at": 1793073369.274079,
+      "five_hour": {
+        "utilization": 0.02,
+        "resetsAt": 1793086200
+      },
+      "seven_day": {
+        "utilization": 0.04,
+        "resetsAt": 1793512800
+      },
+      "status": "allowed"
+    },
+    "limits": [
+      "Shared account meters are not attributable study costs; no subtraction.",
+      "Claude runs use the subscription; no paid Claude API route."
+    ]
+  },
+  "limits": [
+    "This does not pass phase 1, the pilots, the 36 main runs or semantic judging.",
+    "Contamination detection covers explicit captured tool targets; opaque commands remain unresolved. It is not an OS syscall trace.",
+    "Stop stimuli are controlled announcements/reports/questions, not Q3 natural-stop completion outcomes."
+  ]
+}

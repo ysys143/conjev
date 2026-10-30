@@ -1,0 +1,63 @@
+{
+  "canonical": {
+    "H": {
+      "count": 50,
+      "by_tool": {
+        "Read": 19,
+        "Skill": 1,
+        "mcp__context-harness__read_coordinate": 11,
+        "Write": 10,
+        "Edit": 9
+      },
+      "recovery_ids": [
+        "toolu_01DWNSd2nfAuBQcHfdPWLnvE",
+        "toolu_01Y1mD2LM2MjwTpkaxosLSs7",
+        "toolu_01JnM2ZntLx9mMcd2sG4gW42",
+        "toolu_01McDk53wEg8Kinhmbk4M8is",
+        "toolu_01WiAL7NzSN736jcLXHxf4Xq",
+        "toolu_01A5DiLtvHSHXAP9VXbi5W7Q",
+        "toolu_01AT1Lyo1nnGpUB9Mr5q5Wuk",
+        "toolu_012CAD926PfLxyxrRPqN6WUs",
+        "toolu_01WXPoQbxPk825iPsL9i458K",
+        "toolu_016iz6WDujyREzFhsSFznUgL",
+        "toolu_01GsWeMy9hDeceMpfM3XqoME"
+      ]
+    },
+    "V": {
+      "count": 0,
+      "by_tool": {},
+      "recovery_ids": []
+    }
+  },
+  "fold": {
+    "archive_items": 36,
+    "observed_pointer_ids": 36,
+    "saved_utf16_chars": 211624,
+    "archived_original_utf16_chars": 216109
+  },
+  "algebra": {
+    "paired_input_delta": 10536883,
+    "mean_context_component": 9876237.257142857,
+    "request_count_component": 660645.7428571427,
+    "V_summary_input": 429173,
+    "V_summary_output": 62552
+  },
+  "summary_instruction_bindings": [
+    [
+      "V",
+      "82643e2e5aa744ed908ef663c1b0f6c6",
+      "compact-03"
+    ],
+    [
+      "V",
+      "a92fd59d1b5c40d290ba39ec2af70581",
+      "compact-06"
+    ],
+    [
+      "V",
+      "bca91a153e484578a6e909f454323769",
+      "compact-09"
+    ]
+  ],
+  "base_analysis_sha256": "338f9a1a9145cc36b7c84da2c48d9810e7ef7e0ccba447e6de4b8f445d534a7d"
+}

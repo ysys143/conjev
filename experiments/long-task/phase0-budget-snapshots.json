@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "phase": 0,
+  "authorization": {
+    "claude_transport": "subscription",
+    "paid_claude_api_ceiling_usd": 0,
+    "jev_shared_ceiling_usd": 10,
+    "jev_phase_admission": "Remaining shared approved ceiling; failed attempts included"
+  },
+  "before": {
+    "source": "/private/tmp/ch-research-haiku-max-smoke-20261025-2/evidence/stdout.jsonl",
+    "source_sha256": "f133a6580e71b552d8b963fd565e14d166d2a2b956b50aebc244678bb18c7a2a",
+    "event_index": 3,
+    "windows": {
+      "five_hour": {
+        "utilization": 0,
+        "resetsAt": 1792891200
+      },
+      "seven_day": {
+        "utilization": 1,
+        "resetsAt": 1792908000
+      }
+    },
+    "status": "rejected"
+  },
+  "after": {
+    "source": "/private/tmp/ch-research-stop-active-20261026-2/evidence/requests/6f94b8e35c3b4e16a0b86126e12eb586.json",
+    "source_sha256": "81d46285785d73a61a7fcb856b0c1110a16426fff9fd336398982301a2f4fd1b",
+    "observed_at": 1792990879.778465,
+    "five_hour": {
+      "utilization": 0.0,
+      "resetsAt": 1793000400
+    },
+    "seven_day": {
+      "utilization": 0.02,
+      "resetsAt": 1793512800
+    },
+    "status": "allowed"
+  },
+  "limits": [
+    "The before snapshot was a rejected request before any successful selected-model execution.",
+    "The subscription allowance reset between these observations. Do not subtract them or attribute shared-account usage to this study.",
+    "Per-request token usage remains in original captures; CLI list-price estimates are not subscription charges."
+  ]
+}

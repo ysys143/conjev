@@ -114,7 +114,7 @@ test('sliceLines returns the asked lines and clamps out-of-range requests', () =
 
 test('read_coordinate answers with the archived lines', async ($, on) => {
   const kept = { id: 'toolu_old', tool: 'Read', input: { file_path: 'src/app.ts' }, text: BIG, isError: false }
-  on('env.get', () => ({ value: '/home/test' }))
+  on('env.get', (_, e) => ({ value: e.name === 'HOME' ? '/home/test' : undefined }))
   on('session.id', () => ({ value: 'sess-1' }))
   on('fs.exists', (_, e) => ({ value: e.path === '/home/test/.claude-context-fold/sess-1/toolu_old.json' }))
   on('fs.read', () => ({ value: JSON.stringify(kept) }))
@@ -124,8 +124,8 @@ test('read_coordinate answers with the archived lines', async ($, on) => {
   expect(found.result).toBe('Read {"file_path":"src/app.ts"} — lines 10-11 of 300\nline 10\nline 11')
 
   const missing = await $.tool.call({ tool: 'mcp__conjev__read_coordinate', id: 'toolu_gone' })
-  expect(missing.isError).toBe(true)
-  expect(typeof missing.result).toBe('string')
+  expect(missing.deny).toBe('No folded result is kept under \"toolu_gone\".')
+  expect(missing.result).toBe(undefined)
 })
 
 test('the partial cut falls on a model turn, keeping that many turns whole', () => {

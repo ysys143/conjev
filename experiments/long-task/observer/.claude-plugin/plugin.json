@@ -1,0 +1,5 @@
+{
+  "name": "long-task-observer",
+  "version": "0.0.1",
+  "description": "Evaluator-only Stop observation and study-wide Jev spend accounting."
+}

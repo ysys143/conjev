@@ -1,0 +1,684 @@
+{
+  "version": 1,
+  "status": "draft-index-not-frozen",
+  "plan_sha256": "6dd06a59f2d1ca34a8a6c517ee0a25de8d20920ce99a86291ca234483f0daed3",
+  "surfaces": [
+    {
+      "id": "fold-ordinary",
+      "plan_row": "Fold, ordinary",
+      "cases": [
+        {
+          "id": "fold-ordinary.eligible-old-large",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        },
+        {
+          "id": "fold-ordinary.recent-kept",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        },
+        {
+          "id": "fold-ordinary.short-error-kept",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        },
+        {
+          "id": "fold-ordinary.keep-tools-kept",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        },
+        {
+          "id": "fold-ordinary.below-size-kept",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        }
+      ]
+    },
+    {
+      "id": "fold-other-paths",
+      "plan_row": "Fold, other paths",
+      "cases": [
+        {
+          "id": "fold-other-paths.nothing-eligible-summary",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        },
+        {
+          "id": "fold-other-paths.archive-write-failure-summary",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        },
+        {
+          "id": "fold-other-paths.folded-still-large-summary",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        },
+        {
+          "id": "fold-other-paths.second-fold-only-new",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        },
+        {
+          "id": "fold-other-paths.skipped-compaction-no-records",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        }
+      ]
+    },
+    {
+      "id": "read-coordinate",
+      "plan_row": "`read_coordinate`",
+      "cases": [
+        {
+          "id": "read-coordinate.exact-original",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        },
+        {
+          "id": "read-coordinate.offset-and-limit-beyond-400",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        },
+        {
+          "id": "read-coordinate.unknown-id",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        },
+        {
+          "id": "read-coordinate.malformed-id",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        },
+        {
+          "id": "read-coordinate.other-session-id",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        }
+      ]
+    },
+    {
+      "id": "archive-storage",
+      "plan_row": "Archive storage",
+      "cases": [
+        {
+          "id": "archive-storage.private-directories-before-first-write",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        },
+        {
+          "id": "archive-storage.chmod-failure-writes-nothing",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        }
+      ]
+    },
+    {
+      "id": "automatic-compact",
+      "plan_row": "Automatic `/compact`",
+      "cases": [
+        {
+          "id": "automatic-compact.thresholds-met",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        },
+        {
+          "id": "automatic-compact.below-context-threshold",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        },
+        {
+          "id": "automatic-compact.below-savings-threshold",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        }
+      ]
+    },
+    {
+      "id": "consolidation",
+      "plan_row": "Consolidation request",
+      "cases": [
+        {
+          "id": "consolidation.stale-phase",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        },
+        {
+          "id": "consolidation.stale-episodes",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        },
+        {
+          "id": "consolidation.at-most-two-deferrals",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        },
+        {
+          "id": "consolidation.current-files-no-request",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        },
+        {
+          "id": "consolidation.forced-compact-no-request",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        }
+      ]
+    },
+    {
+      "id": "post-compact-note",
+      "plan_row": "Note after compaction",
+      "cases": [
+        {
+          "id": "post-compact-note.folded-results-note",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        },
+        {
+          "id": "post-compact-note.project-files-note",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        },
+        {
+          "id": "post-compact-note.neither-no-note",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        }
+      ]
+    },
+    {
+      "id": "project-reread",
+      "plan_row": "Re-reading project files",
+      "cases": [
+        {
+          "id": "project-reread.canonical-order-after-compact",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        },
+        {
+          "id": "project-reread.no-note-no-reread-obligation",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        }
+      ]
+    },
+    {
+      "id": "skills",
+      "plan_row": "Skills",
+      "cases": [
+        {
+          "id": "skills.project-state-listed-and-invoked",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        },
+        {
+          "id": "skills.consolidate-listed-and-invoked",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        },
+        {
+          "id": "skills.vanilla-no-harness-skills",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        }
+      ]
+    },
+    {
+      "id": "stop-active",
+      "plan_row": "Stop gate, active",
+      "cases": [
+        {
+          "id": "stop-active.announce-retry-once",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        },
+        {
+          "id": "stop-active.completed-report-allowed",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        },
+        {
+          "id": "stop-active.question-allowed",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        },
+        {
+          "id": "stop-active.conditional-ending-allowed",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        },
+        {
+          "id": "stop-active.plan-mode-skip",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        },
+        {
+          "id": "stop-active.background-task-skip",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        },
+        {
+          "id": "stop-active.scheduled-task-skip",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        },
+        {
+          "id": "stop-active.reentry-skip",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        },
+        {
+          "id": "stop-active.missing-key-fail-open",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        },
+        {
+          "id": "stop-active.timeout-fail-open",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        },
+        {
+          "id": "stop-active.cap-fail-open",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        },
+        {
+          "id": "stop-active.circuit-fail-open",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        },
+        {
+          "id": "stop-active.underlying-stop-precedence",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        },
+        {
+          "id": "stop-active.approval-or-input-wait",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        },
+        {
+          "id": "stop-active.explicit-user-stop",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        }
+      ]
+    },
+    {
+      "id": "stop-shadow",
+      "plan_row": "Stop gate, shadow",
+      "cases": [
+        {
+          "id": "stop-shadow.eligible-record-and-delayed-judgment",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        },
+        {
+          "id": "stop-shadow.skip-reason-record",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        },
+        {
+          "id": "stop-shadow.underlying-block-no-jev",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        }
+      ]
+    },
+    {
+      "id": "conditional-instructions",
+      "plan_row": "Conditional instructions, active",
+      "cases": [
+        {
+          "id": "conditional-instructions.keyword-attach-once",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        },
+        {
+          "id": "conditional-instructions.semantic-no-keyword-attach-once",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        },
+        {
+          "id": "conditional-instructions.pinned-in-system",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        },
+        {
+          "id": "conditional-instructions.nonmatch-no-attach",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        },
+        {
+          "id": "conditional-instructions.reattach-after-summary",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        },
+        {
+          "id": "conditional-instructions.no-reattach-after-fold-only",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        }
+      ]
+    },
+    {
+      "id": "tool-floor",
+      "plan_row": "Tool gate floor",
+      "cases": [
+        {
+          "id": "tool-floor.external-secret-file-denied",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        },
+        {
+          "id": "tool-floor.external-secret-print-denied",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        },
+        {
+          "id": "tool-floor.external-direct-archive-denied",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        },
+        {
+          "id": "tool-floor.ordinary-file-allowed",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        },
+        {
+          "id": "tool-floor.first-party-protected-write-denied",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        },
+        {
+          "id": "tool-floor.first-party-read-allowed",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        }
+      ]
+    },
+    {
+      "id": "tool-jev",
+      "plan_row": "Tool gate Jev, active",
+      "cases": [
+        {
+          "id": "tool-jev.external-restricted-denied",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        },
+        {
+          "id": "tool-jev.external-open-allowed",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        },
+        {
+          "id": "tool-jev.first-party-no-call",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        },
+        {
+          "id": "tool-jev.cached-target-no-repeat-call",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        }
+      ]
+    },
+    {
+      "id": "fold-shadow",
+      "plan_row": "Fold relevance, shadow",
+      "cases": [
+        {
+          "id": "fold-shadow.sizes-and-more-than-48-independent-sample",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        },
+        {
+          "id": "fold-shadow.outside-sample-no-record",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        },
+        {
+          "id": "fold-shadow.missing-key-no-call",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        },
+        {
+          "id": "fold-shadow.no-person-prompt-no-call",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        },
+        {
+          "id": "fold-shadow.failed-call-error-no-probability",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        }
+      ]
+    },
+    {
+      "id": "instruction-filter-deterministic",
+      "plan_row": "Instruction filter, deterministic",
+      "cases": [
+        {
+          "id": "instruction-filter-deterministic.duplicate-once",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        },
+        {
+          "id": "instruction-filter-deterministic.unique-preserved",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        },
+        {
+          "id": "instruction-filter-deterministic.organization-preserved",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        },
+        {
+          "id": "instruction-filter-deterministic.memory-preserved",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        }
+      ]
+    },
+    {
+      "id": "instruction-filter-jev",
+      "plan_row": "Instruction filter, Jev readings (shadow)",
+      "cases": [
+        {
+          "id": "instruction-filter-jev.scope-and-cover-readings",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        },
+        {
+          "id": "instruction-filter-jev.always-kept-preserved",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        },
+        {
+          "id": "instruction-filter-jev.shadow-keeps-system-prompt",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        }
+      ]
+    },
+    {
+      "id": "instruction-filter-deferred",
+      "plan_row": "Instruction filter, deferred use (shadow)",
+      "cases": [
+        {
+          "id": "instruction-filter-deferred.each-request",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        },
+        {
+          "id": "instruction-filter-deferred.slash-command-origin",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        },
+        {
+          "id": "instruction-filter-deferred.browser-tool-kind",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        },
+        {
+          "id": "instruction-filter-deferred.web-fetch-tool-kind",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        },
+        {
+          "id": "instruction-filter-deferred.orca-tool-kind",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        },
+        {
+          "id": "instruction-filter-deferred.claude-print-tool-kind",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        },
+        {
+          "id": "instruction-filter-deferred.none-deferred-no-record",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        },
+        {
+          "id": "instruction-filter-deferred.empty-request-no-record",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        },
+        {
+          "id": "instruction-filter-deferred.missing-key-no-record",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        },
+        {
+          "id": "instruction-filter-deferred.unlisted-tool-no-record",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        }
+      ]
+    },
+    {
+      "id": "status-line",
+      "plan_row": "Status line",
+      "cases": [
+        {
+          "id": "status-line.empty-before-event",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        },
+        {
+          "id": "status-line.missing-key-immediate",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        },
+        {
+          "id": "status-line.visible-after-record",
+          "status": "runner_binding_pending",
+          "minimum_deterministic": 1,
+          "minimum_live": 3
+        }
+      ]
+    }
+  ],
+  "surface_count": 19,
+  "case_count": 92,
+  "phase_1_complete": false,
+  "freeze_requirements": [
+    "Resolve every case to a concrete stimulus, configuration, expected action and exact record counts/fields.",
+    "Name every legitimate zero-record condition and its assertion.",
+    "Bind each case to executable deterministic and live runners and corruption probes before phase 1 execution.",
+    "Keep project-file rereading and skill invocation compliance separate from hook correctness.",
+    "Use real terminal evidence for status-line cases; stream events alone are not a screen check.",
+    "No main/pilot outcomes or existing phase-0 diagnostics are substituted for the complete device manifest."
+  ]
+}

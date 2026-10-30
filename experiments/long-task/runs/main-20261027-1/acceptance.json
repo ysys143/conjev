@@ -1,0 +1,24 @@
+{
+  "study_phase": "main",
+  "executed_runs": 2,
+  "valid_pairs": {
+    "Q1": 1,
+    "Q3": 0
+  },
+  "planned_runs": 36,
+  "remaining_runs_not_executed": 34,
+  "pair_complete": true,
+  "job_exit_code": 0,
+  "frozen_sources_match": true,
+  "all_38_judge_packets_bound": true,
+  "original_evidence_retained": true,
+  "freeze_sha256": "a7ee566d881abc86ea56969426f7522c0d3bce855927426d2479cc6695a442cb",
+  "scores_sha256": "f083120beaa47acf07f2f9decaa5991d8ec6b81b850ed41cd871292bf2b817fe",
+  "retention_receipt_sha256": "83e8a3cfb999683541f906ba6b98d9d5a1211e6ef672e4020d5d61db289e499f",
+  "limits": [
+    "One ledger seed-23 Q1 pair only; full study incomplete.",
+    "No Q3 main comparison executed.",
+    "Opaque shell commands remain unresolved; no OS file-access trace.",
+    "Automated semantic judgments are not validated human ground truth."
+  ]
+}

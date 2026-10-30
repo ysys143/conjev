@@ -1,0 +1,75 @@
+{
+  "stages_with_v1_verification_failure": 7,
+  "rows": [
+    {
+      "run": "ch-research-pilot-20261026-2",
+      "arm": "V",
+      "stage": 1,
+      "verdict_v1": "fail",
+      "reason": "The last observed unittest execution did not pass nonempty tests",
+      "earlier_nonempty_green": true,
+      "last_command": "SRC=/private/tmp/ch-research-pilot-20261026-2/V/task\nSCRATCH=$(mktemp -d)\ncp -R \"$SRC/api\" \"$SRC/test_app.py\" \"$SCRATCH\"/\nrun_mutant() {\n  echo \"== mutant: $1\"\n  (cd \"$SCRATCH\" && python3 -m unittest 2>&1 | grep -E '^(FAIL|ERROR|Ran|OK|FAILED)')\n}\ncat > \"$SCRATCH/app.py\" <<'EOF'\ndef normalize(rows):\n    for row in rows:\n        row['id'] = str(row['id'])\n        row['account'] = str(row['account'])\n        row['cents'] = int(row['cents'])\n    return rows\nEOF\nrun_mutant \"mutates input in place\"\ncat > \"$SCRATCH/app.py\" <<'EOF'\ndef normalize(rows):\n    return [\n        {'id': str(r['id']), 'account': str(r['account']), 'cents': int(r['cents'])}\n        for r in reversed(list(rows))\n    ]\nEOF\nrun_mutant \"reverses input order\"\ncat > \"$SCRATCH/app.py\" <<'EOF'\ndef normalize(rows):\n    return [dict(row) for row in rows]\nEOF\nrun_mutant \"skips str/int conversion\"\ncp \"$SRC/app.py\" \"$SCRATCH/app.py\"\nsed -i '' 's/sum(values)/sum(values) + 1/' \"$SCRATCH/api/v1.py\"\nrun_mutant \"summarize total off by one (C1 regression)\"\nrm -rf \"$SCRATCH\"\necho \"== scratch removed\"",
+      "last_output": "== mutant: mutates input in place\nFAIL: test_does_not_change_input (test_app.NormalizeTests.test_does_not_change_input)\nFAIL: test_returns_new_dictionaries (test_app.NormalizeTests.test_returns_new_dictionaries)\nRan 7 tests in 0.001s\nFAILED (failures=2)\n== mutant: reverses input order\nFAIL: test_keeps_input_order (test_app.NormalizeTests.test_keeps_input_order)\nRan 7 tests in 0.001s\nFAILED (failures=1)\n== mutant: skips str/int conversion\nFAIL: test_converts_fields_to_str_and_int (test_app.NormalizeTests.test_converts_fields_to_str_and_int)\nFAIL: test_keeps_input_order (test_app.NormalizeTests.test_keeps_input_order)\nRan 7 tests in 0.001s\nFAILED (failures=2)\n== mutant: summarize total off by one (C1 regression)\nFAIL: test_empty_values (test_app.SummarizeCompatibilityTests.test_empty_values)\nFAIL: test_returns_count_and_total (test_app.SummarizeCompatibilityTests.test_returns_count_and_total)\nRan 7 tests in 0.001s\nFAILED (failures=2)\n[Trash] tmp.iSAjq4OOGH -> ~/.Trash\n== scratch removed"
+    },
+    {
+      "run": "ch-research-pilot-20261026-2",
+      "arm": "V",
+      "stage": 2,
+      "verdict_v1": "fail",
+      "reason": "The last observed unittest execution did not pass nonempty tests",
+      "earlier_nonempty_green": true,
+      "last_command": "SRC=/private/tmp/ch-research-pilot-20261026-2/V/task\nSCRATCH=$(mktemp -d)\ncp -R \"$SRC/api\" \"$SRC/test_app.py\" \"$SCRATCH\"/\nmake_mutant() {\n  cp \"$SRC/app.py\" \"$SCRATCH/app.py\"\n  sed -i '' '/^def totals/,$d' \"$SCRATCH/app.py\"\n  cat >> \"$SCRATCH/app.py\"\n}\nrun_mutant() {\n  echo \"== mutant: $1\"\n  (cd \"$SCRATCH\" && python3 -m unittest 2>&1 | grep -E '^(FAIL|ERROR|Ran|OK|FAILED)')\n}\nmake_mutant <<'EOF'\ndef totals(rows):\n    result = {}\n    for row in rows:\n        account = row['account']\n        result[account] = result.get(account, 0) + row['cents']\n    return result\nEOF\nrun_mutant \"skips normalization\"\nmake_mutant <<'EOF'\ndef totals(rows):\n    result = {}\n    for row in normalize(rows):\n        result[row['account']] = row['cents']\n    return result\nEOF\nrun_mutant \"overwrites instead of summing\"\nmake_mutant <<'EOF'\ndef totals(rows):\n    for row in rows:\n        row['cents'] = int(row['cents'])\n    result = {}\n    for row in normalize(rows):\n        account = row['account']\n        result[account] = result.get(account, 0) + row['cents']\n    return result\nEOF\nrun_mutant \"mutates input\"\nrm -rf \"$SCRATCH\"\necho \"== scratch removed\"\ncd \"$SRC\" && echo \"== constraint check\" && ls -la legacy api requirements.txt && cat legacy/reference.txt && cat api/v1.py && echo \"requirements.txt bytes: $(wc -c < requirements.txt)\"",
+      "last_output": "roups_accounts_after_normalizing)\nRan 12 tests in 0.001s\nFAILED (failures=1, errors=2)\n== mutant: overwrites instead of summing\nFAIL: test_groups_accounts_after_normalizing (test_app.TotalsTests.test_groups_accounts_after_normalizing)\nFAIL: test_sums_cents_by_account (test_app.TotalsTests.test_sums_cents_by_account)\nFAIL: test_sums_normalized_integer_cents (test_app.TotalsTests.test_sums_normalized_integer_cents)\nRan 12 tests in 0.001s\nFAILED (failures=3)\n== mutant: mutates input\nFAIL: test_does_not_change_input (test_app.TotalsTests.test_does_not_change_input)\nRan 12 tests in 0.001s\nFAILED (failures=1)\n[Trash] tmp.x8f8qLfhCQ -> ~/.Trash\n== scratch removed\n== constraint check\n-rw-r--r--  1 jaesolshin  wheel  0 Oct 26 21:32 requirements.txt\n\napi:\ntotal 8\n-rw-r--r--   1 jaesolshin  wheel    0 Oct 26 21:32 __init__.py\ndrwxr-xr-x@  4 jaesolshin  wheel  128 Oct 26 21:33 __pycache__\ndrwxr-xr-x   5 jaesolshin  wheel  160 Oct 26 21:33 .\ndrwx------  12 jaesolshin  wheel  384 Oct 26 21:35 ..\n-rw-r--r--   1 jaesolshin  wheel   79 Oct 26 21:32 v1.py\n\nlegacy:\ntotal 8\ndrwxr-xr-x   3 jaesolshin  wheel   96 Oct 26 21:32 .\ndrwx------  12 jaesolshin  wheel  384 Oct 26 21:35 ..\n-rw-r--r--   1 jaesolshin  wheel   46 Oct 26 21:32 reference.txt\nschema_0f9a0480\nHistorical schema identifier.\ndef summarize(values):\n    return {'count': len(values), 'total': sum(values)}\nrequirements.txt bytes:        0"
+    },
+    {
+      "run": "ch-research-pilot-20261026-2",
+      "arm": "V",
+      "stage": 3,
+      "verdict_v1": "fail",
+      "reason": "The last observed unittest execution did not pass nonempty tests",
+      "earlier_nonempty_green": true,
+      "last_command": "SRC=/private/tmp/ch-research-pilot-20261026-2/V/task\nSCRATCH=$(mktemp -d)\ncp -R \"$SRC/api\" \"$SRC/emit.py\" \"$SRC/test_app.py\" \"$SCRATCH\"/\nmake_mutant() {\n  cp \"$SRC/app.py\" \"$SCRATCH/app.py\"\n  sed -i '' '/^def early_config/,$d' \"$SCRATCH/app.py\"\n  cat >> \"$SCRATCH/app.py\"\n}\nrun_mutant() {\n  echo \"== mutant: $1\"\n  (cd \"$SCRATCH\" && python3 -m unittest 2>&1 | grep -E '^(FAIL|ERROR|Ran|OK|FAILED)')\n}\nmake_mutant <<'EOF'\ndef early_config():\n    return {\n        'ref_ca7e7c1d8a': 192938,\n        'ref_3f7d8fedec': 725364,\n    }\nEOF\nrun_mutant \"off-by-one value for ref_ca7e7c1d8a\"\nmake_mutant <<'EOF'\ndef early_config():\n    return {\n        'ref_3f7d8fedec': 725364,\n        'ref_ca7e7c1d8a': 192937,\n    }\nEOF\nrun_mutant \"keys in reversed order\"\nmake_mutant <<'EOF'\ndef early_config():\n    return {\n        'ref_ca7e7c1d8a': 725364,\n        'ref_3f7d8fedec': 192937,\n    }\nEOF\nrun_mutant \"values swapped between channels\"\nrm -rf \"$SCRATCH\"\necho \"== scratch removed\"\ncd \"$SRC\" && echo \"== constraint check\" && ls -la legacy && cat legacy/reference.txt && cat api/v1.py && echo \"requirements.txt bytes: $(wc -c < requirements.txt)\"",
+      "last_output": "== mutant: off-by-one value for ref_ca7e7c1d8a\nFAIL: test_values_match_marker_lines_in_emit_output (test_app.EarlyConfigTests.test_values_match_marker_lines_in_emit_output)\nRan 14 tests in 0.082s\nFAILED (failures=1)\n== mutant: keys in reversed order\nFAIL: test_values_match_marker_lines_in_emit_output (test_app.EarlyConfigTests.test_values_match_marker_lines_in_emit_output)\nRan 14 tests in 0.081s\nFAILED (failures=1)\n== mutant: values swapped between channels\nFAIL: test_values_match_marker_lines_in_emit_output (test_app.EarlyConfigTests.test_values_match_marker_lines_in_emit_output)\nRan 14 tests in 0.059s\nFAILED (failures=1)\n[Trash] tmp.bl5e0ZkNQD -> ~/.Trash\n== scratch removed\n== constraint check\ntotal 8\ndrwxr-xr-x   3 jaesolshin  wheel   96 Oct 26 21:32 .\ndrwx------  12 jaesolshin  wheel  384 Oct 26 21:37 ..\n-rw-r--r--   1 jaesolshin  wheel   46 Oct 26 21:32 reference.txt\nschema_0f9a0480\nHistorical schema identifier.\ndef summarize(values):\n    return {'count': len(values), 'total': sum(values)}\nrequirements.txt bytes:        0"
+    },
+    {
+      "run": "ch-research-pilot-20261026-2",
+      "arm": "S1",
+      "stage": 1,
+      "verdict_v1": "fail",
+      "reason": "The last observed unittest execution did not pass nonempty tests",
+      "earlier_nonempty_green": true,
+      "last_command": "d=$(mktemp -d) && cp test_app.py \"$d\"/ && cp -R api \"$d\"/ && cat > \"$d\"/app.py <<'EOF'\ndef normalize(rows):\n    for row in rows:\n        row['id'] = str(row['id'])\n        row['account'] = str(row['account'])\n        row['cents'] = int(row['cents'])\n    return rows\nEOF\n(cd \"$d\" && python3 -m unittest 2>&1 | grep -E '^(FAIL|ERROR):|^Ran|^OK|^FAILED'); rm -rf \"$d\"",
+      "last_output": "FAIL: test_does_not_change_input (test_app.NormalizeTests.test_does_not_change_input)\nFAIL: test_returns_new_dictionaries (test_app.NormalizeTests.test_returns_new_dictionaries)\nRan 7 tests in 0.001s\nFAILED (failures=2)\n[Trash] tmp.TXEB2MiBpl -> ~/.Trash"
+    },
+    {
+      "run": "ch-research-pilot-20261027-1",
+      "arm": "V",
+      "stage": 1,
+      "verdict_v1": "fail",
+      "reason": "The last observed unittest execution did not pass nonempty tests",
+      "earlier_nonempty_green": true,
+      "last_command": "python3 -m unittest discover -s /private/tmp/ledger-mutant-check -t /private/tmp/ledger-mutant-check -v",
+      "last_output": "sts.test_leaves_input_rows_unchanged)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/private/tmp/ledger-mutant-check/test_app.py\", line 26, in test_leaves_input_rows_unchanged\n    self.assertEqual(rows, before)\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^\nAssertionError: Lists differ: [{'id': '1', 'account': 'alpha', 'cents': 250}] != [{'id': 1, 'account': 'alpha', 'cents': '250'}]\n\nFirst differing element 0:\n{'id': '1', 'account': 'alpha', 'cents': 250}\n{'id': 1, 'account': 'alpha', 'cents': '250'}\n\n- [{'account': 'alpha', 'cents': 250, 'id': '1'}]\n?                                           - -\n\n+ [{'account': 'alpha', 'cents': '250', 'id': 1}]\n?                                +   +\n\n\n======================================================================\nFAIL: test_returns_new_dictionaries (test_app.NormalizeTests.test_returns_new_dictionaries)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/private/tmp/ledger-mutant-check/test_app.py\", line 34, in test_returns_new_dictionaries\n    self.assertIsNot(result[0], rows[0])\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^\nAssertionError: unexpectedly identical: {'id': '1', 'account': 'alpha', 'cents': 0}\n\n----------------------------------------------------------------------\nRan 6 tests in 0.001s\n\nFAILED (failures=2)"
+    },
+    {
+      "run": "ch-research-pilot-20261027-1",
+      "arm": "V",
+      "stage": 4,
+      "verdict_v1": "fail",
+      "reason": "The last observed unittest execution did not pass nonempty tests",
+      "earlier_nonempty_green": true,
+      "last_command": "mkdir -p /private/tmp/ledger-money-mutant/api && cp /private/tmp/ch-research-pilot-20261027-1/V/task/app.py /private/tmp/ch-research-pilot-20261027-1/V/task/test_app.py /private/tmp/ch-research-pilot-20261027-1/V/task/emit.py /private/tmp/ledger-money-mutant/ && cp /private/tmp/ch-research-pilot-20261027-1/V/task/api/__init__.py /private/tmp/ch-research-pilot-20261027-1/V/task/api/v1.py /private/tmp/ledger-money-mutant/api/ && sed -i '' 's/ROUND_HALF_UP/ROUND_HALF_EVEN/g' /private/tmp/ledger-money-mutant/app.py && (cd /private/tmp/ledger-money-mutant && python3 -m unittest -v; echo \"exit=$?\")",
+      "last_output": "st_app.py\", line 120, in test_ties_round_up_not_to_even\n    self.assertEqual(money(value), expected)\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: '0.12' != '0.13'\n- 0.12\n?    ^\n+ 0.13\n?    ^\n\n\n======================================================================\nFAIL: test_ties_round_up_not_to_even (test_app.MoneyTests.test_ties_round_up_not_to_even) (value='0.145')\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/private/tmp/ledger-money-mutant/test_app.py\", line 120, in test_ties_round_up_not_to_even\n    self.assertEqual(money(value), expected)\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: '0.14' != '0.15'\n- 0.14\n?    ^\n+ 0.15\n?    ^\n\n\n======================================================================\nFAIL: test_ties_round_up_not_to_even (test_app.MoneyTests.test_ties_round_up_not_to_even) (value='1.005')\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/private/tmp/ledger-money-mutant/test_app.py\", line 120, in test_ties_round_up_not_to_even\n    self.assertEqual(money(value), expected)\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: '1.00' != '1.01'\n- 1.00\n?    ^\n+ 1.01\n?    ^\n\n\n----------------------------------------------------------------------\nRan 19 tests in 0.101s\n\nFAILED (failures=4)\nexit=1"
+    },
+    {
+      "run": "ch-research-pilot-20261027-2",
+      "arm": "V",
+      "stage": 1,
+      "verdict_v1": "fail",
+      "reason": "The last observed unittest execution did not pass nonempty tests",
+      "earlier_nonempty_green": true,
+      "last_command": "scratch=$(mktemp -d) && cp /private/tmp/ch-research-pilot-20261027-2/V/task/test_app.py \"$scratch\"/ && cp -R /private/tmp/ch-research-pilot-20261027-2/V/task/api \"$scratch\"/ && printf '%s\\n' \"def normalize(rows):\" \"    for row in rows:\" \"        row['cents'] = int(row['cents'])\" \"        row['id'] = str(row['id'])\" \"        row['account'] = str(row['account'])\" \"    return rows\" > \"$scratch\"/app.py && (cd \"$scratch\" && python3 -m unittest 2>&1 | tail -n 4); rm -rf \"$scratch\"",
+      "last_output": "----------------------------------------------------------------------\nRan 6 tests in 0.001s\n\nFAILED (failures=1)\n[Trash] tmp.pae6rpUvLM -> ~/.Trash"
+    }
+  ]
+}
