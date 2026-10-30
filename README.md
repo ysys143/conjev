@@ -295,6 +295,8 @@ The plugin uses, and only for this: the network (Jev, only with a Jev setting on
 
 Live runs used Claude Code 2.1.306-2.1.309 with Haiku 5.5 in the author's own folders; the Jev timings are direct API calls, and the rule replays use the author's transcripts. Research notes, with methods and limits, are indexed in [docs/research](docs/research/README.md): what each layer has and has not been measured on, [do folded results come back when needed](docs/research/fold-recovery.md) (kit in [`experiments/fold-recovery/`](experiments/fold-recovery/)), the [next evaluation](docs/research/next-evaluation.md), and [benchmarks for keeping a long task on track](docs/research/long-horizon-benchmarks.md).
 
+The 2026-10-27 staged pilot now has one valid V/H pair and one active/off pair: all four conditions completed 12/12 stages with zero detected constraint/decision failures. Active Stop blocked one completed report without additional due-work progress. This single-family pilot does not establish a general completion benefit; the 36 main runs remain unrun. The [pilot report](docs/research/pilot-results.md) records corrected scoring, original evidence and cost coverage.
+
 <details>
 <summary>context-harness 0.0.2 (2026-10-23, Claude Code 2.1.309, Haiku 5.5, the author's own instruction files)</summary>
 
@@ -383,7 +385,9 @@ claude plugin test /path/to/context-harness    # tests/*.test.ts
 claude plugin validate /path/to/context-harness
 ```
 
-The suite has 134 tests. Nineteen defects planted back one at a time each made at least one of them fail. For the instruction filter: the always-kept list ignored, a deferred chunk counted as already saying another, a project rule dropped for a user one, a late Jev answer dropped, chunk names the attached-fragment count cannot read, the memory or organization file cut, a heading inside a code fence taken for a section, and records written while the setting is off. From 0.0.1: the cleanup over the whole folder, a fixed size floor for the judgment, the earlier turn count, folders left readable, a failed `chmod` ignored, archives readable directly, a `/compact` without `HOME`, fragments counted without the conversation, queued prompts not remembered, a failure after the fold undoing it, and a quoted opening tag taken for a block.
+The plugin suite has 139 tests; the separate long-task evaluation kit has its own Python tests. Nineteen defects planted back one at a time each made at least one of the original tests fail. For the instruction filter: the always-kept list ignored, a deferred chunk counted as already saying another, a project rule dropped for a user one, a late Jev answer dropped, chunk names the attached-fragment count cannot read, the memory or organization file cut, a heading inside a code fence taken for a section, and records written while the setting is off. From 0.0.1: the cleanup over the whole folder, a fixed size floor for the judgment, the earlier turn count, folders left readable, a failed `chmod` ignored, archives readable directly, a `/compact` without `HOME`, fragments counted without the conversation, queued prompts not remembered, a failure after the fold undoing it, and a quoted opening tag taken for a block.
+
+Research processes may set `CONTEXT_HARNESS_STATE_HOME` to an absolute directory to keep their archives, records, labels and startup cleanup under that directory's `.local/state/context-harness/`. Without it, the default location and legacy-archive lookup remain unchanged. With it, personal legacy archives are not read. This isolates plugin storage only; it does not isolate credentials, instructions or host file access.
 
 ## Credits
 

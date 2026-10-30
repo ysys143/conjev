@@ -49,9 +49,20 @@ export async function homeOf($: EngineInterface): Promise<string | undefined> {
   return home === undefined || home.trim() === '' ? undefined : home
 }
 
+/** A research process can keep its state apart without changing HOME or auth. */
+export async function storageHomeOf($: EngineInterface): Promise<string | undefined> {
+  const selected = await $.env.get('CONTEXT_HARNESS_STATE_HOME')
+  if (selected === undefined) return homeOf($)
+  if (!selected.startsWith('/') || selected.split('/').some(part => part === '.' || part === '..') || selected.includes('\0')) {
+    throw new Error('CONTEXT_HARNESS_STATE_HOME must be an absolute path without dot segments')
+  }
+
+  return selected.replace(/\/+$/, '') || '/'
+}
+
 /** The state root. Without HOME it throws, so nothing lands in the project folder instead. */
 export async function rootOf($: EngineInterface): Promise<string> {
-  const home = await homeOf($)
+  const home = await storageHomeOf($)
   if (home === undefined) throw new Error('HOME is not set')
 
   return stateRoot(home)
@@ -79,9 +90,12 @@ export async function writeArchive($: EngineInterface, sessionId: string, archiv
 
 /** A folded original by its call id: this plugin's archive first, then the one kept before the rename. */
 export async function readArchived($: EngineInterface, sessionId: string, id: string): Promise<Archived | undefined> {
-  const home = await homeOf($)
+  const home = await storageHomeOf($)
   if (home === undefined || id === '') return undefined
-  for (const dir of [`${stateRoot(home)}/archive/${sessionId}`, `${legacyArchiveRoot(home)}/${sessionId}`]) {
+  const dirs = [`${stateRoot(home)}/archive/${sessionId}`]
+  // An isolated run must never fall through to the person's historical archive.
+  if ((await $.env.get('CONTEXT_HARNESS_STATE_HOME')) === undefined) dirs.push(`${legacyArchiveRoot(home)}/${sessionId}`)
+  for (const dir of dirs) {
     const path = `${dir}/${fileId(id)}.json`
     if (await $.fs.exists(path)) return JSON.parse(await $.fs.read(path)) as Archived
   }
@@ -131,7 +145,7 @@ export async function readRecords($: EngineInterface, limit: number): Promise<{ 
 
 /** Drops judgment records older than 14 days. */
 export async function cleanupRecords($: EngineInterface): Promise<void> {
-  const home = await homeOf($)
+  const home = await storageHomeOf($)
   if (home === undefined) return
   const root = `${stateRoot(home)}/records`
   if (!(await $.fs.exists(root))) return

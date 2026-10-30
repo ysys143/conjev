@@ -27,6 +27,7 @@ export type Setup = {
   /** How full the context window is, in percent, and its size in tokens. */
   percent?: number
   window?: number
+  startedAt?: number
   /** What the engine's own compaction beneath answers: a summary, or a skip. */
   compactBelow?: 'summary' | 'skip'
   /** The plugin folder's .env, wherever the plugin root is. */
@@ -62,6 +63,7 @@ export const setup = (on: On, s: Setup = {}) => {
   const configured: [string, unknown][] = []
   const order: string[] = []
   const commands: string[] = []
+  const summarizedInputs: SessionMessage[][] = []
   // What the engine would load after the plugin answered prompt.context, and every timer the plugin waited on.
   const loaded: { path: string; kind: string; content: string }[][] = []
   const sleeps: number[] = []
@@ -129,7 +131,7 @@ export const setup = (on: On, s: Setup = {}) => {
   on('session.id', () => ({ value: 'sess-1' }))
   on('session.cwd', () => (s.cwdFails ? { deny: 'no cwd' } : { value: '/proj' }))
   on('session.messages', (_, e) => ({ value: (e.as === 'api' ? api : (s.messages ?? [])) as never }))
-  on('session.usage', () => ({ value: { startedAt: 0, context: { window: s.window ?? 200_000, percent: s.percent ?? 10 }, rateLimits: [] } as never }))
+  on('session.usage', () => ({ value: { startedAt: s.startedAt ?? 0, context: { window: s.window ?? 200_000, percent: s.percent ?? 10 }, rateLimits: [] } as never }))
   on('session.append', (_, e, next) => {
     appended.push(JSON.stringify(e.message))
     return next(e)
@@ -169,7 +171,8 @@ export const setup = (on: On, s: Setup = {}) => {
     return { blocks: e.blocks, instructionFiles: e.instructionFiles }
   })
   // A summary replaces what the next request is built from; a compaction the plugin answers never gets here.
-  on('session.compact', () => {
+  on('session.compact', (_, e) => {
+    summarizedInputs.push([...e.messages])
     if (s.compactBelow === 'skip') return { skip: 'skipped below' } as never
     api.length = 0
     api.push({ role: 'user', content: [{ type: 'text', text: 'summary' }] })
@@ -184,7 +187,7 @@ export const setup = (on: On, s: Setup = {}) => {
     return { result: 'ok' }
   })
 
-  return { env, files, fetches, writes, runs, disk, store, statuses, toasts, logs, appended, submitted, configured, order, api, commands, loaded, sleeps }
+  return { env, files, fetches, writes, runs, disk, store, statuses, toasts, logs, appended, submitted, configured, order, api, commands, summarizedInputs, loaded, sleeps }
 }
 
 export const records = (writes: readonly { path: string; text: string }[], point: string) =>

@@ -159,8 +159,8 @@ const SECRET_KEPT = { files: { [`${ARCHIVE}/toolu_x.json`]: kept('API_KEY=abc', 
 test('read_coordinate, external session with the gate active: a folded secret file stays folded', { options: { toolGate: 'active', providerTrust: 'external' } }, async ($, on) => {
   const io = setup(on, SECRET_KEPT)
   const result = await $.tool.call({ tool: 'mcp__context-harness__read_coordinate', id: 'toolu_x' })
-  expect(result.isError).toBe(true)
-  expect(String(result.result)).toContain('env file')
+  expect(String(result.deny)).toContain('env file')
+  expect(result.result).toBe(undefined)
   await settle(() => records(io.writes, 'tool').length > 0)
   expect(records(io.writes, 'tool')[0]?.decision).toBe('deny')
 })
@@ -251,8 +251,8 @@ test('read_coordinate judges a folded path by what it leads to as well', EXTERNA
     realPaths: { '/proj/creds': `${HOME}/.aws/credentials` },
   })
   const result = await $.tool.call({ tool: 'mcp__context-harness__read_coordinate', id: 'toolu_x' })
-  expect(result.isError).toBe(true)
-  expect(String(result.result)).toContain('cloud credentials')
+  expect(String(result.deny)).toContain('cloud credentials')
+  expect(result.result).toBe(undefined)
 })
 
 test('a folder that cannot be made private gets nothing written: the engine summarizes', async ($, on) => {

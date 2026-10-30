@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "head": "9403c5fe7be802ee990f149a1a45d888cf556672",
+  "plan_sha256": "6dd06a59f2d1ca34a8a6c517ee0a25de8d20920ce99a86291ca234483f0daed3",
+  "ledger": "experiments/long-task/runs/study-spend.sqlite3",
+  "runs": {
+    "transport": {
+      "run": "/private/tmp/ch-research-transport-20261026-2",
+      "job": "experiments/long-task/runs/transport-20261026-2/job.json"
+    },
+    "environment": {
+      "run": "/private/tmp/ch-research-environment-20261026-6",
+      "job": "experiments/long-task/runs/environment-20261026-6/job.json"
+    },
+    "lifecycle": {
+      "run": "/private/tmp/ch-research-full-chain-20261026-5",
+      "job": "experiments/long-task/runs/full-chain-20261026-5/job.json"
+    },
+    "contamination": {
+      "run": "/private/tmp/ch-research-contamination-20261026-3",
+      "job": "experiments/long-task/runs/contamination-20261026-3/job.json"
+    },
+    "stop_off": {
+      "run": "/private/tmp/ch-research-stop-off-20261026-4",
+      "job": "experiments/long-task/runs/stop-off-20261026-4/job.json"
+    },
+    "stop_active": {
+      "run": "/private/tmp/ch-research-stop-active-20261026-4",
+      "job": "experiments/long-task/runs/stop-active-20261026-4/job.json"
+    }
+  },
+  "budget_snapshots": "experiments/long-task/phase0-budget-snapshots-20261026-3.json"
+}

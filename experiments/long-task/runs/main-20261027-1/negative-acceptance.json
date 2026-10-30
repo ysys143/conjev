@@ -1,0 +1,13 @@
+{
+  "baseline_all_checks_pass": true,
+  "mutants_rejected": {
+    "missing_original_capture": true,
+    "incomplete_response": true,
+    "missing_upload": true,
+    "wrong_model": true,
+    "missing_stop_judgment": true,
+    "missing_stage_receipt": true
+  },
+  "mutants_expected": 6,
+  "original_evidence_modified": false
+}

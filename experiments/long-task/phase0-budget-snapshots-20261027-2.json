@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "phase": 0,
+  "authorization": {
+    "claude_transport": "subscription",
+    "paid_claude_api_ceiling_usd": 0,
+    "jev_shared_ceiling_usd": 10,
+    "jev_phase_admission": "Shared approved ceiling, all failed attempts retained"
+  },
+  "before": {
+    "source": "/private/tmp/ch-research-transport-stress-20261027-2/evidence/stdout.jsonl",
+    "source_sha256": "0b29babcab1ca8a872791e33b91e914f29aec53bb73036d33ae54f8a815dc0c5",
+    "event_index": 2,
+    "windows": {
+      "five_hour": {
+        "utilization": 0.01,
+        "resetsAt": 1793086200
+      },
+      "seven_day": {
+        "utilization": 0.03,
+        "resetsAt": 1793512800
+      }
+    },
+    "status": "allowed"
+  },
+  "after": {
+    "source": "/private/tmp/ch-research-full-chain-20261027-2/evidence/requests/a3034e60d4f24262b5a1d73b5bf5c65a.json",
+    "source_sha256": "1a68b4d83263b6d0b8c896e1d6d7254f9386a0259f93b167e8b26ed0aee46c75",
+    "observed_at": 1793069785.907678,
+    "five_hour": {
+      "utilization": 0.01,
+      "resetsAt": 1793086200
+    },
+    "seven_day": {
+      "utilization": 0.03,
+      "resetsAt": 1793512800
+    },
+    "status": "allowed"
+  },
+  "limits": [
+    "Shared account meters are not attributable study costs; no subtraction.",
+    "Claude runs use the subscription; no paid Claude API route."
+  ]
+}

@@ -1,0 +1,48 @@
+{
+  "verification_revision": 2,
+  "regressions": {
+    "new": {
+      "tests_run": 13,
+      "passed": true,
+      "failures": 0,
+      "errors": 0
+    },
+    "existing": {
+      "tests_run": 8,
+      "passed": true,
+      "failures": 0,
+      "errors": 0
+    }
+  },
+  "mutants": [
+    {
+      "tests_run": 13,
+      "passed": false,
+      "failures": [
+        "test_verification_v2.VerificationV2Tests.test_an_isolated_green_without_actual_workspace_execution_is_not_a_pass",
+        "test_verification_v2.VerificationV2Tests.test_mixed_workspace_green_and_isolated_red_in_one_call",
+        "test_verification_v2.VerificationV2Tests.test_real_green_followed_by_an_isolated_red_is_a_pass"
+      ],
+      "errors": [],
+      "mutation": "isolated-scope-lost",
+      "exit_code": 1
+    },
+    {
+      "tests_run": 13,
+      "passed": false,
+      "failures": [
+        "test_verification_v2.VerificationV2Tests.test_a_broken_final_snapshot_cannot_borrow_an_earlier_green",
+        "test_verification_v2.VerificationV2Tests.test_an_empty_snapshot_cannot_use_a_claimed_green"
+      ],
+      "errors": [],
+      "mutation": "snapshot-test-bypassed",
+      "exit_code": 1
+    }
+  ],
+  "source_sha256": {
+    "/Users/jaesolshin/Documents/GitHub/context-harness/experiments/long-task/runs/pilot-20261027-repair/verification_v2.py": "2b9955e079d59a25ca66c368c8a08a679d96f6609e60a09b8999d5d84371dad6",
+    "/Users/jaesolshin/Documents/GitHub/context-harness/experiments/long-task/runs/pilot-20261027-repair/grade_v2.py": "b6f53ec52abeadb17b8d7c27c5fe03e1833306b814ebd1d6200d0672a129dc95",
+    "/Users/jaesolshin/Documents/GitHub/context-harness/experiments/long-task/runs/pilot-20261027-repair/test_verification_v2.py": "c6a7c54d94e81ac1a58454605e4e1263ebfc9ad34fefce7b4a05d0019d58722f"
+  },
+  "original_execution_evidence_modified": false
+}

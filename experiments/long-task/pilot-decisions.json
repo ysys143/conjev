@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "date": "2026-10-26",
+  "judge": {
+    "selection": "opus",
+    "resolved_model": "claude-opus-5-5",
+    "effort": "low",
+    "transport": "Claude subscription",
+    "wire_acceptance": "/private/tmp/ch-research-pilot-judge-20261026-1/accepted.json"
+  },
+  "admission": "Complete prerequisite device validation, then four formal pilot runs",
+  "owner_replies": [
+    "opus/low",
+    "선행 장치 검증을 마친 뒤 정식 파일럿 4회"
+  ],
+  "main_runs_authorized_by_this_request": false
+}

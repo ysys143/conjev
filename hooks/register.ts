@@ -14,7 +14,7 @@ import { harnessSettingsFrom, usesJev } from './settings'
 import { newId, runtime, startRuntime } from './state'
 import { showStatus } from './status'
 import { STOP_MESSAGE, STOP_POINT, STOP_QUESTION, announcesByRule, lastParagraph, stopSkipReason } from './stop-gate'
-import { cleanupRecords, homeOf, legacyArchiveRoot, readArchived, readRecords, stateRoot, writeArchive, writeLabel, writeRecord } from './storage'
+import { cleanupRecords, homeOf, legacyArchiveRoot, readArchived, readRecords, rootOf, stateRoot, writeArchive, writeLabel, writeRecord } from './storage'
 import { judgeTool } from './tool-flow'
 import {
   TOOL_POINT,
@@ -451,11 +451,12 @@ export const register: Register = (on, options) => {
     const protectedRoots = [
       $.plugin.root,
       stateRoot(home),
+      await rootOf($),
       legacyArchiveRoot(home),
       ...(settings.instructions === 'off' ? [] : [await fragmentsDirOf($)]),
     ].filter(root => root !== '')
     // Folded originals hold whatever the tools returned, secrets included.
-    const archiveRoots = [`${stateRoot(home)}/archive`, legacyArchiveRoot(home)]
+    const archiveRoots = [`${stateRoot(home)}/archive`, `${await rootOf($)}/archive`, legacyArchiveRoot(home)]
     const isWriting = canWrite(tool, command)
 
     let verdict: FloorVerdict | undefined
@@ -514,7 +515,7 @@ export const register: Register = (on, options) => {
     const item = await readArchived($, await $.session.id(), id)
 
     // A plugin tool's result reaches the model as its content: a string here.
-    if (item === undefined) return { isError: true, result: `No folded result is kept under "${id}".` }
+    if (item === undefined) return { deny: `No folded result is kept under "${id}".` }
 
     // A folded original goes through the gate as the call that made it would have.
     if (settings.toolGate !== 'off') {
@@ -551,7 +552,7 @@ export const register: Register = (on, options) => {
           facts: { tool: 'read_coordinate', kind: 'archived', reason, trust: trust.trust, why: trust.why },
         }).catch(() => undefined)
         showStatus($)
-        if (settings.toolGate === 'active') return { isError: true, result: denyMessage({ kind: 'restricted', reason }, trust.trust) }
+        if (settings.toolGate === 'active') return { deny: denyMessage({ kind: 'restricted', reason }, trust.trust) }
       }
     }
 
@@ -561,7 +562,7 @@ export const register: Register = (on, options) => {
     const head = `${item.tool} ${JSON.stringify(item.input)} — lines ${part.from}-${part.to} of ${part.total}`
 
     return { isReadOnly: true, result: `${head}\n${part.body}` }
-  }).catch($ => ({ isError: true, result: `${$.plugin.name}: could not read the folded result.` }))
+  }).catch($ => ({ deny: `${$.plugin.name}: could not read the folded result.` }))
 
   on('tool.call', { tool: 'mcp__context-harness__policy_report' }, async ($, e) => {
     const input = e as unknown as Record<string, unknown>
@@ -576,7 +577,7 @@ export const register: Register = (on, options) => {
     }
 
     return { isReadOnly: true, result: JSON.stringify(report, null, 2) }
-  }).catch($ => ({ isError: true, result: `${$.plugin.name}: could not measure this session.` }))
+  }).catch($ => ({ deny: `${$.plugin.name}: could not measure this session.` }))
 
   // Only the fold policy's own values: never a gate, a Jev mode or the key.
   on('tool.call', { tool: 'mcp__context-harness__set_policy' }, async ($, e) => {
@@ -593,5 +594,5 @@ export const register: Register = (on, options) => {
     }
 
     return { result: lines.length === 0 ? 'No policy value was given.' : lines.join('\n') }
-  }).catch($ => ({ isError: true, result: `${$.plugin.name}: could not set the policy.` }))
+  }).catch($ => ({ deny: `${$.plugin.name}: could not set the policy.` }))
 }

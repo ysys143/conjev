@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "rules": {
+    "stop": "One record per eligible Stop; skipped/no-key/cap/circuit records make no outgoing call.",
+    "tool": "Only facts.kind=jev may carry a call. Floor records and cached target hits make no Jev call.",
+    "fold": "One batch per session and timestamp; at most 24 rows. Usage is on the first row only; at most 48 sampled results per compaction.",
+    "instructions": "One batch per session, prompt joinKey and timestamp. Its usage is copied onto every fragment decision, including keyword decisions alongside a Jev call; count that usage once.",
+    "instr-filter": "Only decision=sent is a call record, one per scope-1 or cover-1 request. Per-chunk readings carry no additional usage.",
+    "instr-defer": "One batch per session, request joinKey and timestamp. Usage appears on the first deferred chunk only.",
+    "instr-tool": "A deterministic observed tool-use signature, never a Jev call."
+  },
+  "source_sha256": {
+    "hooks/register.ts": "3205c3cbf86f778fe4b7c9664cdeb988e2cdb6e2250abb4bc303668fd9781a3b",
+    "hooks/fragment-flow.ts": "8668802055b9ad7356bf288fd0b911edf7e7459c4a2618d8955542eb0492f674",
+    "hooks/fold-flow.ts": "220306c2b0fd6cf23a5e6a699f5a7e4d32728e7af287076d49238b05a1e92173",
+    "hooks/tool-flow.ts": "5661401535b25c7440fc3913b160f9e3ec60e26f9156eedfee16aaf40e490b1f",
+    "hooks/filter-flow.ts": "87f28d7fc2481ed950563e955bd7e796747118c8ccddf649020ef3484965c512",
+    "hooks/instruction-docs.ts": "ccfe1bbef8818d089de051c095432eba2d000bb8eb1c3ebe662541bbeba4d6d3",
+    "hooks/instructions.ts": "734d723ac710557ca1c0064bd6cf1a35f36f87c3ed935a05c67b22ddae435a3b"
+  },
+  "limits": [
+    "Per-device live acceptance belongs to phase 1, not this accounting fixture.",
+    "Missing usage is unknown, not zero. Expected call count must come from the independent study ledger.",
+    "Expected record multiplicities and missing individual batch members are checked by the device-case manifest."
+  ]
+}
